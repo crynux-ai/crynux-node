@@ -1,0 +1,18 @@
+---
+debug: true
+
+node:
+  name: "Crynux Official"
+  type: "crynux_node"
+  capabilities: "24GB, RTX4090, x1"
+  version: "v0.1.0"
+
+
+data_dir: "/app/lora-runner/data/workspace"
+pretrained_models_dir: "/app/lora-runner/data/pretrained-models"
+training_logs_dir: "/app/lora-runner/data/training-logs"
+inference_logs_dir: "/app/lora-runner/data/inference-logs"
+
+celery:
+  broker: "redis://172.17.0.1:6379/0"
+  backend: "redis://172.17.0.1:6379/1"

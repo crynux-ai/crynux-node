@@ -1,0 +1,31 @@
+version: "3.2"
+
+services:
+  redis:
+    image: redis:7.0.11-alpine
+    container_name: redis
+    restart: unless-stopped
+
+  worker:
+    image: worker:dev
+    container_name: worker
+    volumes:
+      - "./data:/app/lora-runner/data"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              capabilities: [ gpu ]
+
+  flower:
+    image: mher/flower:0.9.7
+    container_name: flower
+    restart: unless-stopped
+    environment:
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - FLOWER_PORT=8888
+    ports:
+      - 8889:8888
+    depends_on:
+      - redis
