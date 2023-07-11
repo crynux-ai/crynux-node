@@ -4,3 +4,5 @@ venv
 *.iml
 *.pyc
 __pycache__/
+*.pem
+*.cert

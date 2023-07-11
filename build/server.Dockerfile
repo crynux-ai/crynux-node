@@ -1,10 +1,8 @@
-FROM python:3.10
+FROM server_base:dev
 
 WORKDIR /app
 COPY . .
 
-RUN pip install -r requirements.txt
-
 EXPOSE 5025
 
-ENTRYPOINT gunicorn -c data/gunicorn.conf.py 'lora_runner:app'
+ENTRYPOINT gunicorn -c build/data/gunicorn.conf.py 'lora_runner:app'

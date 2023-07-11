@@ -1,4 +1,5 @@
 #!/bin/bash
 
-gunicorn -c build/data/gunicorn.conf.py 'lora_runner:app' --worker-tmp-dir /tmp
+source ~/.virutalenv/lora-runner/bin/activate
+gunicorn -c build/data/gunicorn.conf.py 'lora_runner:app'
 

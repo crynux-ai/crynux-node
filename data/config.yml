@@ -2,7 +2,7 @@
 debug: true
 
 node:
-  name: "Crynux Official"
+  name: "Desk X"
   type: "crynux_node"
   capabilities: "24GB, RTX4090, x1"
   version: "v0.1.0"

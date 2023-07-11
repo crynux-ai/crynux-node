@@ -9,6 +9,7 @@ services:
   worker:
     image: worker:dev
     container_name: worker
+    restart: unless-stopped
     volumes:
       - "./data:/app/lora-runner/data"
     deploy:
@@ -18,14 +19,11 @@ services:
             - driver: nvidia
               capabilities: [ gpu ]
 
-  flower:
-    image: mher/flower:0.9.7
-    container_name: flower
+  server:
+    image: server:dev
+    container_name: server
     restart: unless-stopped
-    environment:
-      - CELERY_BROKER_URL=redis://redis:6379/0
-      - FLOWER_PORT=8888
+    volumes:
+      - "./data:/app/lora-runner/data"
     ports:
-      - 8889:8888
-    depends_on:
-      - redis
+      - "5025:5025"
