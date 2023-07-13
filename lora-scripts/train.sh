@@ -2,21 +2,21 @@
 # LoRA train script by @Akegarasu
 
 # Train data path | 设置训练用模型、图片
-pretrained_model=${PRETRAINED_MODEL} # base model path | 底模路径
+pretrained_model="${PRETRAINED_MODEL}" # base model path | 底模路径
 is_v2_model=0                             # SD2.0 model | SD2.0模型 2.0模型下 clip_skip 默认无效
 parameterization=0                        # parameterization | 参数化 本参数需要和 V2 参数同步使用 实验性功能
-train_data_dir=${DATASET_DIR}              # train dataset path | 训练数据集路径
+train_data_dir="${DATASET_DIR}"              # train dataset path | 训练数据集路径
 reg_data_dir=""                           # directory for regularization images | 正则化数据集路径，默认不使用正则化图像。
 
 # Network settings | 网络设置
 network_module="networks.lora" # 在这里将会设置训练的网络种类，默认为 networks.lora 也就是 LoRA 训练。如果你想训练 LyCORIS（LoCon、LoHa） 等，则修改这个值为 lycoris.kohya
 network_weights=""             # pretrained weights for LoRA network | 若需要从已有的 LoRA 模型上继续训练，请填写 LoRA 模型路径。
-network_dim=32                 # network dim | 常用 4~128，不是越大越好
-network_alpha=32               # network alpha | 常用与 network_dim 相同的值或者采用较小的值，如 network_dim的一半 防止下溢。默认值为 1，使用较小的 alpha 需要提升学习率。
+network_dim=${NETWORK_DIMENSION}                 # network dim | 常用 4~128，不是越大越好
+network_alpha=${NETWORK_DIMENSION}               # network alpha | 常用与 network_dim 相同的值或者采用较小的值，如 network_dim的一半 防止下溢。默认值为 1，使用较小的 alpha 需要提升学习率。
 
 # Train related params | 训练相关参数
-resolution="768,1024"  # image resolution w,h. 图片分辨率，宽,高。支持非正方形，但必须是 64 倍数。
-batch_size=5          # batch size
+resolution="${IMAGE_WIDTH},${IMAGE_HEIGHT}"  # image resolution w,h. 图片分辨率，宽,高。支持非正方形，但必须是 64 倍数。
+batch_size=${BATCH_SIZE}          # batch size
 max_train_epoches=${EPOCH}  # max train epoches | 最大训练 epoch
 save_every_n_epochs=0 # save every n epochs | 每 N 个 epoch 保存一次
 
@@ -29,7 +29,7 @@ keep_tokens=0   # keep heading N tokens when shuffling caption tokens | 在随�
 min_snr_gamma=0 # minimum signal-to-noise ratio (SNR) value for gamma-ray | 伽马射线事件的最小信噪比（SNR）值  默认为 0
 
 # Learning rate | 学习率
-lr="1e-4"
+lr="${LEARNING_RATE}"
 unet_lr="1e-4"
 text_encoder_lr="1e-5"
 lr_scheduler="cosine_with_restarts" # "linear", "cosine", "cosine_with_restarts", "polynomial", "constant", "constant_with_warmup", "adafactor"
@@ -38,7 +38,7 @@ lr_restart_cycles=1                 # cosine_with_restarts restart cycles | 余�
 
 # Output settings | 输出设置
 output_name="character"           # output model name | 模型保存名称
-output_dir=${OUTPUT_DIR}
+output_dir="${OUTPUT_DIR}"
 save_model_as="safetensors" # model save ext | 模型保存格式 ckpt, pt, safetensors
 
 # Resume training state | 恢复训练设置
@@ -52,7 +52,7 @@ persistent_data_loader_workers=0 # persistent dataloader workers | 容易爆内�
 clip_skip=2                      # clip skip | 玄学 一般用 2
 
 # 优化器设置
-optimizer_type="AdamW" # Optimizer type | 优化器类型 默认为 AdamW8bit，可选：AdamW AdamW8bit Lion SGDNesterov SGDNesterov8bit DAdaptation AdaFactor
+optimizer_type="${OPTIMIZER}" # Optimizer type | 优化器类型 默认为 AdamW8bit，可选：AdamW AdamW8bit Lion SGDNesterov SGDNesterov8bit DAdaptation AdaFactor
 
 # LyCORIS 训练设置
 algo="lora"  # LyCORIS network algo | LyCORIS 网络算法 可选 lora、loha、lokr、ia3、dylora。lora即为locon
@@ -66,7 +66,9 @@ wandb_api_key="" # wandb_api_key | API,通过https://wandb.ai/authorize获取
 log_tracker_name="" # log_tracker_name | wandb项目名称,留空则为"network_train"
 
 # ============= DO NOT MODIFY CONTENTS BELOW | 请勿修改下方内容 =====================
-export HF_HOME="huggingface"
+export HF_DATASETS_OFFLINE=1
+export TRANSFORMERS_OFFLINE=1
+export HF_HOME="/app/lora-scripts/huggingface"
 export TF_CPP_MIN_LOG_LEVEL=3
 
 extArgs=()

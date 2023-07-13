@@ -10,9 +10,10 @@ node:
 
 data_dir: "/app/lora-runner/data/workspace"
 pretrained_models_dir: "/app/lora-runner/data/pretrained-models"
+controlnet_models_dir: "/app/lora-runner/data/controlnet"
 training_logs_dir: "/app/lora-runner/data/training-logs"
 inference_logs_dir: "/app/lora-runner/data/inference-logs"
 
 celery:
-  broker: "redis://redis:6379/0"
-  backend: "redis://redis:6379/1"
+  broker: "redis://172.17.0.1:6379/0"
+  backend: "redis://172.17.0.1:6379/1"

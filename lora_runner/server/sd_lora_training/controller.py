@@ -54,16 +54,21 @@ task_config_schema = {
         'config': {
             'type': 'object',
             'properties': {
-                'epoch': {'type': 'integer'}
-            },
-            'required': ['epoch']
+                'image_width': {'type': 'integer', 'default': 768},
+                'image_height': {'type': 'integer', 'default': 768},
+                'epoch': {'type': 'integer', 'default': 10},
+                'batch_size': {'type': 'integer', 'default': 5},
+                'network_dimension': {'type': 'integer', 'default': 32},
+                'learning_rate': {'type': 'string', 'default': "5e-5"},
+                'optimizer': {'type': 'string', 'default': 'AdamW'}
+            }
         }
     },
     'required': ['client_id', 'dataset_id', 'pretrained_model_name', 'config']
 }
 
 
-@expects_json(task_config_schema)
+@expects_json(task_config_schema, fill_defaults=True)
 def create_task():
 
     client_id = g.data["client_id"]
@@ -76,8 +81,13 @@ def create_task():
     if not os.path.isfile(pretrained_model):
         return response.response_validation_error("pretrained_model_name", "pretrained model not found")
 
-    client_data_folder = os.path.join(config["data_dir"], client_id)
-    dataset_folder = os.path.join(client_data_folder, dataset_id)
+    dataset_folder = os.path.join(
+        config["data_dir"],
+        "dataset",
+        client_id,
+        dataset_id
+    )
+
     if not os.path.isdir(dataset_folder):
         return response.response_validation_error("dataset_id", "dataset not found")
 

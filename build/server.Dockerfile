@@ -1,8 +1,8 @@
 FROM server_base:dev
 
-WORKDIR /app
+WORKDIR /app/lora-runner
 COPY . .
 
 EXPOSE 5025
 
-ENTRYPOINT gunicorn -c build/data/gunicorn.conf.py 'lora_runner:app'
+ENTRYPOINT gunicorn -c /app/lora-runner/data/gunicorn.conf.py 'lora_runner:app'

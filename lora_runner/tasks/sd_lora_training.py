@@ -1,10 +1,18 @@
 from .celery_app import celery_app
 from lora_runner.config import config
+from .task_common import env_vars_to_cmd_str
 import os
 
 
 @celery_app.task(bind=True, name="sd_lora_training", track_started=True)
 def sd_lora_training(self, client_id, dataset_id, pretrained_model_name, task_config):
+
+    # pretrained model
+    pretrained_model = os.path.join(
+                config["pretrained_models_dir"],
+                pretrained_model_name,
+                pretrained_model_name + ".ckpt"
+            )
 
     # dataset folder
     dataset_folder = os.path.join(
@@ -26,18 +34,21 @@ def sd_lora_training(self, client_id, dataset_id, pretrained_model_name, task_co
 
     log_file = os.path.join(config["training_logs_dir"], self.request.id + ".log")
 
-    epoch = task_config["epoch"]
+    env_vars = {
+        "PRETRAINED_MODEL": pretrained_model,
+        "DATASET_DIR": dataset_folder,
+        "OUTPUT_DIR": model_folder,
+        "EPOCH": task_config["epoch"],
+        "IMAGE_WIDTH": task_config["image_width"],
+        "IMAGE_HEIGHT": task_config["image_height"],
+        "BATCH_SIZE": task_config["batch_size"],
+        "NETWORK_DIMENSION": task_config["network_dimension"],
+        "LEARNING_RATE": task_config["learning_rate"],
+        "OPTIMIZER": task_config["optimizer"],
+    }
 
     # start lora-script
-    cmd = 'export PRETRAINED_MODEL="'\
-          + os.path.join(
-                config["pretrained_models_dir"],
-                pretrained_model_name,
-                pretrained_model_name + ".ckpt"
-            ) + '"'
-    cmd = cmd + ' DATASET_DIR="' + dataset_folder + '"'
-    cmd = cmd + ' OUTPUT_DIR="' + model_folder + '"'
-    cmd = cmd + ' EPOCH=' + str(epoch)
+    cmd = env_vars_to_cmd_str(env_vars)
     cmd = cmd + " && cd /app/lora-scripts && . ./venv/bin/activate && ./train.sh"
     cmd = cmd + ' >> "' + log_file + '" 2>&1'
 

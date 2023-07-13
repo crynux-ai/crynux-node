@@ -10,6 +10,7 @@ node:
 
 data_dir: "build/data/workspace"
 pretrained_models_dir: "build/data/pretrained-models"
+controlnet_models_dir: "build/data/controlnet"
 training_logs_dir: "build/data/training-logs"
 inference_logs_dir: "build/data/inference-logs"
 
