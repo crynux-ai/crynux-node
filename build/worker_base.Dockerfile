@@ -25,4 +25,5 @@ COPY ./lora-scripts/prefetch.sh /app/lora-scripts/prefetch.sh
 COPY ./lora-scripts/prefetch.py /app/lora-scripts/prefetch.py
 
 WORKDIR /app/lora-scripts
+RUN chmod +x train.sh && chmod +x inference.sh && chmod +x prefetch.sh
 RUN . ./venv/bin/activate && ./prefetch.sh
