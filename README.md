@@ -53,11 +53,21 @@ $ docker build -t worker:dev -f build/worker.Dockerfile .
 
 ### Start LoRA Runner using the docker images
 
-Go to the ```build``` folder, the config files and data files are located
-under ```data``` folder. Check the config files and edit them according to
-your own need.
+#### Create the configuration files
 
-Then start all the related docker containers
+The config files are located under ```/build/data```. Two files are required:
+```/build/data/config.yml``` for the application and ```/build/data/gunicorn.conf.py```
+for the Gunicorn http server.
+
+We have provided two example config files under the folder. To run with the default config,
+just rename the files, remove the trailing ```.example``` from the file names.
+
+If you have customized requirements, such as serving under HTTPS protocol,
+just modify the config files according to your needs.
+
+#### Start the docker containers
+
+All the related docker containers can be started easily
 using docker compose:
 
 ```shell
