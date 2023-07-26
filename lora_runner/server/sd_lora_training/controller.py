@@ -10,12 +10,16 @@ import os
 def upload_dataset():
     client_id = request.form.get("client_id")
     dataset_id = request.form.get("dataset_id")
+    repeat = request.form.get("repeat")
 
     if client_id is None:
         return response.response_validation_error("client_id", "client_id is required")
 
     if dataset_id is None:
         return response.response_validation_error("dataset_id", "dataset_id is required")
+
+    if repeat is None:
+        repeat = 2
 
     if "file" not in request.files:
         return response.response_validation_error("file", "no_file_uploaded")
@@ -35,8 +39,9 @@ def upload_dataset():
         "dataset",
         client_id,
         dataset_id,
-        "2_character"
+        str(repeat) + "_character"
     )
+
     if not os.path.isdir(dataset_images_folder):
         os.makedirs(dataset_images_folder)
 
