@@ -18,12 +18,9 @@ WORKDIR /app/lora-scripts/venv/lib/python3.10/site-packages/tensorrt_libs
 RUN ln -s libnvinfer.so.8 libnvinfer.so.7
 RUN ln -s libnvinfer_plugin.so.8 libnvinfer_plugin.so.7
 
-
-COPY ./lora-scripts/train.sh /app/lora-scripts/train.sh
-COPY ./lora-scripts/inference.sh /app/lora-scripts/inference.sh
-COPY ./lora-scripts/prefetch.sh /app/lora-scripts/prefetch.sh
-COPY ./lora-scripts/prefetch.py /app/lora-scripts/prefetch.py
-
 WORKDIR /app/lora-scripts
+
+COPY ./lora-scripts/* .
+
 RUN chmod +x train.sh && chmod +x inference.sh && chmod +x prefetch.sh
 RUN . ./venv/bin/activate && ./prefetch.sh

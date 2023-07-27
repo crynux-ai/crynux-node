@@ -1,6 +1,6 @@
 from .celery_app import celery_app
 from lora_runner.config import config
-from .task_common import env_vars_to_cmd_str
+from .task_common import env_vars_to_cmd_str, print_cuda_info
 import os
 
 
@@ -34,6 +34,8 @@ def sd_lora_training(self, client_id, dataset_id, pretrained_model_name, task_co
 
     log_file = os.path.join(config["training_logs_dir"], self.request.id + ".log")
 
+    print_cuda_info(log_file)
+
     env_vars = {
         "PRETRAINED_MODEL": pretrained_model,
         "DATASET_DIR": dataset_folder,
@@ -59,4 +61,3 @@ def sd_lora_training(self, client_id, dataset_id, pretrained_model_name, task_co
             raise Exception("training process exited with error")
     else:
         raise Exception("training process did not exit normally")
-

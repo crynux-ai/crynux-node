@@ -1,5 +1,5 @@
 from .celery_app import celery_app
-from .task_common import env_vars_to_cmd_str
+from .task_common import env_vars_to_cmd_str, print_cuda_info
 from lora_runner.config import config
 import os
 
@@ -38,6 +38,8 @@ def sd_lora_inference(
 
     if not os.path.exists(image_output_dir):
         os.mkdir(image_output_dir)
+
+    print_cuda_info(log_file)
 
     env_vars = {
         "PRETRAINED_MODEL": pretrained_model,
