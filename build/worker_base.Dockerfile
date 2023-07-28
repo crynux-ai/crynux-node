@@ -20,7 +20,7 @@ RUN ln -s libnvinfer_plugin.so.8 libnvinfer_plugin.so.7
 
 WORKDIR /app/lora-scripts
 
-COPY ./lora-scripts/* .
+COPY ./lora-scripts/* ./
 
 RUN chmod +x train.sh && chmod +x inference.sh && chmod +x prefetch.sh
 RUN . ./venv/bin/activate && ./prefetch.sh
