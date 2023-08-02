@@ -33,4 +33,5 @@ python ./sd-scripts/gen_img_diffusers.py \
       --network_mul ${MODEL_WEIGHT} \
       --max_embeddings_multiples 3 \
       --images_per_prompt ${NUM_IMAGES}\
+      --seed ${SEED}\
       ${controlnet[@]}

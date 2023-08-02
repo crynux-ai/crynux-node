@@ -1,3 +1,5 @@
+import random
+
 from .celery_app import celery_app
 from .task_common import env_vars_to_cmd_str, print_cuda_info
 from lora_runner.config import config
@@ -53,6 +55,11 @@ def sd_lora_inference(
         "NUM_IMAGES": task_config["num_images"],
         "POSE_WEIGHT": task_config["pose_weight"]
     }
+
+    if task_config["seed"] == 0:
+        env_vars["SEED"] = random.randint(10000000, 99999999)
+    else:
+        env_vars["SEED"] = task_config["seed"]
 
     if pose["use_pose"]:
         openpose_model_file = os.path.join(

@@ -88,6 +88,7 @@ task_config_schema = {
                 'image_height': {'type': 'integer', 'default': 1024},
                 'num_images': {'type': 'integer', 'default': 6},
                 'pose_weight': {'type': 'number', 'default': 1},
+                'seed': {'type': 'number', 'default': 0}
             }
         }
     },
