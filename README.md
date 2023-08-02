@@ -16,14 +16,8 @@ The building commands, however, should be executed under the root folder of the 
 
 The building process of the server container is divided into 2 parts for faster dev workflow.
 
-1. Build the base image for the server:
+1. Build the server image:
    
-```shell
-$ docker build -t server_base:dev -f build/server_base.Dockerfile .
-```
-
-2. Build the server image:
-
 ```shell
 $ docker build -t server:dev -f build/server.Dockerfile .
 ```
