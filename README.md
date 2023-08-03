@@ -1,12 +1,8 @@
-## Crynux Node for the Hex
+## Crynux Node for the Hydrogen(H) Network
 
-LoRA Runner should be started on the machine with GPUs,
-and will provide APIs to execute training, fine-tuning and inference
+Crynux Node should be started on the machine with GPUs,
+and will connect to the Crynux Network to execute training, fine-tuning and inference
 tasks of Stable Diffusion models for other applications.
-
-
-Given a remote LoRA Runner node, the users could run the supported applications
-on the laptops, iPads and even mobile phones where powerful GPUs are not available.
 
 ### Build the docker images
 The docker images are built using Dockerfiles which are all located under the ```build``` folder.
