@@ -27,20 +27,8 @@ $ docker build -t server:dev -f build/server.Dockerfile .
 
 The building process of the worker container is divided into 3 parts:
 
-1. Build the base image for the worker:
+1. Build the worker image:
    
-```shell
-$ docker build -t worker_base:dev -f build/worker_base.Dockerfile .
-```
-
-2. Build the base image for the runner:
-
-```shell
-$ docker build -t worker_runner_base:dev -f build/worker_runner_base.Dockerfile .
-```
-
-3. Build the worker image:
-
 ```shell
 $ docker build -t worker:dev -f build/worker.Dockerfile .
 ```
