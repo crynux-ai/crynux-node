@@ -1,12 +1,8 @@
-## Running Stable Diffusion LoRA tasks remotely on the shared GPUs
+## Crynux Node for the Hydrogen(H) Network
 
-LoRA Runner should be started on the machine with GPUs,
-and will provide APIs to execute training, fine-tuning and inference
+Crynux Node should be started on the machine with GPUs,
+and will connect to the Crynux Network to execute training, fine-tuning and inference
 tasks of Stable Diffusion models for other applications.
-
-
-Given a remote LoRA Runner node, the users could run the supported applications
-on the laptops, iPads and even mobile phones where powerful GPUs are not available.
 
 ### Build the docker images
 The docker images are built using Dockerfiles which are all located under the ```build``` folder.
@@ -14,9 +10,7 @@ The building commands, however, should be executed under the root folder of the 
 
 #### The server container
 
-The building process of the server container is divided into 2 parts for faster dev workflow.
-
-1. Build the server image:
+Build the server image:
    
 ```shell
 $ docker build -t server:dev -f build/server.Dockerfile .
@@ -25,13 +19,19 @@ $ docker build -t server:dev -f build/server.Dockerfile .
 
 #### The worker container
 
-The building process of the worker container is divided into 3 parts:
-
-1. Build the worker image:
+Build the worker image:
    
 ```shell
 $ docker build -t worker:dev -f build/worker.Dockerfile .
 ```
+
+### Prepare the pretrained models
+
+Download the popular pretrained models into ```build/data/pretrained-models```.
+For example, download the Stable Diffusion 1.5 model, and place the ckpt file at:
+
+```build/data/pretrained-models/stable-diffusion-v1-5-pruned/stable-diffusion-v1-5-pruned.ckpt```
+
 
 ### Start LoRA Runner using the docker images
 
