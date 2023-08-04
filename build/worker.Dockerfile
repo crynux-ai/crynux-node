@@ -19,8 +19,10 @@ WORKDIR /app/lora-scripts
 COPY ./lora-scripts/* ./
 
 ENV LD_LIBRARY_PATH="/venv/lib/python3.10/site-packages/tensorrt_libs:${LD_LIBRARY_PATH}"
+ENV LD_LIBRARY_PATH="/venv/lib/python3.10/site-packages/torch/lib:${LD_LIBRARY_PATH}"
 RUN ln -s /venv/lib/python3.10/site-packages/tensorrt_libs/libnvinfer.so.8 /venv/lib/python3.10/site-packages/tensorrt_libs/libnvinfer.so.7 && \ 
-    ln -s /venv/lib/python3.10/site-packages/tensorrt_libs/libnvinfer_plugin.so.8 /venv/lib/python3.10/site-packages/tensorrt_libs/libnvinfer_plugin.so.7
+    ln -s /venv/lib/python3.10/site-packages/tensorrt_libs/libnvinfer_plugin.so.8 /venv/lib/python3.10/site-packages/tensorrt_libs/libnvinfer_plugin.so.7 && \
+    ln -s /venv/lib/python3.10/site-packages/torch/lib/libnvrtc-672ee683.so.11.2 /venv/lib/python3.10/site-packages/torch/lib/libnvrtc.so
 RUN chmod +x train.sh && chmod +x inference.sh && chmod +x prefetch.sh && ./prefetch.sh
 
 WORKDIR /app/lora-runner
