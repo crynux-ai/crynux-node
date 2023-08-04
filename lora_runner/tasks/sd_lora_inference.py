@@ -79,7 +79,7 @@ def sd_lora_inference(
             env_vars['CONTROLNET_MODEL'] = openpose_model_file
 
     cmd = env_vars_to_cmd_str(env_vars)
-    cmd = cmd + " && cd /app/lora-scripts && . ./venv/bin/activate && ./inference.sh"
+    cmd = cmd + " && cd /app/lora-scripts && ./inference.sh"
     cmd = cmd + ' >> "' + log_file + '" 2>&1'
 
     status = os.system(cmd)

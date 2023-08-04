@@ -51,7 +51,7 @@ def sd_lora_training(self, client_id, dataset_id, pretrained_model_name, task_co
 
     # start lora-script
     cmd = env_vars_to_cmd_str(env_vars)
-    cmd = cmd + " && cd /app/lora-scripts && . ./venv/bin/activate && ./train.sh"
+    cmd = cmd + " && cd /app/lora-scripts && ./train.sh"
     cmd = cmd + ' >> "' + log_file + '" 2>&1'
 
     status = os.system(cmd)

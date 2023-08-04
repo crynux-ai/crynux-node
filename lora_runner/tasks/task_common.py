@@ -16,7 +16,7 @@ def env_vars_to_cmd_str(env_vars):
 
 
 def print_cuda_info(log_file):
-    cmd = "cd /app/lora-scripts && . ./venv/bin/activate && python ./gpu_info.py"
+    cmd = "cd /app/lora-scripts && python ./gpu_info.py"
     cmd = cmd + ' >> "' + log_file + '" 2>&1'
 
     status = os.system(cmd)
