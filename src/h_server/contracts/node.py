@@ -46,5 +46,5 @@ class NodeContract(ContractWrapperBase):
         )
 
     async def get_node_status(self, address: str) -> NodeStatus:
-        res = await self._function_call("getNodeStatus", address=address)
+        res = await self._function_call("getNodeStatus", nodeAddress=address)
         return NodeStatus(res)
