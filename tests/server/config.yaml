@@ -1,0 +1,8 @@
+ethereum:
+  privkey: "0xbde1aedbe693f34c3c1502e40fe17b18b7f71757523db93a3038a8cadfe43d4d"
+  provider: ""
+
+  contract:
+    token: ""
+    node: ""
+    task: ""
