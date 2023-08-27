@@ -73,6 +73,11 @@ async def _main():
     await db.init(config.db)
 
     contracts = _make_contracts(config)
+    await contracts.init(
+        token_contract_address=config.ethereum.contract.token,
+        node_contract_address=config.ethereum.contract.node,
+        task_contract_address=config.ethereum.contract.task,
+    )
     relay = _make_relay(config)
     queue = _make_event_queue()
 
@@ -111,3 +116,7 @@ def main():
         run(_main)
     except KeyboardInterrupt:
         pass
+
+
+if __name__ == "__main__":
+    main()
