@@ -1,8 +1,10 @@
-from anyio import CancelScope, Event
+from functools import partial
+from typing import Optional
+
+from anyio import Event, create_task_group
 from fastapi import FastAPI
 from hypercorn.asyncio import serve
 from hypercorn.config import Config
-from typing import Optional
 
 from .v1 import router as v1_router
 
@@ -23,8 +25,9 @@ class Server(object):
         config.errorlog = "-"
 
         try:
-            with CancelScope(shield=True):
-                await serve(self._app, config, shutdown_trigger=self._shutdown_event.wait) # type: ignore
+            async with create_task_group() as tg:
+                serve_func = partial(serve, self._app, config, shutdown_trigger=self._shutdown_event.wait)  # type: ignore
+                tg.start_soon(serve_func)
         finally:
             self._shutdown_event = None
 
