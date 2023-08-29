@@ -20,16 +20,16 @@ class ChainTask(BaseModel):
 class TaskConfig(BaseModel):
     image_width: int
     image_height: int
-    lora_weight: float
+    lora_weight: int
     num_images: int
     seed: int
     steps: int
 
 
 class PoseConfig(BaseModel):
-    data_url: str
-    pose_weight: float
+    pose_weight: int
     preprocess: bool
+    data_url: str = ""
 
 
 class RelayTask(BaseModel):
@@ -42,6 +42,15 @@ class RelayTask(BaseModel):
     lora_model: str
     task_config: Optional[TaskConfig] = None
     pose: Optional[PoseConfig] = None
+
+
+class RelayTaskInput(BaseModel):
+    task_id: int
+    base_model: str
+    prompt: str
+    task_config: TaskConfig
+    pose: PoseConfig
+    lora_model: str = ""
 
 
 class TaskStatus(Enum):

@@ -1,11 +1,16 @@
 import json
 import time
-from collections import OrderedDict
+import logging
 from typing import Any, Dict, Optional, Tuple
 
 from eth_account import Account
 from eth_account.signers.local import LocalAccount
 from web3 import Web3
+
+from h_server.utils import sort_dict
+
+
+_logger = logging.getLogger(__name__)
 
 
 class Signer(object):
@@ -15,11 +20,7 @@ class Signer(object):
     def sign(
         self, input: Dict[str, Any], timestamp: Optional[int] = None
     ) -> Tuple[int, str]:
-        sort_keys = sorted(input.keys())
-
-        ordered_input = OrderedDict()
-        for key in sort_keys:
-            ordered_input[key] = input[key]
+        ordered_input = sort_dict(input)
 
         input_bytes = json.dumps(
             ordered_input, ensure_ascii=False, separators=(",", ":")

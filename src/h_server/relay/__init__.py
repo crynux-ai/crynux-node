@@ -1,10 +1,11 @@
 import json
 import os.path
-from typing import List, Optional
+from typing import List, Optional, BinaryIO
 
 import httpx
+from anyio import wrap_file
 
-from h_server.models import RelayTask
+from h_server.models import RelayTask, RelayTaskInput
 
 from .exceptions import RelayError
 from .sign import Signer
@@ -38,12 +39,24 @@ class Relay(object):
         self.client = httpx.AsyncClient(base_url=base_url)
         self.signer = Signer(privkey=privkey)
 
+    async def create_task(self, task: RelayTaskInput) -> RelayTask:
+        input = task.model_dump()
+        timestamp, signature = self.signer.sign(input)
+        input.update({"timestamp": timestamp, "signature": signature})
+
+        resp = await self.client.post("/v1/inference_tasks", json=input)
+        resp = _process_resp(resp, "createTask")
+        content = resp.json()
+        data = content["data"]
+        return RelayTask.model_validate(data)
+
     async def get_task(self, task_id: int) -> RelayTask:
         input = {"task_id": task_id}
         timestamp, signature = self.signer.sign(input)
 
         resp = await self.client.get(
-            f"/{task_id}", params={"timestamp": timestamp, "signature": signature}
+            f"/v1/inference_tasks/{task_id}",
+            params={"timestamp": timestamp, "signature": signature},
         )
         resp = _process_resp(resp, "getTask")
         content = resp.json()
@@ -60,7 +73,7 @@ class Relay(object):
             files.append(("images", (filename, open(file_path, "rb"), "image/png")))
 
         resp = await self.client.post(
-            f"/{task_id}/results",
+            f"/v1/inference_tasks/{task_id}/results",
             data={"timestamp": timestamp, "signature": signature},
             files=files,
         )
@@ -69,6 +82,21 @@ class Relay(object):
         message = content["message"]
         if message != "success":
             raise RelayError(resp.status_code, "uploadTaskResult", message)
+
+    async def get_result(self, task_id: int, image_num: int, dst: BinaryIO):
+        input = {"task_id": task_id, "image_num": str(image_num)}
+        timestamp, signature = self.signer.sign(input)
+
+        async_dst = wrap_file(dst)
+
+        async with self.client.stream(
+            "GET",
+            f"/v1/inference_tasks/{task_id}/results/{image_num}",
+            params={"timestamp": timestamp, "signature": signature},
+        ) as resp:
+            resp = _process_resp(resp, "getTask")
+            async for chunk in resp.aiter_bytes():
+                await async_dst.write(chunk)
 
     async def close(self):
         await self.client.aclose()
