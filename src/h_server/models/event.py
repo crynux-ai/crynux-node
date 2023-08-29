@@ -72,8 +72,8 @@ def load_event_from_contracts(event_data: EventData) -> TaskEvent:
             task_id=event_data["args"]["taskId"],
             creator=Web3.to_checksum_address(event_data["args"]["creator"]),
             selected_node=Web3.to_checksum_address(event_data["args"]["selectedNode"]),
-            task_hash=event_data["args"]["taskHash"],
-            data_hash=event_data["args"]["dataHash"],
+            task_hash=Web3.to_hex(event_data["args"]["taskHash"]),
+            data_hash=Web3.to_hex(event_data["args"]["dataHash"]),
             round=event_data["args"]["round"],
         )
     elif name == "TaskResultCommitmentsReady":
@@ -81,7 +81,7 @@ def load_event_from_contracts(event_data: EventData) -> TaskEvent:
     elif name == "TaskSuccess":
         return TaskSuccess(
             task_id=event_data["args"]["taskId"],
-            result=event_data["args"]["result"],
+            result=Web3.to_hex(event_data["args"]["result"]),
             result_node=Web3.to_checksum_address(event_data["args"]["resultNode"]),
         )
     elif name == "TaskAborted":

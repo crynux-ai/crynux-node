@@ -10,7 +10,7 @@ from .event import (
     load_event_from_contracts,
 )
 from .node import NodeStatus
-from .task import ChainTask, RelayTask, TaskState, TaskStatus
+from .task import ChainTask, RelayTask, RelayTaskInput, TaskState, TaskStatus
 
 __all__ = [
     "TaskKind",
@@ -27,4 +27,5 @@ __all__ = [
     "NodeStatus",
     "TaskStatus",
     "TaskState",
+    "RelayTaskInput"
 ]

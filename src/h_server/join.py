@@ -34,7 +34,9 @@ async def node_join(contracts: Contracts):
     finally:
         with move_on_after(delay=5, shield=True):
             try:
-                await contracts.node_contract.pause()
+                status = await contracts.node_contract.get_node_status(contracts.account)
+                if status == NodeStatus.AVAILABLE:
+                    await contracts.node_contract.pause()
             except TxRevertedError as e:
                 _logger.error("Node cannot pause during termination")
                 _logger.error(str(e))
