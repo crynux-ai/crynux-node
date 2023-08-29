@@ -10,8 +10,8 @@ from anyio import Lock, fail_after, get_cancelled_exc_class, to_thread
 from celery.result import AsyncResult
 
 from h_server import models
-from h_server.event_queue import EventQueue, get_event_queue
-from h_server.celery import get_celery
+from h_server.event_queue import EventQueue
+from h_server.celery_app import get_celery
 from h_server.contracts import Contracts, TxRevertedError, get_contracts
 from h_server.relay import Relay, RelayError, get_relay
 from h_server.watcher import EventWatcher, get_watcher
@@ -21,7 +21,7 @@ from .state_cache import TaskStateCache
 from .utils import make_result_commitments
 from web3.types import EventData
 
-_logger = logging.getLogger()
+_logger = logging.getLogger(__name__)
 
 
 class TaskRunner(ABC):
@@ -58,22 +58,27 @@ def wrap_task_error():
     except RelayError as e:
         retry = (
             e.status_code == 400
-            and e.method == "getTask"
             and ("Task not found" in e.message or "Task not ready" in e.message)
         )
-        _logger.exception(e)
-        _logger.error("Task relay error")
+        if not retry:
+            _logger.exception(e)
+            _logger.error("Task relay error")
+        else:
+            _logger.error("Retry for task relay error")
         raise TaskError(str(e), TaskErrorSource.Relay, retry=retry)
     except TxRevertedError as e:
         _logger.exception(e)
         _logger.error("Task contracts error")
         raise TaskError(str(e), TaskErrorSource.Contracts, retry=False)
     except celery_exceptions.CeleryError as e:
-        _logger.exception(e)
-        _logger.error("Task celery error")
         retry = isinstance(e, celery_exceptions.TimeoutError) or isinstance(
             e, celery_exceptions.Retry
         )
+        if not retry:
+            _logger.exception(e)
+            _logger.error("Task celery error")
+        else:
+            _logger.error("Retry for celery error")
         raise TaskError(str(e), TaskErrorSource.Celery, retry=retry)
     except TaskFailure as e:
         _logger.error("Task celery execution failed")
@@ -126,7 +131,7 @@ class InferenceTaskRunner(TaskRunner):
             "task",
             "TaskSuccess",
             callback=_push_event,
-            filter_args={"taskId": self.task_id, "resultNode": self.contracts.account},
+            filter_args={"taskId": self.task_id},
         )
         self._aborted_watch_id = self.watcher.watch_event(
             "task",
@@ -138,10 +143,10 @@ class InferenceTaskRunner(TaskRunner):
     async def init(self):
         assert self._state is None, "The task runner has already been initialized."
 
-        try:
+        if await self.cache.has(self.task_id):
             state = await self.cache.load(self.task_id)
             self._state = state
-        except KeyError:
+        else:
             self._state = models.TaskState(
                 task_id=self.task_id,
                 round=0,
@@ -166,6 +171,7 @@ class InferenceTaskRunner(TaskRunner):
     async def process_event(self, event: models.TaskEvent):
         with wrap_task_error():
             async with self.lock:
+                _logger.debug(f"Process event {event}")
                 if event.kind == "TaskCreated":
                     assert isinstance(event, models.TaskCreated)
                     await self.task_created(event)
@@ -271,7 +277,8 @@ class InferenceTaskRunner(TaskRunner):
                 self._state.status == models.TaskStatus.Disclosed
             ), "Task status is not disclosed when receive event TaskSuccess."
 
-            await self.relay.upload_task_result(self.task_id, self._state.files)
+            if event.result_node == self.contracts.account:
+                await self.relay.upload_task_result(self.task_id, self._state.files)
 
             self._state.status = models.TaskStatus.Success
 
@@ -306,12 +313,7 @@ class InferenceTaskRunner(TaskRunner):
 
 
 class TestTaskRunner(TaskRunner):
-    def __init__(
-        self,
-        task_id: int,
-        state_cache: TaskStateCache,
-        queue: EventQueue
-    ):
+    def __init__(self, task_id: int, state_cache: TaskStateCache, queue: EventQueue):
         super().__init__(task_id=task_id, state_cache=state_cache, queue=queue)
 
         self._state: Optional[models.TaskState] = None

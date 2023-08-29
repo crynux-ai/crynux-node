@@ -1,3 +1,4 @@
+import logging
 from typing import Any, Awaitable, Callable, Dict, Optional, cast
 
 from anyio import CancelScope, Event, create_task_group, fail_after, sleep
@@ -5,6 +6,7 @@ from anyio.abc import TaskGroup
 from web3 import AsyncWeb3
 from web3.contract.async_contract import AsyncContract, AsyncContractEvent
 from web3.types import EventData, TxReceipt
+from web3.logs import DISCARD
 
 from h_server.contracts import Contracts
 
@@ -12,6 +14,18 @@ from .block_cache import BlockNumberCache
 
 EventCallback = Callable[[EventData], Awaitable[None]]
 
+_logger = logging.getLogger(__name__)
+
+
+def wrap_callback(callback: EventCallback) -> EventCallback:
+    async def inner(event: EventData):
+        try:
+            return await callback(event)
+        except Exception as e:
+            _logger.exception(e)
+            _logger.error(f"Watcher callback for event {event} failed.")
+
+    return inner
 
 class EventFilter(object):
     def __init__(
@@ -36,9 +50,10 @@ class EventFilter(object):
             return
         if tx["to"] != self.event.address:
             return
-        for event in self.event.process_receipt(tx):
+        for event in self.event.process_receipt(tx, errors=DISCARD):
             if _filter_event(event, self.filter_args):
-                tg.start_soon(self.callback, event)
+                _logger.debug(f"Watch event: {event}")
+                tg.start_soon(wrap_callback(self.callback), event)
 
 
 def _filter_event(event: EventData, filter_args: Optional[Dict[str, Any]]) -> bool:
@@ -111,6 +126,7 @@ class EventWatcher(object):
         filter_id = self._next_filter_id
         self._event_filters[filter_id] = event_filter
         self._next_filter_id += 1
+        _logger.debug(f"Watch event {contract_name}.{event_name}, {filter_args}")
         return filter_id
 
     def unwatch_event(self, filter_id: int):
@@ -176,7 +192,7 @@ class EventWatcher(object):
 
                         start += 1
 
-                        with fail_after(delay=2, shield=True):
+                        with fail_after(delay=5, shield=True):
                             if self._cache is not None:
                                 await self._cache.set(start + 1)
                     else:

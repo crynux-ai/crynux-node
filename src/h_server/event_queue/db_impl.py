@@ -1,3 +1,4 @@
+import logging
 from collections import deque
 from typing import Optional, Tuple
 
@@ -9,6 +10,9 @@ from h_server.db import models as db_models
 from h_server.models import TaskEvent, load_event_from_json
 
 from .abc import EventQueue
+
+
+_logger = logging.getLogger()
 
 
 class DbEventQueue(EventQueue):
@@ -62,12 +66,14 @@ class DbEventQueue(EventQueue):
             model_id = event_model.id
 
         await self._put(model_id, event)
+        _logger.debug(f"put event {event} to queue")
 
     async def get(self) -> Tuple[int, TaskEvent]:
         ack_id, event = await self._get()
 
         self._no_ack_events[ack_id] = event
 
+        _logger.debug(f"get {ack_id} event {event}")
         return ack_id, event
 
     async def ack(self, ack_id: int):
@@ -81,7 +87,8 @@ class DbEventQueue(EventQueue):
             await sess.delete(event_model)
             await sess.commit()
 
-        del self._no_ack_events[ack_id]
+        event = self._no_ack_events.pop(ack_id)
+        _logger.debug(f"ack {ack_id} event {event}")
 
     async def no_ack(self, ack_id: int):
         if ack_id not in self._no_ack_events:
@@ -89,3 +96,4 @@ class DbEventQueue(EventQueue):
 
         event = self._no_ack_events.pop(ack_id)
         await self._put(ack_id, event)
+        _logger.debug(f"no ack {ack_id} event {event}")

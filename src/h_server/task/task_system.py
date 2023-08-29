@@ -1,20 +1,17 @@
 import logging
 from typing import Dict, Optional, Type, TypeVar
 
-from anyio import (Event, create_task_group, fail_after,
-                   get_cancelled_exc_class, sleep)
+from anyio import Event, create_task_group, fail_after, get_cancelled_exc_class, sleep
 from anyio.abc import TaskGroup
 
-from h_server.contracts import Contracts
 from h_server.event_queue import EventQueue
-from h_server.relay import Relay
-from h_server.watcher import EventWatcher
+from h_server.models import TaskEvent
 
 from .exceptions import TaskError
 from .state_cache import TaskStateCache
 from .task_runner import InferenceTaskRunner, TaskRunner
 
-_logger = logging.getLogger()
+_logger = logging.getLogger(__name__)
 
 
 T = TypeVar("T", bound=TaskRunner)
@@ -67,15 +64,20 @@ class TaskSystem(object):
                         )
                         await runner.init()
                         self._runners[task_id] = runner
+                        _logger.debug(f"Create task runner for {event.task_id}")
 
-                    async def _process_event():
+                    async def _process_event(ack_id: int, event: TaskEvent):
                         try:
                             finished = await runner.process_event(event)
                             with fail_after(5, shield=True):
                                 if finished:
                                     del self._runners[task_id]
                                     await self._state_cache.delete(task_id)
+                                    _logger.debug(f"Task {event.task_id} finished")
                                 await self.event_queue.ack(ack_id)
+                                _logger.debug(
+                                    f"Task {event.task_id} process event {event.kind} success."
+                                )
                         except get_cancelled_exc_class() as e:
                             with fail_after(5, shield=True):
                                 await self.event_queue.no_ack(ack_id)
@@ -86,8 +88,9 @@ class TaskSystem(object):
                             )
                             if e.retry:
                                 with fail_after(self._retry_delay + 5, shield=True):
+                                    _logger.debug(f"Retry {event} for {event.task_id}")
                                     await sleep(self._retry_delay)
-                                    await self.event_queue.no_ack(ack_id)
+                                    await self.event_queue.no_ack(ack_id=ack_id)
                         except Exception as e:
                             _logger.exception(e)
                             _logger.error(
@@ -96,7 +99,12 @@ class TaskSystem(object):
                             with fail_after(5, shield=True):
                                 await self.event_queue.no_ack(ack_id)
 
-                    tg.start_soon(_process_event)
+                    tg.start_soon(_process_event, ack_id, event)
+        except get_cancelled_exc_class() as e:
+            raise
+        except Exception as e:
+            _logger.exception(e)
+            raise
         finally:
             self._tg = None
             self._stop_event = None
