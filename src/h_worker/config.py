@@ -1,3 +1,4 @@
+import os
 from typing import Literal, Optional
 
 from pydantic import BaseModel
@@ -24,7 +25,7 @@ class TaskConfig(BaseModel):
     training_logs_dir: str
     inference_logs_dir: str
     cwd: str
-    result_api: str
+    result_url: str
 
 
 class Config(YamlBaseSettings):
@@ -35,7 +36,7 @@ class Config(YamlBaseSettings):
     task: TaskConfig
 
     model_config = SettingsConfigDict(
-        yaml_file=os.getenv("H_SERVER_CONFIG", "config/config.yaml")  # type: ignore
+        yaml_file=os.getenv("H_SERVER_CONFIG", "config/worker_config.yaml")  # type: ignore
     )
 
 

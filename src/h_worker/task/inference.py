@@ -75,7 +75,7 @@ def sd_lora_inference(
         envs.update(
             {
                 "STEPS": str(task_config["steps"]),
-                "MODEL_WEIGHT": str(task_config["lora_weight"]),
+                "MODEL_WEIGHT": str(task_config["lora_weight"] / 100),
                 "IMAGE_WIDTH": str(task_config["image_width"]),
                 "IMAGE_HEIGHT": str(task_config["image_height"]),
                 "NUM_IMAGES": str(task_config["num_images"]),
@@ -98,6 +98,7 @@ def sd_lora_inference(
                     "POSE_IMAGE": pose_file,
                     "POSE_PREPROCESS": "1" if pose["preprocess"] else "0",
                     "CONTROLNET_MODEL": openpose_model_file,
+                    "POSE_WEIGHT": str(pose["pose_weight"] / 100),
                 }
             )
 
@@ -125,6 +126,37 @@ def sd_lora_inference(
         files.append(("files", (image_file, open(image_path, "rb"), "image/png")))
 
     resp = http_client.post(
-        config.task.result_api, files=files, data={"hashes": hashes}
+        config.task.result_url + f"/v1/task/{task_id}/result",
+        files=files,
+        data={"hashes": hashes},
+    )
+    resp.raise_for_status()
+
+
+@celery.task(name="mock_lora_inference", track_started=True)
+def mock_lora_inference(
+    task_id: int,
+    prompts: str,
+    base_model: str,
+    lora_model: str,
+    task_config: Optional[models.TaskConfig] = None,
+    pose: Optional[models.PoseConfig] = None,
+):
+    print(f"task_id: {task_id}")
+    print(f"prompts: {prompts}")
+    print(f"base_model: {base_model}")
+    print(f"lora_model: {lora_model}")
+
+    print(f"task config: {task_config}")
+    print(f"pose config: {pose}")
+
+    hashes = [get_image_hash("test.png")]
+    files = [("files", ("test.png", open("test.png", "rb"), "image/png"))]
+
+    config = get_config()
+    resp = http_client.post(
+        config.task.result_url + f"/v1/task/{task_id}/result",
+        files=files,
+        data={"hashes": hashes},
     )
     resp.raise_for_status()

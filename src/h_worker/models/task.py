@@ -4,7 +4,7 @@ from typing import TypedDict
 class TaskConfig(TypedDict):
     image_width: int
     image_height: int
-    lora_weight: float
+    lora_weight: int
     num_images: int
     seed: int
     steps: int
@@ -12,5 +12,5 @@ class TaskConfig(TypedDict):
 
 class PoseConfig(TypedDict):
     data_url: str
-    pose_weight: float
+    pose_weight: int
     preprocess: bool
