@@ -7,7 +7,7 @@ from h_worker import models
 from h_worker.celery import celery
 from h_worker.config import get_config
 
-from .utils import get_lora_model, get_pose_file, upload_result
+from . import utils
 
 
 @celery.task(name="sd_lora_inference", track_started=True)
@@ -33,7 +33,7 @@ def sd_lora_inference(
     if not os.path.exists(base_model_path):
         raise ValueError("base model not found")
 
-    lora_model_path = get_lora_model(
+    lora_model_path = utils.get_lora_model(
         lora_model=lora_model, data_dir=config.task.data_dir
     )
 
@@ -44,7 +44,7 @@ def sd_lora_inference(
         os.makedirs(image_dir, exist_ok=True)
 
     if pose is not None and len(pose["data_url"]) > 0:
-        pose_file = get_pose_file(
+        pose_file = utils.get_pose_file(
             data_dir=config.task.data_dir, task_id=task_id, pose_url=pose["data_url"]
         )
     else:
@@ -100,6 +100,7 @@ def sd_lora_inference(
     )
 
     with open(log_file, mode="w", encoding="utf-8") as log_file:
+        utils.print_gpu_info(log_file)
         subprocess.run(
             args,
             stdout=log_file,
@@ -112,7 +113,9 @@ def sd_lora_inference(
     image_files = sorted(os.listdir(image_dir))
     image_paths = [os.path.join(image_dir, file) for file in image_files]
 
-    upload_result(config.task.result_url + f"/v1/task/{task_id}/result", image_paths)
+    utils.upload_result(
+        config.task.result_url + f"/v1/task/{task_id}/result", image_paths
+    )
 
 
 @celery.task(name="mock_lora_inference", track_started=True)
@@ -133,4 +136,6 @@ def mock_lora_inference(
     print(f"pose config: {pose}")
 
     config = get_config()
-    upload_result(config.task.result_url + f"/v1/task/{task_id}/result", ["test.png"])
+    utils.upload_result(
+        config.task.result_url + f"/v1/task/{task_id}/result", ["test.png"]
+    )
