@@ -63,7 +63,7 @@ class TaskSystem(object):
                             task_id=task_id,
                             state_cache=self._state_cache,
                             queue=self._queue,
-                            task_name="mock_lora_inference",
+                            task_name="sd_lora_inference",
                             distributed=self._distributed,
                         )
                         await runner.init()
