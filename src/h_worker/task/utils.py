@@ -1,20 +1,17 @@
 import hashlib
 import importlib
 import os.path
-import subprocess
 from mimetypes import guess_extension, guess_type
 from typing import List, TextIO
 
 import httpx
+import imhash
 
 http_client = httpx.Client()
 
 
 def get_image_hash(filename: str) -> str:
-    dirname = os.path.dirname(os.path.abspath(__file__))
-    imhash = os.path.join(dirname, "imhash")
-    res = subprocess.check_output([imhash, "-f", filename], encoding="utf-8")
-    return res.strip()
+    return imhash.getPHash(filename)  # type: ignore
 
 
 def get_lora_model(lora_model: str, data_dir: str) -> str:
