@@ -19,7 +19,6 @@ RUN pip install -r requirements.txt
 RUN pip install lion-pytorch lycoris-lora dadaptation fastapi uvicorn wandb network==0.1 xformers==0.0.19 tensorrt==8.6.1
 
 WORKDIR /app/lora-scripts
-COPY ./lora-scripts/* ./
 
 ENV LD_LIBRARY_PATH="/venv/lib/python3.10/site-packages/tensorrt_libs:${LD_LIBRARY_PATH}"
 ENV LD_LIBRARY_PATH="/venv/lib/python3.10/site-packages/torch/lib:${LD_LIBRARY_PATH}"
