@@ -22,11 +22,13 @@ class TaskSystem(object):
         self,
         state_cache: TaskStateCache,
         queue: EventQueue,
+        distributed: bool = False,
         retry_delay: float = 5,
     ) -> None:
         self._state_cache = state_cache
         self._queue = queue
         self._retry_delay = retry_delay
+        self._distributed = distributed
 
         self._tg: Optional[TaskGroup] = None
         self._stop_event: Optional[Event] = None
@@ -61,6 +63,8 @@ class TaskSystem(object):
                             task_id=task_id,
                             state_cache=self._state_cache,
                             queue=self._queue,
+                            task_name="mock_lora_inference",
+                            distributed=self._distributed,
                         )
                         await runner.init()
                         self._runners[task_id] = runner

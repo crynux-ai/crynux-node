@@ -1,57 +1,63 @@
 import os
 import random
+import shutil
 import subprocess
 from typing import Optional
 
 from h_worker import models
-from h_worker.celery import celery
 from h_worker.config import get_config
 
 from . import utils
 
 
-@celery.task(name="sd_lora_inference", track_started=True)
 def sd_lora_inference(
     task_id: int,
     prompts: str,
     base_model: str,
     lora_model: str,
+    distributed: bool = True,
+    local_config: Optional[models.LocalConfig] = None,
     task_config: Optional[models.TaskConfig] = None,
     pose: Optional[models.PoseConfig] = None,
 ):
-    config = get_config()
-    if os.path.abspath(os.getcwd()) != os.path.abspath(config.task.cwd):
-        os.chdir(config.task.cwd)
+    if local_config is None:
+        config = get_config()
+        local_config = models.LocalConfig(**config.task.model_dump())
 
-    args = ["python", "sd-scripts/gen_img_diffusers.py"]
+    args = [
+        "python",
+        os.path.join(local_config["script_dir"], "sd-scripts/gen_img_diffusers.py"),
+    ]
 
     base_model_path = os.path.abspath(
         os.path.join(
-            config.task.pretrained_models_dir, base_model, f"{base_model}.ckpt"
+            local_config["pretrained_models_dir"], base_model, f"{base_model}.ckpt"
         )
     )
     if not os.path.exists(base_model_path):
         raise ValueError("base model not found")
 
     lora_model_path = utils.get_lora_model(
-        lora_model=lora_model, data_dir=config.task.data_dir
+        lora_model=lora_model, data_dir=local_config["data_dir"]
     )
 
     image_dir = os.path.abspath(
-        os.path.join(config.task.data_dir, "image", str(task_id))
+        os.path.join(local_config["data_dir"], "image", str(task_id))
     )
     if not os.path.exists(image_dir):
         os.makedirs(image_dir, exist_ok=True)
 
     if pose is not None and len(pose["data_url"]) > 0:
         pose_file = utils.get_pose_file(
-            data_dir=config.task.data_dir, task_id=task_id, pose_url=pose["data_url"]
+            data_dir=local_config["data_dir"],
+            task_id=task_id,
+            pose_url=pose["data_url"],
         )
     else:
         pose_file = ""
 
     log_file = os.path.abspath(
-        os.path.join(config.task.inference_logs_dir, f"{task_id}.log")
+        os.path.join(local_config["inference_logs_dir"], f"{task_id}.log")
     )
 
     args.extend(["--ckpt", base_model_path])
@@ -77,7 +83,7 @@ def sd_lora_inference(
     if pose is not None and pose_file != "":
         openpose_model_file = os.path.abspath(
             os.path.join(
-                config.task.controlnet_models_dir, "control_v11p_sd15_openpose.pth"
+                local_config["controlnet_models_dir"], "control_v11p_sd15_openpose.pth"
             )
         )
 
@@ -108,22 +114,25 @@ def sd_lora_inference(
             env=envs,
             check=True,
             encoding="utf-8",
+            cwd=local_config["script_dir"]
         )
 
-    image_files = sorted(os.listdir(image_dir))
-    image_paths = [os.path.join(image_dir, file) for file in image_files]
+    if distributed:
+        image_files = sorted(os.listdir(image_dir))
+        image_paths = [os.path.join(image_dir, file) for file in image_files]
 
-    utils.upload_result(
-        config.task.result_url + f"/v1/task/{task_id}/result", image_paths
-    )
+        utils.upload_result(
+            local_config["result_url"] + f"/v1/task/{task_id}/result", image_paths
+        )
 
 
-@celery.task(name="mock_lora_inference", track_started=True)
 def mock_lora_inference(
     task_id: int,
     prompts: str,
     base_model: str,
     lora_model: str,
+    distributed: bool = True,
+    local_config: Optional[models.LocalConfig] = None,
     task_config: Optional[models.TaskConfig] = None,
     pose: Optional[models.PoseConfig] = None,
 ):
@@ -135,7 +144,20 @@ def mock_lora_inference(
     print(f"task config: {task_config}")
     print(f"pose config: {pose}")
 
-    config = get_config()
-    utils.upload_result(
-        config.task.result_url + f"/v1/task/{task_id}/result", ["test.png"]
+    if local_config is None:
+        config = get_config()
+        local_config = models.LocalConfig(**config.task.model_dump())
+    print(local_config)
+
+    image_dir = os.path.abspath(
+        os.path.join(local_config["data_dir"], "image", str(task_id))
     )
+    if not os.path.exists(image_dir):
+        os.makedirs(image_dir, exist_ok=True)
+
+    shutil.copyfile("test.png", os.path.join(image_dir, "test.png"))
+
+    if distributed:
+        utils.upload_result(
+            local_config["result_url"] + f"/v1/task/{task_id}/result", ["test.png"]
+        )

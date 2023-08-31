@@ -1,14 +1,24 @@
-from functools import lru_cache
+from threading import RLock
+from typing import Optional
 
 from celery import Celery
 
 from h_server.config import get_config
 
+_celery: Optional[Celery] = None
 
-@lru_cache()
+_lock = RLock()
+
+
 def get_celery():
     config = get_config()
-    celery = Celery(
-        "h_worker", broker=config.celery.broker, backend=config.celery.backend
-    )
-    return celery
+    assert config.celery is not None, "Celery config not found."
+
+    global _celery
+
+    with _lock:
+        if _celery is None:
+            _celery = Celery(
+                "h_worker", broker=config.celery.broker, backend=config.celery.backend
+            )
+    return _celery

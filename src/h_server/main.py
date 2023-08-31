@@ -30,8 +30,8 @@ def _make_relay(config: Config) -> Relay:
     return relay
 
 
-def _make_event_queue() -> EventQueue:
-    queue = DbEventQueue()
+async def _make_event_queue() -> EventQueue:
+    queue = await DbEventQueue.from_db()
     set_event_queue(queue)
     return queue
 
@@ -56,10 +56,10 @@ def _make_watcher(contracts: Contracts, queue: EventQueue):
     return watcher
 
 
-def _make_task_system(queue: EventQueue) -> TaskSystem:
+def _make_task_system(queue: EventQueue, distributed: bool) -> TaskSystem:
     cache = DbTaskStateCache()
 
-    system = TaskSystem(state_cache=cache, queue=queue)
+    system = TaskSystem(state_cache=cache, queue=queue, distributed=distributed)
     system.set_runner_cls(runner_cls=InferenceTaskRunner)
 
     set_task_system(system)
@@ -79,18 +79,22 @@ async def _main():
         task_contract_address=config.ethereum.contract.task,
     )
     relay = _make_relay(config)
-    queue = _make_event_queue()
+    queue = await _make_event_queue()
 
     watcher = _make_watcher(contracts=contracts, queue=queue)
-    system = _make_task_system(queue=queue)
+    system = _make_task_system(queue=queue, distributed=config.distributed)
 
-    server = Server()
+    if config.distributed:
+        server = Server()
+    else:
+        server = None
 
     async def signal_handler(scope: CancelScope):
         with open_signal_receiver(signal.SIGINT, signal.SIGTERM) as signals:
             async for _ in signals:
                 system.stop()
-                server.stop()
+                if server is not None:
+                    server.stop()
                 watcher.stop()
                 with move_on_after(2, shield=True):
                     await relay.close()
@@ -103,7 +107,8 @@ async def _main():
 
                 tg.start_soon(watcher.start)
 
-                tg.start_soon(server.start, config.server_host, config.server_port)
+                if server is not None:
+                    tg.start_soon(server.start, config.server_host, config.server_port)
 
                 tg.start_soon(system.start)
     finally:

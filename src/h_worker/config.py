@@ -24,7 +24,7 @@ class TaskConfig(BaseModel):
     controlnet_models_dir: str
     training_logs_dir: str
     inference_logs_dir: str
-    cwd: str
+    script_dir: str
     result_url: str
 
 

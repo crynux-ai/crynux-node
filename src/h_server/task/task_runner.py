@@ -10,8 +10,8 @@ from anyio import Lock, fail_after, get_cancelled_exc_class, to_thread
 from celery.result import AsyncResult
 
 from h_server import models
+from h_server.config import TaskConfig as LocalConfig, get_config
 from h_server.event_queue import EventQueue
-from h_server.celery_app import get_celery
 from h_server.contracts import Contracts, TxRevertedError, get_contracts
 from h_server.relay import Relay, RelayError, get_relay
 from h_server.watcher import EventWatcher, get_watcher
@@ -31,10 +31,14 @@ class TaskRunner(ABC):
         task_id: int,
         state_cache: TaskStateCache,
         queue: EventQueue,
+        task_name: str,
+        distributed: bool,
     ):
         self.task_id = task_id
         self.cache = state_cache
         self.queue = queue
+        self.task_name = task_name
+        self.distributed = distributed
 
     @abstractmethod
     async def init(self):
@@ -56,9 +60,8 @@ def wrap_task_error():
         _logger.error("Task assert error")
         raise TaskError(str(e), TaskErrorSource.Unknown, retry=False)
     except RelayError as e:
-        retry = (
-            e.status_code == 400
-            and ("Task not found" in e.message or "Task not ready" in e.message)
+        retry = e.status_code == 400 and (
+            "Task not found" in e.message or "Task not ready" in e.message
         )
         if not retry:
             _logger.exception(e)
@@ -95,11 +98,20 @@ class InferenceTaskRunner(TaskRunner):
         task_id: int,
         state_cache: TaskStateCache,
         queue: EventQueue,
+        task_name: str,
+        distributed: bool,
         contracts: Optional[Contracts] = None,
         relay: Optional[Relay] = None,
         watcher: Optional[EventWatcher] = None,
+        local_config: Optional[LocalConfig] = None,
     ) -> None:
-        super().__init__(task_id=task_id, state_cache=state_cache, queue=queue)
+        super().__init__(
+            task_id=task_id,
+            state_cache=state_cache,
+            queue=queue,
+            task_name=task_name,
+            distributed=distributed,
+        )
         if contracts is None:
             self.contracts = get_contracts()
         else:
@@ -112,6 +124,19 @@ class InferenceTaskRunner(TaskRunner):
             self.watcher = get_watcher()
         else:
             self.watcher = watcher
+
+        if not self.distributed:
+            # load task local config only in non-distributed mode
+            if local_config is None:
+                config = get_config()
+                assert (
+                    config.task_config is not None
+                ), "Default task local config not found in config."
+                self.local_config = config.task_config
+            else:
+                self.local_config = local_config
+        else:
+            self.local_config = None
 
         self._state: Optional[models.TaskState] = None
 
@@ -206,33 +231,79 @@ class InferenceTaskRunner(TaskRunner):
 
             task = await self.relay.get_task(event.task_id)
 
-            def run_task():
-                celery = get_celery()
-                kwargs = {
-                    "task_id": task.task_id,
-                    "prompts": task.prompt,
-                    "base_model": task.base_model,
-                    "lora_model": task.lora_model,
-                }
-                if task.task_config is not None:
-                    kwargs["task_config"] = task.task_config.model_dump()
-                if task.pose is not None:
-                    kwargs["pose"] = task.pose.model_dump()
-                res: AsyncResult = celery.send_task(
-                    "sd_lora_inference",
-                    kwargs=kwargs,
-                )
-                try:
-                    res.get()
-                except celery_exceptions.CeleryError:
-                    raise
-                except Exception as e:
-                    _logger.exception(e)
-                    raise TaskFailure(str(e))
+            if self.distributed:
 
-            await to_thread.run_sync(run_task, cancellable=True)
+                def run_distributed_task():
+                    from h_server.celery_app import get_celery
 
-            self._state.status = models.TaskStatus.Executing
+                    celery = get_celery()
+                    kwargs = {
+                        "task_id": task.task_id,
+                        "prompts": task.prompt,
+                        "base_model": task.base_model,
+                        "lora_model": task.lora_model,
+                        "distributed": True,
+                    }
+                    if task.task_config is not None:
+                        kwargs["task_config"] = task.task_config.model_dump()
+                    if task.pose is not None:
+                        kwargs["pose"] = task.pose.model_dump()
+                    res: AsyncResult = celery.send_task(
+                        self.task_name,
+                        kwargs=kwargs,
+                    )
+                    try:
+                        res.get()
+                    except celery_exceptions.CeleryError:
+                        raise
+                    except Exception as e:
+                        _logger.exception(e)
+                        raise TaskFailure(str(e))
+
+                await to_thread.run_sync(run_distributed_task, cancellable=True)
+                self._state.status = models.TaskStatus.Executing
+
+            else:
+
+                def run_local_task():
+                    import h_worker.task as h_task
+                    from h_worker.task.utils import get_image_hash
+
+                    assert self.local_config is not None
+
+                    task_func = getattr(h_task, self.task_name)
+                    kwargs = {
+                        "task_id": task.task_id,
+                        "prompts": task.prompt,
+                        "base_model": task.base_model,
+                        "lora_model": task.lora_model,
+                        "distributed": False,
+                        "local_config": self.local_config.model_dump(),
+                    }
+                    if task.task_config is not None:
+                        kwargs["task_config"] = task.task_config.model_dump()
+                    if task.pose is not None:
+                        kwargs["pose"] = task.pose.model_dump()
+
+                    task_func(**kwargs)
+
+                    image_dir = os.path.join(
+                        self.local_config.data_dir, "image", str(self.task_id)
+                    )
+                    image_files = sorted(os.listdir(image_dir))
+                    image_paths = [
+                        os.path.join(image_dir, file) for file in image_files
+                    ]
+                    hashes = [get_image_hash(path) for path in image_paths]
+                    return models.TaskResultReady(
+                        task_id=self.task_id,
+                        hashes=hashes,
+                        files=image_paths,
+                    )
+
+                next_event = await to_thread.run_sync(run_local_task, cancellable=True)
+                self._state.status = models.TaskStatus.Executing
+                await self.queue.put(next_event)
 
     async def result_ready(self, event: models.TaskResultReady):
         async with self.state_context():
@@ -313,8 +384,21 @@ class InferenceTaskRunner(TaskRunner):
 
 
 class TestTaskRunner(TaskRunner):
-    def __init__(self, task_id: int, state_cache: TaskStateCache, queue: EventQueue):
-        super().__init__(task_id=task_id, state_cache=state_cache, queue=queue)
+    def __init__(
+        self,
+        task_id: int,
+        state_cache: TaskStateCache,
+        queue: EventQueue,
+        task_name: str,
+        distributed: bool,
+    ):
+        super().__init__(
+            task_id=task_id,
+            state_cache=state_cache,
+            queue=queue,
+            task_name=task_name,
+            distributed=distributed,
+        )
 
         self._state: Optional[models.TaskState] = None
         self._lock: Optional[Lock] = None

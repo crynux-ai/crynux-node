@@ -180,6 +180,7 @@ class EventWatcher(object):
                 while not _should_stop(self._stop_event, start):
                     if start <= (await self.w3.eth.get_block_number()):
                         block = await self.w3.eth.get_block(start)
+                        _logger.debug(f"Get block {start} from chain.")
                         if "transactions" in block and len(self._event_filters) > 0:
                             async with create_task_group() as tg:
                                 for tx_hash in block["transactions"]:

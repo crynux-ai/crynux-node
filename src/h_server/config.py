@@ -41,6 +41,16 @@ class CeleryConfig(BaseModel):
     backend: str
 
 
+class TaskConfig(BaseModel):
+    data_dir: str
+    pretrained_models_dir: str
+    controlnet_models_dir: str
+    training_logs_dir: str
+    inference_logs_dir: str
+    script_dir: str
+    result_url: str
+
+
 class Config(YamlBaseSettings):
     log: LogConfig
 
@@ -50,7 +60,10 @@ class Config(YamlBaseSettings):
     task_dir: str
     relay_url: str
 
-    celery: CeleryConfig
+    celery: Optional[CeleryConfig] = None
+
+    distributed: bool = True
+    task_config: Optional[TaskConfig] = None
 
     server_host: str = "0.0.0.0"
     server_port: int = 7412
