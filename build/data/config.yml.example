@@ -1,19 +1,26 @@
----
-debug: true
+log:
+  dir: "logs"
+  level: "DEBUG"
 
-node:
-  name: "Crynux Official"
-  type: "crynux_node"
-  capabilities: "24GB, RTX4090, x1"
-  version: "v0.1.0"
+ethereum:
+  privkey: ""
+  provider: ""
 
+  contract:
+    token: ""
+    node: ""
+    task: ""
 
-data_dir: "/app/lora-runner/data/workspace"
-pretrained_models_dir: "/app/lora-runner/data/pretrained-models"
-controlnet_models_dir: "/app/lora-runner/data/controlnet"
-training_logs_dir: "/app/lora-runner/data/training-logs"
-inference_logs_dir: "/app/lora-runner/data/inference-logs"
+task_dir: tasks
+db: sqlite+aiosqlite:///db/server.db
+relay_url: ""
 
-celery:
-  broker: "redis://redis:6379/0"
-  backend: "redis://redis:6379/1"
+distributed: 0
+task_config:
+  data_dir: "/app/data/workspace"
+  pretrained_models_dir: "/app/data/pretrained-models"
+  controlnet_models_dir: "/app/data/controlnet"
+  training_logs_dir: "/app/data/training-logs"
+  inference_logs_dir: "/app/data/inference-logs"
+  script_dir: "/app/lora-scripts"
+  result_url: ""
