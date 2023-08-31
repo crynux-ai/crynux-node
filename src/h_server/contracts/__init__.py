@@ -1,0 +1,135 @@
+import logging
+from typing import TYPE_CHECKING, Optional
+
+from eth_account.signers.local import LocalAccount
+from web3 import AsyncWeb3
+from web3.middleware.signing import async_construct_sign_and_send_raw_middleware
+from web3.providers.async_base import AsyncBaseProvider
+
+from . import crynux_token, node, task
+from .exceptions import TxRevertedError
+
+from h_server.config import get_default_tx_option, TxOption
+
+
+__all__ = ["TxRevertedError", "Contracts", "get_contracts", "set_contracts"]
+
+_logger = logging.getLogger(__name__)
+
+
+class Contracts(object):
+    node_contract: node.NodeContract
+    task_contract: task.TaskContract
+    token_contract: crynux_token.TokenContract
+
+    def __init__(
+        self,
+        provider: Optional[AsyncBaseProvider] = None,
+        provider_path: Optional[str] = None,
+        privkey: str = "",
+        default_account_index: Optional[int] = None,
+    ):
+        if provider is None:
+            if provider_path is None:
+                raise ValueError("provider and provider_path cannot be all None.")
+            if provider_path.startswith("http"):
+                from web3 import AsyncHTTPProvider
+
+                provider = AsyncHTTPProvider(provider_path)
+            elif provider_path.startswith("ws"):
+                from web3 import WebsocketProviderV2
+
+                provider = WebsocketProviderV2(provider_path)
+            else:
+                raise ValueError(f"unsupported provider {provider_path}")
+
+        self.provider = provider
+        self._w3 = AsyncWeb3(self.provider)
+        self._w3.eth.account.signHash
+        self._privkey = privkey
+        self._default_account_index = default_account_index
+
+        self._initialized = False
+
+    async def init(
+        self,
+        token_contract_address: Optional[str] = None,
+        node_contract_address: Optional[str] = None,
+        task_contract_address: Optional[str] = None,
+        *,
+        option: "Optional[TxOption]" = None,
+    ):
+        if self._privkey != "":
+            account: LocalAccount = self._w3.eth.account.from_key(self._privkey)
+            middleware = await async_construct_sign_and_send_raw_middleware(account)
+            self._w3.middleware_onion.add(middleware)
+            self._w3.eth.default_account = account.address
+        elif self._default_account_index is not None:
+            self._w3.eth.default_account = (await self._w3.eth.accounts)[
+                self._default_account_index
+            ]
+        _logger.info(f"Wallet address is {self._w3.eth.default_account}")
+
+        if option is None:
+            option = get_default_tx_option()
+
+        if token_contract_address is not None:
+            self.token_contract = crynux_token.TokenContract(
+                self.w3, self.w3.to_checksum_address(token_contract_address)
+            )
+        else:
+            self.token_contract = crynux_token.TokenContract(self.w3)
+            await self.token_contract.deploy(option=option)
+            token_contract_address = self.token_contract.address
+        if node_contract_address is not None:
+            self.node_contract = node.NodeContract(
+                self.w3, self.w3.to_checksum_address(node_contract_address)
+            )
+        else:
+            self.node_contract = node.NodeContract(self.w3)
+            await self.node_contract.deploy(token_contract_address, option=option)
+            node_contract_address = self.node_contract.address
+        if task_contract_address is not None:
+            self.task_contract = task.TaskContract(
+                self.w3, self.w3.to_checksum_address(task_contract_address)
+            )
+        else:
+            self.task_contract = task.TaskContract(self.w3)
+            await self.task_contract.deploy(
+                node_contract_address, token_contract_address, option=option
+            )
+            task_contract_address = self.task_contract.address
+
+        self._initialized = True
+
+    @property
+    def w3(self):
+        return self._w3
+
+    @property
+    def account(self):
+        res = self._w3.eth.default_account
+        assert res, "Contracts has not been initialized!"
+        return res
+
+    @property
+    def initialized(self) -> bool:
+        return self._initialized
+
+    async def get_current_block_number(self) -> int:
+        return await self._w3.eth.get_block_number()
+
+
+_default_contracts: Optional[Contracts] = None
+
+
+def get_contracts() -> Contracts:
+    assert _default_contracts is not None, "Contracts has not been set."
+
+    return _default_contracts
+
+
+def set_contracts(contracts: Contracts):
+    global _default_contracts
+
+    _default_contracts = contracts

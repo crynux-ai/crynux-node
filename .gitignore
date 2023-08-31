@@ -6,3 +6,7 @@ venv
 __pycache__/
 *.pem
 *.cert
+*.egg-info/
+*.egg
+nodes
+*.so
