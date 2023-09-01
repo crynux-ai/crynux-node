@@ -36,6 +36,7 @@ class Config(YamlBaseSettings):
     task: TaskConfig
 
     model_config = SettingsConfigDict(
+        secrets_dir=None,
         yaml_file=os.getenv("H_SERVER_CONFIG", "config/worker_config.yaml")  # type: ignore
     )
 
