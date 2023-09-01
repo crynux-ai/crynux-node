@@ -30,7 +30,6 @@ RUN pip install torch==2.0.0+cu118 torchvision==0.15.1+cu118 --extra-index-url h
 RUN pip install -r requirements.txt
 RUN pip install lion-pytorch lycoris-lora dadaptation fastapi uvicorn wandb network==0.1 xformers==0.0.19 tensorrt==8.6.1
 
-
 FROM nvidia/cuda:11.8.0-cudnn8-runtime-ubuntu22.04
 
 RUN apt update
@@ -48,6 +47,11 @@ WORKDIR /app/lora-scripts
 RUN ln -s venv/lib/python3.10/site-packages/tensorrt_libs/libnvinfer.so.8 venv/lib/python3.10/site-packages/tensorrt_libs/libnvinfer.so.7 && \ 
     ln -s venv/lib/python3.10/site-packages/tensorrt_libs/libnvinfer_plugin.so.8 venv/lib/python3.10/site-packages/tensorrt_libs/libnvinfer_plugin.so.7 && \
     ln -s venv/lib/python3.10/site-packages/torch/lib/libnvrtc-672ee683.so.11.2 venv/lib/python3.10/site-packages/torch/lib/libnvrtc.so
+
+WORKDIR /app
+
+COPY build/data data
+RUN mv data/config.yml.example config.yml
 
 ENV H_SERVER_CONFIG="/app/config.yml"
 
