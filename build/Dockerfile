@@ -18,15 +18,7 @@ RUN pip install torch==2.0.0+cu118 torchvision==0.15.1+cu118 --extra-index-url h
 RUN pip install -r requirements.txt
 RUN pip install lion-pytorch lycoris-lora dadaptation fastapi uvicorn wandb network==0.1 xformers==0.0.19 tensorrt==8.6.1
 
-WORKDIR /app/lora-scripts
-
-ENV LD_LIBRARY_PATH="/venv/lib/python3.10/site-packages/tensorrt_libs:${LD_LIBRARY_PATH}"
-ENV LD_LIBRARY_PATH="/venv/lib/python3.10/site-packages/torch/lib:${LD_LIBRARY_PATH}"
-RUN ln -s /venv/lib/python3.10/site-packages/tensorrt_libs/libnvinfer.so.8 /venv/lib/python3.10/site-packages/tensorrt_libs/libnvinfer.so.7 && \ 
-    ln -s /venv/lib/python3.10/site-packages/tensorrt_libs/libnvinfer_plugin.so.8 /venv/lib/python3.10/site-packages/tensorrt_libs/libnvinfer_plugin.so.7 && \
-    ln -s /venv/lib/python3.10/site-packages/torch/lib/libnvrtc-672ee683.so.11.2 /venv/lib/python3.10/site-packages/torch/lib/libnvrtc.so
-
-WORKDIR /app/lora-runner
+WORKDIR /app/h-node
 
 COPY src src
 COPY pyproject.toml pyproject.toml
@@ -42,6 +34,12 @@ RUN apt install python3.10 python3.10-venv ffmpeg libsm6 libxext6 -y
 COPY --from=builder /venv /venv
 ENV PATH="/venv/bin:${PATH}"
 
+ENV LD_LIBRARY_PATH="/venv/lib/python3.10/site-packages/tensorrt_libs:${LD_LIBRARY_PATH}"
+ENV LD_LIBRARY_PATH="/venv/lib/python3.10/site-packages/torch/lib:${LD_LIBRARY_PATH}"
+RUN ln -s /venv/lib/python3.10/site-packages/tensorrt_libs/libnvinfer.so.8 /venv/lib/python3.10/site-packages/tensorrt_libs/libnvinfer.so.7 && \ 
+    ln -s /venv/lib/python3.10/site-packages/tensorrt_libs/libnvinfer_plugin.so.8 /venv/lib/python3.10/site-packages/tensorrt_libs/libnvinfer_plugin.so.7 && \
+    ln -s /venv/lib/python3.10/site-packages/torch/lib/libnvrtc-672ee683.so.11.2 /venv/lib/python3.10/site-packages/torch/lib/libnvrtc.so
+
 WORKDIR /app
 
 COPY remote-lora-scripts lora-scripts
@@ -52,6 +50,6 @@ COPY prefetch.py prefetch.py
 ENV HF_HOME="/app/lora-scripts/huggingface"
 RUN python3 prefetch.py
 
-ENV H_SERVER_CONFIG=/app/data/config.yml
+ENV H_SERVER_CONFIG="/app/config.yml"
 
 ENTRYPOINT ["python3", "-m", "h_server.main"]
