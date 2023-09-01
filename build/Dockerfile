@@ -50,7 +50,7 @@ RUN ln -s venv/lib/python3.10/site-packages/tensorrt_libs/libnvinfer.so.8 venv/l
 
 WORKDIR /app
 
-COPY build/data data
+COPY build/data/ data/
 RUN mv data/config.yml.example config.yml
 
 ENV H_SERVER_CONFIG="/app/config.yml"
