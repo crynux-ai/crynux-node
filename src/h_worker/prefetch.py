@@ -25,7 +25,7 @@ def _prefetch_base_model(
             os.makedirs(model_dir, exist_ok=True)
 
         url = base_model_urls[base_model]
-        with client.stream("GET", url) as resp:
+        with client.stream("GET", url, follow_redirects=True) as resp:
             resp.raise_for_status()
             with open(base_model_path, mode="wb") as f:
                 for chunk in resp.iter_bytes():
