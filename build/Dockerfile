@@ -48,7 +48,8 @@ COPY prefetch.py prefetch.py
 COPY --from=builder /venv /venv
 ENV PATH="/venv/bin:${PATH}"
 
-RUN HF_HOME="/app/lora-scripts/huggingface" python3 prefetch.py
+ENV HF_HOME="/app/lora-scripts/huggingface"
+RUN python3 prefetch.py
 
 ENV H_SERVER_CONFIG=/app/data/config.yml
 
