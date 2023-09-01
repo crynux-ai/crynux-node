@@ -24,8 +24,14 @@ def sd_lora_inference(
         config = get_config()
         local_config = models.LocalConfig(**config.task.model_dump())
 
+    # Check if venv exists. If it exits, use the venv interpreter; else use the current interpreter
+    exe = "python"
+    worker_venv = os.path.abspath(os.path.join(local_config["script_dir"], "venv"))
+    if os.path.exists(worker_venv):
+        exe = os.path.join(worker_venv, "bin", "python")
+
     args = [
-        "python",
+        exe,
         os.path.join(local_config["script_dir"], "sd-scripts/gen_img_diffusers.py"),
     ]
 
