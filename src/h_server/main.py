@@ -1,3 +1,4 @@
+import os
 import signal
 
 from anyio import create_task_group, move_on_after, open_signal_receiver, run
@@ -70,6 +71,20 @@ async def _main():
     config = get_config()
 
     log.init(config)
+
+    if not config.distributed:
+        from h_worker.prefetch import prefetch
+
+        assert (
+            config.task_config is not None
+        ), "Task config is None in non-distributed version"
+
+        prefetch(
+            config.task_config.pretrained_models_dir,
+            os.path.join(config.task_config.script_dir, "huggingface"),
+            config.task_config.script_dir,
+        )
+
     await db.init(config.db)
 
     contracts = _make_contracts(config)
