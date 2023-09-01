@@ -37,7 +37,10 @@ RUN pip install -r requirements.txt && pip install .
 FROM nvidia/cuda:11.8.0-cudnn8-runtime-ubuntu22.04
 
 RUN apt update
-RUN apt install python3.10 ffmpeg libsm6 libxext6 -y
+RUN apt install python3.10 python3.10-venv ffmpeg libsm6 libxext6 -y
+
+COPY --from=builder /venv /venv
+ENV PATH="/venv/bin:${PATH}"
 
 WORKDIR /app
 
@@ -45,8 +48,6 @@ COPY remote-lora-scripts lora-scripts
 
 COPY prefetch.py prefetch.py
 
-COPY --from=builder /venv /venv
-ENV PATH="/venv/bin:${PATH}"
 
 ENV HF_HOME="/app/lora-scripts/huggingface"
 RUN python3 prefetch.py
