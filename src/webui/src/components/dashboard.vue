@@ -1,6 +1,7 @@
 <script setup>
 import { h } from 'vue'
 import { PauseCircleOutlined, LogoutOutlined } from '@ant-design/icons-vue'
+import EditAccount from './edit-account.vue'
 </script>
 
 <template>
@@ -26,7 +27,9 @@ import { PauseCircleOutlined, LogoutOutlined } from '@ant-design/icons-vue'
 
     <a-col :span="8">
       <a-card title="Account" :bordered="false" style="height: 100%">
-        <template #extra><a href="javascript:void(0)">Edit</a></template>
+        <template #extra>
+          <edit-account></edit-account>
+        </template>
         <a-row>
           <a-col :span="12">
             <a-statistic title="Address" :value="'0xA1d5e...27cFE'"></a-statistic>
