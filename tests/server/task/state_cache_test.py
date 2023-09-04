@@ -1,5 +1,7 @@
 import pytest
 
+from datetime import datetime
+
 from h_server import db
 from h_server.models import TaskState, TaskStatus
 from h_server.task.state_cache import DbTaskStateCache, MemoryTaskStateCache
@@ -16,6 +18,7 @@ async def test_memory_state_cache():
         result=bytes.fromhex("01020405060708"),
     )
 
+    start = datetime.now()
     await cache.dump(state)
 
     _state = await cache.load(state.task_id)
@@ -24,7 +27,18 @@ async def test_memory_state_cache():
 
     assert await cache.has(state.task_id)
 
+    assert await cache.count() == 1
+    assert await cache.count(start=start, end=datetime.now()) == 1
+    assert await cache.count(start=datetime.now()) == 0
+    assert await cache.count(start=start, end=datetime.now(), deleted=True) == 0
+    assert await cache.count(start=start, end=datetime.now(), deleted=False) == 1
+
     await cache.delete(state.task_id)
+    assert await cache.count() == 1
+    assert await cache.count(start=start, end=datetime.now()) == 1
+    assert await cache.count(start=datetime.now()) == 0
+    assert await cache.count(start=start, end=datetime.now(), deleted=True) == 1
+    assert await cache.count(start=start, end=datetime.now(), deleted=False) == 0
 
     assert not (await cache.has(state.task_id))
 
@@ -52,7 +66,8 @@ async def test_db_state_cache(init_db):
         files=["test.png"],
         result=bytes.fromhex("01020405060708"),
     )
-
+    
+    start = datetime.now()
     await cache.dump(state)
 
     _state = await cache.load(state.task_id)
@@ -60,8 +75,18 @@ async def test_db_state_cache(init_db):
     assert state == _state
 
     assert await cache.has(state.task_id)
-
+    assert await cache.count() == 1
+    assert await cache.count(start=start, end=datetime.now()) == 1
+    assert await cache.count(start=datetime.now()) == 0
+    assert await cache.count(start=start, end=datetime.now(), deleted=True) == 0
+    assert await cache.count(start=start, end=datetime.now(), deleted=False) == 1
+    
     await cache.delete(state.task_id)
+    assert await cache.count() == 1
+    assert await cache.count(start=start, end=datetime.now()) == 1
+    assert await cache.count(start=datetime.now()) == 0
+    assert await cache.count(start=start, end=datetime.now(), deleted=True) == 1
+    assert await cache.count(start=start, end=datetime.now(), deleted=False) == 0
 
     assert not (await cache.has(state.task_id))
 

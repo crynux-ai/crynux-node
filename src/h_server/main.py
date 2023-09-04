@@ -5,14 +5,15 @@ from anyio import create_task_group, move_on_after, open_signal_receiver, run
 from anyio.abc import CancelScope
 from web3.types import EventData
 
-from h_server import db, models, log
+from h_server import db, log, models
 from h_server.config import Config, get_config
 from h_server.contracts import Contracts, set_contracts
 from h_server.event_queue import DbEventQueue, EventQueue, set_event_queue
 from h_server.join import node_join
 from h_server.relay import Relay, set_relay
 from h_server.server import Server
-from h_server.task import DbTaskStateCache, TaskSystem, set_task_system
+from h_server.task import (DbTaskStateCache, TaskSystem, set_task_state_cache,
+                           set_task_system)
 from h_server.task.task_runner import InferenceTaskRunner
 from h_server.watcher import DbBlockNumberCache, EventWatcher, set_watcher
 
@@ -59,6 +60,7 @@ def _make_watcher(contracts: Contracts, queue: EventQueue):
 
 def _make_task_system(queue: EventQueue, distributed: bool) -> TaskSystem:
     cache = DbTaskStateCache()
+    set_task_state_cache(cache)
 
     system = TaskSystem(state_cache=cache, queue=queue, distributed=distributed)
     system.set_runner_cls(runner_cls=InferenceTaskRunner)

@@ -1,10 +1,13 @@
-from .abc import TaskStateCache
 from datetime import datetime
+from typing import Optional
 
 import sqlalchemy as sa
+
 from h_server import db
 from h_server.db import models as db_models
 from h_server.models import TaskState
+
+from .abc import TaskStateCache
 
 
 class DbTaskStateCache(TaskStateCache):
@@ -70,3 +73,24 @@ class DbTaskStateCache(TaskStateCache):
             if state is not None and state.deleted_at is None:
                 state.deleted_at = datetime.now()
             await sess.commit()
+
+    async def count(
+        self,
+        start: Optional[datetime] = None,
+        end: Optional[datetime] = None,
+        deleted: Optional[bool] = None,
+    ):
+        async with db.session_scope() as sess:
+            q = sa.select(sa.func.count(db_models.TaskState.id))
+            if start is not None:
+                q = q.where(db_models.TaskState.updated_at >= start)
+            if end is not None:
+                q = q.where(db_models.TaskState.updated_at < end)
+            if deleted is not None:
+                if deleted:
+                    q = q.where(db_models.TaskState.deleted_at.is_not(None))
+                else:
+                    q = q.where(db_models.TaskState.deleted_at.is_(None))
+
+            n = (await sess.execute(q)).scalar_one()
+            return n
