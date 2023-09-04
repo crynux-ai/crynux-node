@@ -1,4 +1,5 @@
 from .abc import TaskStateCache
+from datetime import datetime
 
 import sqlalchemy as sa
 from h_server import db
@@ -9,8 +10,10 @@ from h_server.models import TaskState
 class DbTaskStateCache(TaskStateCache):
     async def load(self, task_id: int) -> TaskState:
         async with db.session_scope() as sess:
-            q = sa.select(db_models.TaskState).where(
-                db_models.TaskState.task_id == task_id
+            q = (
+                sa.select(db_models.TaskState)
+                .where(db_models.TaskState.task_id == task_id)
+                .where(db_models.TaskState.deleted_at.is_(None))
             )
             state = (await sess.scalars(q)).one_or_none()
             if state is not None:
@@ -42,10 +45,12 @@ class DbTaskStateCache(TaskStateCache):
                     result=task_state.result,
                 )
                 sess.add(state)
-            else:
+            elif state.deleted_at is None:
                 state.round = task_state.round
                 state.status = task_state.status
                 state.result = task_state.result
+            else:
+                raise KeyError(f"Task state of {task_id} has been deleted.")
             await sess.commit()
 
     async def has(self, task_id: int) -> bool:
@@ -54,7 +59,7 @@ class DbTaskStateCache(TaskStateCache):
                 db_models.TaskState.task_id == task_id
             )
             state = (await sess.scalars(q)).one_or_none()
-            return state is not None
+            return state is not None and state.deleted_at is None
 
     async def delete(self, task_id: int):
         async with db.session_scope() as sess:
@@ -62,6 +67,6 @@ class DbTaskStateCache(TaskStateCache):
                 db_models.TaskState.task_id == task_id
             )
             state = (await sess.scalars(q)).one_or_none()
-            if state is not None:
-                await sess.delete(state)
+            if state is not None and state.deleted_at is None:
+                state.deleted_at = datetime.now()
             await sess.commit()

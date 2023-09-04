@@ -1,6 +1,8 @@
-from typing import get_args
+from typing import get_args, Optional
 import sqlalchemy as sa
 from sqlalchemy.orm import Mapped, mapped_column
+from datetime import datetime
+
 
 from h_server.models import TaskKind, TaskStatus
 
@@ -18,6 +20,10 @@ class TaskState(Base, BaseMixin):
     files: Mapped[str] = mapped_column(sa.Text, nullable=False, index=False)
     result: Mapped[bytes] = mapped_column(
         sa.LargeBinary, nullable=False, index=False, default=b""
+    )
+
+    deleted_at: Mapped[Optional[datetime]] = mapped_column(
+        sa.DateTime, default=None, nullable=True, index=False
     )
 
 

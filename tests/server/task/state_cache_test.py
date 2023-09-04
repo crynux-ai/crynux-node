@@ -31,6 +31,9 @@ async def test_memory_state_cache():
     with pytest.raises(KeyError):
         await cache.load(state.task_id)
 
+    with pytest.raises(KeyError):
+        await cache.dump(state)
+
 
 @pytest.fixture(scope="module")
 async def init_db():
@@ -64,3 +67,6 @@ async def test_db_state_cache(init_db):
 
     with pytest.raises(KeyError):
         await cache.load(state.task_id)
+
+    with pytest.raises(KeyError):
+        await cache.dump(state)
