@@ -2,7 +2,9 @@ from enum import IntEnum
 
 
 class NodeStatus(IntEnum):
-    UNKNOWN = 0
+    QUIT = 0
     AVAILABLE = 1
     BUSY = 2
-    PAUSED = 3
+    PENDING_PAUSE = 3
+    PENDING_QUIT = 4
+    PAUSED = 5
