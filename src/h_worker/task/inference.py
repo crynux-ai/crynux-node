@@ -128,7 +128,7 @@ def sd_lora_inference(
         image_paths = [os.path.join(image_dir, file) for file in image_files]
 
         utils.upload_result(
-            local_config["result_url"] + f"/v1/task/{task_id}/result", image_paths
+            local_config["result_url"] + f"/v1/tasks/{task_id}/result", image_paths
         )
 
 
@@ -165,5 +165,5 @@ def mock_lora_inference(
 
     if distributed:
         utils.upload_result(
-            local_config["result_url"] + f"/v1/task/{task_id}/result", ["test.png"]
+            local_config["result_url"] + f"/v1/tasks/{task_id}/result", ["test.png"]
         )

@@ -125,6 +125,12 @@ class TaskSystem(object):
             return True
         return await self._state_cache.has(task_id)
 
+    async def is_running(self) -> bool:
+        if len(self._runners) > 0:
+            return True
+        n = await self._state_cache.count(deleted=False)
+        return n > 0
+
 
 _default_task_system: Optional[TaskSystem] = None
 

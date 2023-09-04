@@ -1,19 +1,21 @@
 import os
 import shutil
 from string import hexdigits
-from typing import List
+from typing import List, Literal
+from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Path, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from typing_extensions import Annotated
+from pydantic import BaseModel
 
 from h_server.config import Config, get_config
-from h_server.task import get_task_system, TaskSystem
-from h_server.models import TaskResultReady
+from h_server.task import get_task_system, TaskSystem, get_task_state_cache, TaskStateCache
+from h_server.models import TaskResultReady, TaskStatus
 
 from .utils import CommonResponse
 
-router = APIRouter()
+router = APIRouter(prefix="/tasks")
 
 
 def store_result_files(task_dir: str, task_id: str, files: List[UploadFile]):
@@ -67,3 +69,34 @@ async def upload_result(
     await task_system.event_queue.put(event)
 
     return CommonResponse()
+
+
+class TaskStats(BaseModel):
+    status: Literal["running", "idle"]
+    num_today: int
+    num_total: int
+
+
+@router.get("", response_model=TaskStats)
+async def get_task_stats(
+    *,
+    task_system: Annotated[TaskSystem, Depends(get_task_system)],
+    task_state_cache: Annotated[TaskStateCache, Depends(get_task_state_cache)],
+):
+    if await task_system.is_running():
+        status = "running"
+    else:
+        status = "idle"
+    
+    now = datetime.now()
+    today_start = now - timedelta(days=1)
+
+    num_today = await task_state_cache.count(
+        start=today_start, deleted=True, status=TaskStatus.Success
+    )
+
+    num_total = await task_state_cache.count(
+        deleted=True, status=TaskStatus.Success
+    )
+
+    return TaskStats(status=status, num_today=num_today, num_total=num_total)
