@@ -28,5 +28,6 @@ class TaskStateCache(ABC):
         start: Optional[datetime] = None,
         end: Optional[datetime] = None,
         deleted: Optional[bool] = None,
+        status: Optional[models.TaskStatus] = None
     ) -> int:
         ...
