@@ -9,7 +9,7 @@ from .event import (
     load_event_from_json,
     load_event_from_contracts,
 )
-from .node import NodeStatus
+from .node import ChainNodeStatus, NodeStatus, NodeState, convert_node_status
 from .task import ChainTask, RelayTask, RelayTaskInput, TaskState, TaskStatus
 
 __all__ = [
@@ -24,7 +24,10 @@ __all__ = [
     "load_event_from_contracts",
     "ChainTask",
     "RelayTask",
+    "ChainNodeStatus",
     "NodeStatus",
+    "convert_node_status",
+    "NodeState",
     "TaskStatus",
     "TaskState",
     "RelayTaskInput"

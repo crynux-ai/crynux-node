@@ -1,13 +1,23 @@
 import os
 from typing import Literal, Optional, TypedDict
 
+import yaml
+from anyio import Condition, to_thread
 from pydantic import BaseModel
 from pydantic_settings import SettingsConfigDict
 from pydantic_settings_yaml import YamlBaseSettings
 from web3 import Web3
 from web3.types import Wei
 
-__all__ = ["Config", "get_config", "set_config", "TxOption", "get_default_tx_option"]
+__all__ = [
+    "Config",
+    "get_config",
+    "set_config",
+    "wait_privkey",
+    "set_privkey",
+    "TxOption",
+    "get_default_tx_option",
+]
 
 LogLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR", "FATAL", "CRITICAL"]
 
@@ -24,8 +34,8 @@ class Contract(BaseModel):
 
 
 class Ethereum(BaseModel):
-    privkey: str
     provider: str
+    privkey: str = ""
 
     chain_id: Optional[int] = None
     gas: Optional[int] = None
@@ -70,7 +80,7 @@ class Config(YamlBaseSettings):
 
     model_config = SettingsConfigDict(
         secrets_dir=None,
-        yaml_file=os.getenv("H_SERVER_CONFIG", "config/server_config.yaml")  # type: ignore
+        yaml_file=os.getenv("H_SERVER_CONFIG", "config/server_config.yaml"),  # type: ignore
     )
 
 
@@ -89,6 +99,43 @@ def get_config():
 def set_config(config: Config):
     global _config
     _config = config
+
+
+_condition: Optional[Condition] = None
+
+
+def _get_condition() -> Condition:
+    global _condition
+
+    if _condition is None:
+        _condition = Condition()
+
+    return _condition
+
+
+async def wait_privkey() -> str:
+    config = get_config()
+    condition = _get_condition()
+    async with condition:
+        while len(config.ethereum.privkey) == 0:
+            await condition.wait()
+        return config.ethereum.privkey
+
+
+async def set_privkey(privkey: str):
+    config = get_config()
+    condition = _get_condition()
+    async with condition:
+        config.ethereum.privkey = privkey
+        condition.notify(1)
+
+    def dump_config():
+        config_file: Optional[str] = config.model_config.get("yaml_file")
+        assert config_file is not None
+        with open(config_file, mode="w", encoding="utf-8") as f:
+            yaml.safe_dump(config.model_dump(), f)
+
+    await to_thread.run_sync(dump_config)
 
 
 class TxOption(TypedDict, total=False):
