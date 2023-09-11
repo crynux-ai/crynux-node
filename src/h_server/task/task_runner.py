@@ -404,7 +404,7 @@ class InferenceTaskRunner(TaskRunner):
             await to_thread.run_sync(delete_result_files, self._state.files)
 
 
-class TestTaskRunner(TaskRunner):
+class MockTaskRunner(TaskRunner):
     def __init__(
         self,
         task_id: int,

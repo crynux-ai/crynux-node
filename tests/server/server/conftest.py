@@ -2,7 +2,7 @@ import pytest
 
 from h_server.config import Config, set_config
 from h_server.event_queue import MemoryEventQueue, set_event_queue
-from h_server.task import TaskSystem, TestTaskRunner, set_task_system
+from h_server.task import TaskSystem, MockTaskRunner, set_task_system
 from h_server.task.state_cache import MemoryTaskStateCache
 
 
@@ -29,6 +29,6 @@ async def init():
     cache = MemoryTaskStateCache()
 
     system = TaskSystem(state_cache=cache, queue=queue)
-    system.set_runner_cls(TestTaskRunner)
+    system.set_runner_cls(MockTaskRunner)
 
     set_task_system(system)
