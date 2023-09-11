@@ -79,7 +79,6 @@ class Config(YamlBaseSettings):
     server_port: int = 7412
 
     model_config = SettingsConfigDict(
-        secrets_dir=None,
         yaml_file=os.getenv("H_SERVER_CONFIG", "config/server_config.yaml"),  # type: ignore
     )
 
