@@ -6,7 +6,7 @@ from .state_cache import (
     set_task_state_cache,
     get_task_state_cache,
 )
-from .task_runner import TaskRunner, InferenceTaskRunner, TestTaskRunner
+from .task_runner import TaskRunner, InferenceTaskRunner, MockTaskRunner
 
 
 __all__ = [
@@ -20,5 +20,5 @@ __all__ = [
     "get_task_state_cache",
     "TaskRunner",
     "InferenceTaskRunner",
-    "TestTaskRunner",
+    "MockTaskRunner",
 ]
