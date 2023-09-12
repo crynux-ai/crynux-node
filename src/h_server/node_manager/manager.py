@@ -9,10 +9,10 @@ from web3 import Web3
 from web3.types import EventData
 
 from h_server import models
-from h_server.config import Config, get_config, wait_privkey
+from h_server.config import Config, wait_privkey
 from h_server.contracts import Contracts, set_contracts
 from h_server.event_queue import DbEventQueue, EventQueue, set_event_queue
-from h_server.relay import Relay, set_relay
+from h_server.relay import Relay, WebRelay, set_relay
 from h_server.task import (DbTaskStateCache, InferenceTaskRunner,
                            TaskStateCache, TaskSystem, set_task_state_cache,
                            set_task_system)
@@ -31,7 +31,7 @@ def _make_contracts(privkey: str, provider: str) -> Contracts:
 
 
 def _make_relay(privkey: str, relay_url: str) -> Relay:
-    relay = Relay(base_url=relay_url, privkey=privkey)
+    relay = WebRelay(base_url=relay_url, privkey=privkey)
     set_relay(relay)
     return relay
 
@@ -87,6 +87,12 @@ class NodeManager(object):
         node_state_cache_cls: Type[NodeStateCache] = DbNodeStateCache,
         block_number_cache_cls: Type[BlockNumberCache] = DbBlockNumberCache,
         task_state_cache_cls: Type[TaskStateCache] = DbTaskStateCache,
+        privkey: Optional[str] = None,
+        event_queue: Optional[EventQueue] = None,
+        contracts: Optional[Contracts] = None,
+        relay: Optional[Relay] = None,
+        watcher: Optional[EventWatcher] = None,
+        task_system: Optional[TaskSystem] = None,
     ) -> None:
         self.config = config
         self.node_state_cache = node_state_cache_cls()
@@ -96,10 +102,12 @@ class NodeManager(object):
         self.block_number_cache_cls = block_number_cache_cls
         self.task_state_cache_cls = task_state_cache_cls
 
-        self._contracts: Optional[Contracts] = None
-        self._relay: Optional[Relay] = None
-        self._watcher: Optional[EventWatcher] = None
-        self._task_system: Optional[TaskSystem] = None
+        self._privkey = privkey
+        self._event_queue = event_queue
+        self._contracts = contracts
+        self._relay = relay
+        self._watcher = watcher
+        self._task_system = task_system
 
         self._tg: Optional[TaskGroup] = None
         self._finish_event: Optional[Event] = None
@@ -140,30 +148,32 @@ class NodeManager(object):
         )
 
     async def _init_components(self):
-        assert self._contracts is None, "Node manager components has been initialized."
-        assert self._relay is None, "Node manager components has been initialized."
-        assert self._watcher is None, "Node manager components has been initialized."
-        assert (
-            self._task_system is None
-        ), "Node manager components has been initialized."
-
         _logger.info("Initializing node manager components.")
-        privkey = await wait_privkey()
-        self._contracts = _make_contracts(privkey, self.config.ethereum.provider)
-        await self._contracts.init()
+        if self._contracts is None or self._relay is None:
+            if self._privkey is None:
+                self._privkey = await wait_privkey()
 
-        self._relay = _make_relay(privkey, self.config.relay_url)
-        event_queue = _make_event_queue(self.event_queue_cls)
-        self._watcher = _make_watcher(
-            contracts=self._contracts,
-            queue=event_queue,
-            block_number_cache_cls=self.block_number_cache_cls,
-        )
-        self._task_system = _make_task_system(
-            queue=event_queue,
-            distributed=self.config.distributed,
-            task_state_cache_cls=self.task_state_cache_cls,
-        )
+            if self._contracts is None:
+                self._contracts = _make_contracts(self._privkey, self.config.ethereum.provider)
+                await self._contracts.init()
+            if self._relay is None:
+                self._relay = _make_relay(self._privkey, self.config.relay_url)
+
+        if self._watcher is None or self._task_system is None:
+            if self._event_queue is None:
+                self._event_queue = _make_event_queue(self.event_queue_cls)
+            if self._watcher is None:
+                self._watcher = _make_watcher(
+                    contracts=self._contracts,
+                    queue=self._event_queue,
+                    block_number_cache_cls=self.block_number_cache_cls,
+                )
+            if self._task_system is None:
+                self._task_system = _make_task_system(
+                    queue=self._event_queue,
+                    distributed=self.config.distributed,
+                    task_state_cache_cls=self.task_state_cache_cls,
+                )
         _logger.info("Node manager components initializing complete.")
 
     async def _init(self):
@@ -291,6 +301,9 @@ class NodeManager(object):
             models.ChainNodeStatus.BUSY,
         ], "Cannot stop node. Node should be running."
         await self._contracts.node_contract.quit()
+        status = await self._contracts.node_contract.get_node_status(
+            self._contracts.account
+        )
         local_status = models.convert_node_status(status)
         assert local_status in [
             models.NodeStatus.Stopped,
@@ -310,6 +323,9 @@ class NodeManager(object):
             status == models.ChainNodeStatus.PAUSED
         ), "Cannot resume node. Node should be paused."
         await self._contracts.node_contract.resume()
+        status = await self._contracts.node_contract.get_node_status(
+            self._contracts.account
+        )
         local_status = models.convert_node_status(status)
         assert (
             local_status == models.NodeStatus.Running
@@ -329,6 +345,9 @@ class NodeManager(object):
             models.ChainNodeStatus.BUSY,
         ], "Cannot pause node. Node should be running."
         await self._contracts.node_contract.pause()
+        status = await self._contracts.node_contract.get_node_status(
+            self._contracts.account
+        )
         local_status = models.convert_node_status(status)
         assert local_status in [
             models.NodeStatus.Paused,
