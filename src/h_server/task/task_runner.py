@@ -89,7 +89,7 @@ def wrap_task_error():
     except Exception as e:
         _logger.exception(e)
         _logger.error("Task unknown error")
-        raise TaskError(str(e), TaskErrorSource.Unknown, retry=True)
+        raise TaskError(str(e), TaskErrorSource.Unknown, retry=False)
 
 
 class InferenceTaskRunner(TaskRunner):
