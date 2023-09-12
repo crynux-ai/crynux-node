@@ -3,7 +3,7 @@ import os
 from logging.handlers import RotatingFileHandler
 from typing import Optional
 
-from h_server.config import Config, get_config
+from h_worker.config import Config, get_config
 
 
 def init(config: Optional[Config] = None, root: bool = False):
@@ -14,7 +14,7 @@ def init(config: Optional[Config] = None, root: bool = False):
 
     if not os.path.exists(config.log.dir):
         os.makedirs(config.log.dir, exist_ok=True)
-    log_file = os.path.join(config.log.dir, "h-server.log")
+    log_file = os.path.join(config.log.dir, "h-worker.log")
     file_handler = RotatingFileHandler(
         log_file,
         encoding="utf-8",
@@ -31,16 +31,11 @@ def init(config: Optional[Config] = None, root: bool = False):
     stream_handler.setFormatter(formatter)
     file_handler.setFormatter(formatter)
 
-    logger_names = []
     if root:
-        logger_names.append(None)
+        logger = logging.getLogger()
     else:
-        logger_names.append("h_server")
-        if config.distributed:
-            logger_names.append("h_worker")
+        logger = logging.getLogger("h_server")
 
-    for name in logger_names:
-        logger = logging.getLogger(name)
-        logger.addHandler(stream_handler)
-        logger.addHandler(file_handler)
-        logger.setLevel(config.log.level)
+    logger.addHandler(stream_handler)
+    logger.addHandler(file_handler)
+    logger.setLevel(config.log.level)

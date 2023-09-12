@@ -10,9 +10,6 @@ from web3 import Web3
 from h_server.utils import sort_dict
 
 
-_logger = logging.getLogger(__name__)
-
-
 class Signer(object):
     def __init__(self, privkey: str) -> None:
         self.account: LocalAccount = Account.from_key(privkey)

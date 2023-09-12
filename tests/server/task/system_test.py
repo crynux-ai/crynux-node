@@ -4,11 +4,9 @@ from anyio import Condition, create_task_group, fail_after
 from web3 import Web3
 
 from h_server import models
-from h_server.contracts import Contracts
 from h_server.event_queue import MemoryEventQueue
-from h_server.relay import Relay
 from h_server.task import MemoryTaskStateCache, TaskSystem
-from h_server.task.task_runner import TestTaskRunner
+from h_server.task.task_runner import MockTaskRunner
 
 
 class AckMemoryEventQueue(MemoryEventQueue):
@@ -40,7 +38,7 @@ async def test_task_system():
         state_cache=cache,
     )
 
-    system.set_runner_cls(TestTaskRunner)
+    system.set_runner_cls(MockTaskRunner)
 
     task_id = 1
     creator = Web3.to_checksum_address("0xd075aB490857256e6fc85d75d8315e7c9914e008")

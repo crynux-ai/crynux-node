@@ -72,6 +72,14 @@ class TaskContract(ContractWrapperBase):
             round=round,
             result=result,
         )
+    
+    async def report_task_error(self, task_id: int, round: int, *, option: "Optional[TxOption]" = None):
+        return await self._transaction_call(
+            "reportTaskError",
+            option=option,
+            taskId=task_id,
+            round=round,
+        )
 
     async def get_task(self, task_id: int) -> ChainTask:
         res = await self._function_call("getTask", taskId=task_id)

@@ -89,7 +89,7 @@ def wrap_task_error():
     except Exception as e:
         _logger.exception(e)
         _logger.error("Task unknown error")
-        raise TaskError(str(e), TaskErrorSource.Unknown, retry=True)
+        raise TaskError(str(e), TaskErrorSource.Unknown, retry=False)
 
 
 class InferenceTaskRunner(TaskRunner):
@@ -187,6 +187,26 @@ class InferenceTaskRunner(TaskRunner):
                 with fail_after(5, shield=True):
                     await self.cache.dump(task_state=self._state)
 
+    async def _report_error(self):
+        assert self._state is not None, "The task runner has not been initialized."
+
+        round = self._state.round
+
+        await self.contracts.task_contract.report_task_error(self.task_id, round)
+
+    @asynccontextmanager
+    async def report_error_context(self):
+        try:
+            yield
+        except get_cancelled_exc_class() as e:
+            raise
+        except TaskError as e:
+            if not e.retry:
+                await self._report_error()
+            raise
+        except Exception as e:
+            await self._report_error()
+
     @property
     def lock(self) -> Lock:
         if self._lock is None:
@@ -194,31 +214,32 @@ class InferenceTaskRunner(TaskRunner):
         return self._lock
 
     async def process_event(self, event: models.TaskEvent):
-        with wrap_task_error():
-            async with self.lock:
-                _logger.debug(f"Process event {event}")
-                if event.kind == "TaskCreated":
-                    assert isinstance(event, models.TaskCreated)
-                    await self.task_created(event)
-                    return False
-                elif event.kind == "TaskResultReady":
-                    assert isinstance(event, models.TaskResultReady)
-                    await self.result_ready(event)
-                    return False
-                elif event.kind == "TaskResultCommitmentsReady":
-                    assert isinstance(event, models.TaskResultCommitmentsReady)
-                    await self.commitment_ready(event)
-                    return False
-                elif event.kind == "TaskSuccess":
-                    assert isinstance(event, models.TaskSuccess)
-                    await self.task_success(event)
-                    return True
-                elif event.kind == "TaskAborted":
-                    assert isinstance(event, models.TaskAborted)
-                    await self.task_aborted(event)
-                    return True
-                else:
-                    raise ValueError(f"Unknown event kind {event.kind}")
+        async with self.report_error_context():
+            with wrap_task_error():
+                async with self.lock:
+                    _logger.debug(f"Process event {event}")
+                    if event.kind == "TaskCreated":
+                        assert isinstance(event, models.TaskCreated)
+                        await self.task_created(event)
+                        return False
+                    elif event.kind == "TaskResultReady":
+                        assert isinstance(event, models.TaskResultReady)
+                        await self.result_ready(event)
+                        return False
+                    elif event.kind == "TaskResultCommitmentsReady":
+                        assert isinstance(event, models.TaskResultCommitmentsReady)
+                        await self.commitment_ready(event)
+                        return False
+                    elif event.kind == "TaskSuccess":
+                        assert isinstance(event, models.TaskSuccess)
+                        await self.task_success(event)
+                        return True
+                    elif event.kind == "TaskAborted":
+                        assert isinstance(event, models.TaskAborted)
+                        await self.task_aborted(event)
+                        return True
+                    else:
+                        raise ValueError(f"Unknown event kind {event.kind}")
 
     async def task_created(self, event: models.TaskCreated):
         async with self.state_context():
@@ -383,7 +404,7 @@ class InferenceTaskRunner(TaskRunner):
             await to_thread.run_sync(delete_result_files, self._state.files)
 
 
-class TestTaskRunner(TaskRunner):
+class MockTaskRunner(TaskRunner):
     def __init__(
         self,
         task_id: int,

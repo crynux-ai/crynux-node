@@ -5,7 +5,7 @@ from web3 import AsyncWeb3
 
 from .utils import ContractWrapperBase
 
-from h_server.models import NodeStatus
+from h_server.models import ChainNodeStatus
 
 if TYPE_CHECKING:
     from h_server.config import TxOption
@@ -45,6 +45,6 @@ class NodeContract(ContractWrapperBase):
             "updateTaskContractAddress", option=option, taskContract=address
         )
 
-    async def get_node_status(self, address: str) -> NodeStatus:
+    async def get_node_status(self, address: str) -> ChainNodeStatus:
         res = await self._function_call("getNodeStatus", nodeAddress=address)
-        return NodeStatus(res)
+        return ChainNodeStatus(res)

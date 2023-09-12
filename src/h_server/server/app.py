@@ -12,7 +12,7 @@ from .v1 import router as v1_router
 class Server(object):
     def __init__(self) -> None:
         self._app = FastAPI()
-        self._app.include_router(v1_router, prefix="/v1")
+        self._app.include_router(v1_router)
         self._shutdown_event: Optional[Event] = None
 
     async def start(self, host: str, port: int):

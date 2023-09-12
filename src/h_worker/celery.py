@@ -1,7 +1,15 @@
-from celery import Celery
+import logging
+import os.path
 
+from celery import Celery
+from celery.signals import celeryd_after_setup
+
+from h_worker import log
 from h_worker.config import get_config
-from h_worker.task import sd_lora_inference, mock_lora_inference
+from h_worker.prefetch import prefetch
+from h_worker.task import mock_lora_inference, sd_lora_inference
+
+_logger = logging.getLogger(__name__)
 
 celery = Celery(
     "h_worker",
@@ -11,3 +19,17 @@ celery = Celery(
 
 celery.task(name="sd_lora_inference", track_started=True)(sd_lora_inference)
 celery.task(name="mock_lora_inference", track_started=True)(mock_lora_inference)
+
+
+@celeryd_after_setup.connect
+def prefetch_after_setup(_, __, **kwargs):
+    config = get_config()
+    log.init(config)
+
+    _logger.info("Prefetch base models.")
+    prefetch(
+        config.task.pretrained_models_dir,
+        os.path.join(config.task.script_dir, "huggingface"),
+        config.task.script_dir,
+    )
+    _logger.info("Prefetching base models complete.")

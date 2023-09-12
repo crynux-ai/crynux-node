@@ -1,8 +1,10 @@
 import logging
-from typing import TYPE_CHECKING, Optional
+from typing import cast, Optional
 
 from eth_account.signers.local import LocalAccount
+from eth_typing import ChecksumAddress
 from web3 import AsyncWeb3
+from web3.types import TxParams
 from web3.middleware.signing import async_construct_sign_and_send_raw_middleware
 from web3.providers.async_base import AsyncBaseProvider
 
@@ -45,7 +47,6 @@ class Contracts(object):
 
         self.provider = provider
         self._w3 = AsyncWeb3(self.provider)
-        self._w3.eth.account.signHash
         self._privkey = privkey
         self._default_account_index = default_account_index
 
@@ -107,7 +108,7 @@ class Contracts(object):
         return self._w3
 
     @property
-    def account(self):
+    def account(self) -> ChecksumAddress:
         res = self._w3.eth.default_account
         assert res, "Contracts has not been initialized!"
         return res
@@ -118,6 +119,21 @@ class Contracts(object):
 
     async def get_current_block_number(self) -> int:
         return await self._w3.eth.get_block_number()
+
+    async def get_balance(self, account: ChecksumAddress) -> int:
+        return await self.w3.eth.get_balance(account)
+    
+    async def transfer(self, to: str, amount: int, *, option: "Optional[TxOption]" = None):
+        if option is None:
+            option = get_default_tx_option()
+        opt = cast(TxParams, option.copy())
+        opt["to"] = self.w3.to_checksum_address(to)
+        opt["from"] = self.account
+        opt["value"] = self.w3.to_wei(amount, "Wei")
+
+        tx_hash = await self.w3.eth.send_transaction(opt)
+        receipt = await self.w3.eth.wait_for_transaction_receipt(tx_hash)
+        return receipt
 
 
 _default_contracts: Optional[Contracts] = None

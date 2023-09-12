@@ -1,19 +1,21 @@
 import os
 import shutil
+from datetime import datetime, timedelta
 from string import hexdigits
-from typing import List
+from typing import List, Literal
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Path, UploadFile
+from fastapi import (APIRouter, File, Form, HTTPException, Path,
+                     UploadFile)
 from fastapi.concurrency import run_in_threadpool
+from pydantic import BaseModel
 from typing_extensions import Annotated
 
-from h_server.config import Config, get_config
-from h_server.task import get_task_system, TaskSystem
-from h_server.models import TaskResultReady
+from h_server.models import TaskResultReady, TaskStatus
 
+from ..depends import ConfigDep, TaskStateCacheDep, TaskSystemDep
 from .utils import CommonResponse
 
-router = APIRouter()
+router = APIRouter(prefix="/tasks")
 
 
 def store_result_files(task_dir: str, task_id: str, files: List[UploadFile]):
@@ -43,8 +45,8 @@ async def upload_result(
     hashes: Annotated[List[str], Form(description="The task result file hashes")],
     files: Annotated[List[UploadFile], File(description="The task result files")],
     *,
-    config: Annotated[Config, Depends(get_config)],
-    task_system: Annotated[TaskSystem, Depends(get_task_system)],
+    config: ConfigDep,
+    task_system: TaskSystemDep,
 ) -> CommonResponse:
     if not (await task_system.has_task(task_id=task_id)):
         raise HTTPException(status_code=400, detail=f"Task {task_id} does not exist.")
@@ -67,3 +69,32 @@ async def upload_result(
     await task_system.event_queue.put(event)
 
     return CommonResponse()
+
+
+class TaskStats(BaseModel):
+    status: Literal["running", "idle"]
+    num_today: int
+    num_total: int
+
+
+@router.get("", response_model=TaskStats)
+async def get_task_stats(
+    *,
+    task_system: TaskSystemDep,
+    task_state_cache: TaskStateCacheDep,
+):
+    if await task_system.is_running():
+        status = "running"
+    else:
+        status = "idle"
+
+    now = datetime.now()
+    today_start = now - timedelta(days=1)
+
+    num_today = await task_state_cache.count(
+        start=today_start, deleted=True, status=TaskStatus.Success
+    )
+
+    num_total = await task_state_cache.count(deleted=True, status=TaskStatus.Success)
+
+    return TaskStats(status=status, num_today=num_today, num_total=num_total)

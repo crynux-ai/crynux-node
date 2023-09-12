@@ -1,4 +1,5 @@
 import os
+import logging
 import random
 import shutil
 import subprocess
@@ -8,6 +9,8 @@ from h_worker import models
 from h_worker.config import get_config
 
 from . import utils
+
+_logger = logging.getLogger(__name__)
 
 
 def sd_lora_inference(
@@ -23,6 +26,16 @@ def sd_lora_inference(
     if local_config is None:
         config = get_config()
         local_config = models.LocalConfig(**config.task.model_dump())
+
+    _logger.info(
+        f"task id: {task_id},"
+        f"prompts: {prompts},"
+        f"base model: {base_model},"
+        f"lora_model: {lora_model},"
+        f"local config: {local_config},"
+        f"task config: {task_config},"
+        f"pose: {pose}"
+    )
 
     # Check if venv exists. If it exits, use the venv interpreter; else use the current interpreter
     exe = "python"
@@ -120,17 +133,18 @@ def sd_lora_inference(
             env=envs,
             check=True,
             encoding="utf-8",
-            cwd=local_config["script_dir"]
+            cwd=local_config["script_dir"],
         )
+    _logger.info("Inference task success.")
 
     if distributed:
         image_files = sorted(os.listdir(image_dir))
         image_paths = [os.path.join(image_dir, file) for file in image_files]
 
         utils.upload_result(
-            local_config["result_url"] + f"/v1/task/{task_id}/result", image_paths
+            local_config["result_url"] + f"/v1/tasks/{task_id}/result", image_paths
         )
-
+        _logger.info("Upload inference task result.")
 
 def mock_lora_inference(
     task_id: int,
@@ -142,18 +156,18 @@ def mock_lora_inference(
     task_config: Optional[models.TaskConfig] = None,
     pose: Optional[models.PoseConfig] = None,
 ):
-    print(f"task_id: {task_id}")
-    print(f"prompts: {prompts}")
-    print(f"base_model: {base_model}")
-    print(f"lora_model: {lora_model}")
-
-    print(f"task config: {task_config}")
-    print(f"pose config: {pose}")
-
     if local_config is None:
         config = get_config()
         local_config = models.LocalConfig(**config.task.model_dump())
-    print(local_config)
+    _logger.info(
+        f"task id: {task_id},"
+        f"prompts: {prompts},"
+        f"base model: {base_model},"
+        f"lora_model: {lora_model},"
+        f"local config: {local_config},"
+        f"task config: {task_config},"
+        f"pose: {pose}"
+    )
 
     image_dir = os.path.abspath(
         os.path.join(local_config["data_dir"], "image", str(task_id))
@@ -165,5 +179,6 @@ def mock_lora_inference(
 
     if distributed:
         utils.upload_result(
-            local_config["result_url"] + f"/v1/task/{task_id}/result", ["test.png"]
+            local_config["result_url"] + f"/v1/tasks/{task_id}/result", ["test.png"]
         )
+        _logger.info("Upload inference task result.")
