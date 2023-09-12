@@ -24,7 +24,7 @@ dependencies = [
     "pydantic-settings~=2.0.3",
     "pydantic-settings-yaml~=0.2.0",
 ]
-version = "0.0.4"
+version = "0.0.5"
 
 [tool.setuptools.packages.find]
 where = ["src"]
