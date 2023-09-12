@@ -51,3 +51,5 @@ async def set_account(input: Annotated[PrivkeyInput, Body()]):
             Account.decrypt, input.keystore, input.passphrase.get_secret_value()
         )
         await set_privkey(privkey.hex())
+
+    return CommonResponse()

@@ -13,8 +13,8 @@ router = APIRouter(prefix="/node")
 
 
 @router.get("", response_model=NodeState)
-async def get_node_state(*, node_manager: NodeManagerDep):
-    return node_manager.get_state()
+async def get_node_state(*, node_manager: NodeManagerDep) -> NodeState:
+    return await node_manager.get_state()
 
 
 ControlAction = Literal["start", "stop", "pause", "resume"]
@@ -38,3 +38,5 @@ async def control_node(
         await node_manager.resume()
     elif input.action == "stop":
         await node_manager.stop()
+
+    return CommonResponse()
