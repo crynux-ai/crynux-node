@@ -24,11 +24,13 @@ class TaskSystem(object):
         queue: EventQueue,
         distributed: bool = False,
         retry_delay: float = 5,
+        task_name: str = "sd_lora_inference"
     ) -> None:
         self._state_cache = state_cache
         self._queue = queue
         self._retry_delay = retry_delay
         self._distributed = distributed
+        self._task_name = task_name
 
         self._tg: Optional[TaskGroup] = None
         self._stop_event: Optional[Event] = None
@@ -63,7 +65,7 @@ class TaskSystem(object):
                             task_id=task_id,
                             state_cache=self._state_cache,
                             queue=self._queue,
-                            task_name="sd_lora_inference",
+                            task_name=self._task_name,
                             distributed=self._distributed,
                         )
                         await runner.init()
