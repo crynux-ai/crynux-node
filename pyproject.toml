@@ -30,7 +30,7 @@ version = "0.0.7"
 
 [tool.setuptools.packages.find]
 where = ["src"]
-include = ["h_server", "h_worker"]
+include = ["h_server*", "h_worker*"]
 
 [tool.setuptools.package-data]
 "h_server.contracts.abi" = ["*.json"]
