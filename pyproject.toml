@@ -23,9 +23,10 @@ dependencies = [
     "pydantic~=2.2.1",
     "pydantic-settings~=2.0.3",
     "pydantic-settings-yaml~=0.2.0",
-    "importlib-resources~=6.0.0"
+    "importlib-resources~=6.0.0",
+    "python-multipart==0.0.6"
 ]
-version = "0.0.6"
+version = "0.0.7"
 
 [tool.setuptools.packages.find]
 where = ["src"]
