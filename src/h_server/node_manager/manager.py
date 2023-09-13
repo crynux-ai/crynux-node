@@ -178,7 +178,7 @@ class NodeManager(object):
 
     async def _init(self):
         status = await self._get_status()
-        if status == models.NodeStatus.Init:
+        if status in (models.NodeStatus.Init, models.NodeStatus.Error):
             _logger.info("Initialize node manager")
 
             if not self.config.distributed:
@@ -206,8 +206,9 @@ class NodeManager(object):
             async with create_task_group() as tg:
                 self._tg = tg
 
-                await self._init_components()
-                await self._init()
+                async with create_task_group() as init_tg:
+                    init_tg.start_soon(self._init_components)
+                    init_tg.start_soon(self._init)
 
                 assert self._watcher is not None
                 assert self._task_system is not None
