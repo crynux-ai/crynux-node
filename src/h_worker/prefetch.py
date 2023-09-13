@@ -1,6 +1,7 @@
 import logging
 import os
 import subprocess
+import hashlib
 
 import httpx
 
@@ -11,6 +12,24 @@ base_model_urls = {
     "stable-diffusion-2-1": "https://huggingface.co/stabilityai/stable-diffusion-2-1/resolve/main/v2-1_768-nonema-pruned.ckpt",
 }
 
+base_model_cksum = {
+    "stable-diffusion-2-1": "71f860473d5df49d5a09197d5b7a65d7",
+    "stable-diffusion-v1-5-pruned": "fde08ee6f4fac7ab26592bf519cbb405"
+}
+
+
+def _check_model_checksum(path: str, model: str) -> bool:
+    m = hashlib.new("md5")
+
+    with open(path, mode="rb") as f:
+        chunk = f.read(8192)
+        while chunk:
+            m.update(chunk)
+            chunk = f.read(8192)
+    
+    cksum = m.hexdigest()
+    return cksum == base_model_cksum[model]
+
 
 def _prefetch_base_model(
     client: httpx.Client, pretrained_models_dir: str, base_model: str
@@ -18,7 +37,13 @@ def _prefetch_base_model(
     base_model_path = os.path.join(
         pretrained_models_dir, base_model, f"{base_model}.ckpt"
     )
+    should_download = False
     if not os.path.exists(base_model_path):
+        should_download = True
+    elif not _check_model_checksum(base_model_path, base_model):
+        should_download = True
+
+    if should_download:
         _logger.info(f"Downloading base model {base_model}")
         model_dir = os.path.dirname(base_model_path)
         if not os.path.exists(model_dir):

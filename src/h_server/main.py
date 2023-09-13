@@ -33,9 +33,9 @@ async def _main():
         async with create_task_group() as tg:
             tg.start_soon(signal_handler, tg.cancel_scope)
 
-            tg.start_soon(server.start, config.server_host, config.server_port)
-
             tg.start_soon(node_manager.run)
+
+            tg.start_soon(server.start, config.server_host, config.server_port)
     finally:
         with move_on_after(2, shield=True):
             await db.close()

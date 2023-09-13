@@ -22,12 +22,16 @@ class AccountInfo(BaseModel):
 
 @router.get("", response_model=AccountInfo)
 async def get_account_info(*, contracts: ContractsDep):
-    eth_balance = await contracts.get_balance(contracts.account)
-    cnx_balance = await contracts.token_contract.balance_of(contracts.account)
-    return AccountInfo(
-        address=contracts.account, eth_balance=eth_balance, cnx_balance=cnx_balance
-    )
-
+    if contracts is not None:
+        eth_balance = await contracts.get_balance(contracts.account)
+        cnx_balance = await contracts.token_contract.balance_of(contracts.account)
+        return AccountInfo(
+            address=contracts.account, eth_balance=eth_balance, cnx_balance=cnx_balance
+        )
+    else:
+        return AccountInfo(
+            address="", eth_balance=0, cnx_balance=0,
+        )
 
 PrivkeyType = Literal["private_key", "keystore"]
 

@@ -1,4 +1,5 @@
 from fastapi import Depends
+from typing import Optional
 from typing_extensions import Annotated
 
 from h_server.config import Config, get_config
@@ -26,7 +27,12 @@ async def _get_config():
 
 
 async def _get_task_system():
-    return get_task_system()
+    try:
+        return get_task_system()
+    except AssertionError as e:
+        if "TaskSystem has not been set" in str(e):
+            return None
+        raise
 
 
 async def _get_task_state_cache():
@@ -38,11 +44,15 @@ async def _get_node_manager():
 
 
 async def _get_contracts():
-    return get_contracts()
-
+    try:
+        return get_contracts()
+    except AssertionError as e:
+        if "Contracts has not been set" in str(e):
+            return None
+        raise
 
 ConfigDep = Annotated[Config, Depends(_get_config)]
-TaskSystemDep = Annotated[TaskSystem, Depends(_get_task_system)]
+TaskSystemDep = Annotated[Optional[TaskSystem], Depends(_get_task_system)]
 TaskStateCacheDep = Annotated[TaskStateCache, Depends(_get_task_state_cache)]
 NodeManagerDep = Annotated[NodeManager, Depends(_get_node_manager)]
-ContractsDep = Annotated[Contracts, Depends(_get_contracts)]
+ContractsDep = Annotated[Optional[Contracts], Depends(_get_contracts)]
