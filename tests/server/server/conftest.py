@@ -224,4 +224,4 @@ async def prepare_enviroment(
 
 @pytest.fixture(scope="module")
 def client():
-    return TestClient(Server().app)
+    return TestClient(Server().app, base_url="http://testserver/manager")
