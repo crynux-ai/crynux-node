@@ -48,6 +48,8 @@ async def upload_result(
     config: ConfigDep,
     task_system: TaskSystemDep,
 ) -> CommonResponse:
+    if task_system is None:
+        raise HTTPException(500, detail="Task system has not been set.")
     if not (await task_system.has_task(task_id=task_id)):
         raise HTTPException(status_code=400, detail=f"Task {task_id} does not exist.")
 
@@ -72,7 +74,7 @@ async def upload_result(
 
 
 class TaskStats(BaseModel):
-    status: Literal["running", "idle"]
+    status: Literal["running", "idle", "waiting"]
     num_today: int
     num_total: int
 
@@ -83,6 +85,12 @@ async def get_task_stats(
     task_system: TaskSystemDep,
     task_state_cache: TaskStateCacheDep,
 ):
+    if task_system is None:
+        return TaskStats(
+            status="waiting",
+            num_today=0,
+            num_total=0
+        )
     if await task_system.is_running():
         status = "running"
     else:
