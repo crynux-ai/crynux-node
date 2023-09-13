@@ -10,3 +10,6 @@ __pycache__/
 *.egg
 nodes
 *.so
+config/*
+db/*
+logs/*
