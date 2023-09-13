@@ -1,9 +1,8 @@
 import os
 
-from anyio import create_task_group, to_thread
+from anyio import create_task_group
 from fastapi import APIRouter
 from pydantic import BaseModel
-from typing_extensions import Annotated
 
 from h_server import utils
 
@@ -41,9 +40,9 @@ async def get_system_info(*, config: ConfigDep):
             if config.task_config is not None:
                 base_model_dir = config.task_config.pretrained_models_dir
                 lora_model_dir = os.path.join(config.task_config.data_dir, "model")
-                log_dir = os.path.join(config.task_config.inference_logs_dir)
-                disk_info = await to_thread.run_sync(
-                    utils.get_disk_info, base_model_dir, lora_model_dir, log_dir
+                inference_log_dir = os.path.join(config.task_config.inference_logs_dir)
+                disk_info = await utils.get_disk_info(
+                    base_model_dir, lora_model_dir, config.log.dir, inference_log_dir
                 )
                 info["disk"] = disk_info
             else:
