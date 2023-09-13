@@ -8,7 +8,9 @@ const keystoreInput = ref('')
 const keystorePassphraseInput = ref('')
 const isLoading = ref(false)
 
-const showModal = async () => {
+const props = defineProps(['accountStatus'])
+
+const showModal = () => {
   modalVisible.value = true
 }
 
@@ -17,19 +19,28 @@ const hideModal = () => {
 }
 
 const changeAccount = () => {}
+
+defineExpose({ showModal })
 </script>
 
 <template>
   <a href="javascript:void(0)" @click="showModal">Edit</a>
   <a-modal
     :visible="modalVisible"
-    title="Set Node Account"
+    title="Node Wallet"
     @ok="hideModal"
     @cancel="hideModal"
     width="700px"
     :destroy-on-close="true"
     :mask-closable="false"
   >
+    <a-alert
+      message="A wallet with enough ETH(>0.01) and CNX(>400) must be provided to the node"
+      type="info"
+      style="margin-top: 16px"
+      v-if="props.accountStatus.address === ''"
+    />
+
     <a-tabs v-model:activeKey="activeImportType">
       <a-tab-pane key="private-key" tab="Private Key">
         <a-textarea

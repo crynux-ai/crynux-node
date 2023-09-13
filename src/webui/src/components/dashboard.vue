@@ -1,7 +1,77 @@
 <script setup>
-import { h } from 'vue'
-import { PauseCircleOutlined, LogoutOutlined } from '@ant-design/icons-vue'
+import { h, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
+import { PauseCircleOutlined, LogoutOutlined, PlayCircleOutlined } from '@ant-design/icons-vue'
 import EditAccount from './edit-account.vue'
+
+import systemAPI from '../api/v1/system'
+import nodeAPI from '../api/v1/node'
+import taskAPI from '../api/v1/task'
+
+const accountEditor = ref(null)
+
+const systemInfo = reactive({
+  gpu: {
+    usage: 0,
+    model: '',
+    vram_used: 0,
+    vram_total: 0
+  },
+  cpu: {
+    usage: 0,
+    num_cores: 0,
+    frequency: 0
+  },
+  memory: {
+    available: 0,
+    total: 0
+  },
+  disk: {
+    base_models: 0,
+    lora_models: 0,
+    logs: 0
+  }
+})
+
+const nodeStatus = reactive({
+  status: 'initializing',
+  message: ''
+})
+
+const accountStatus = reactive({
+  address: '',
+  eth_balance: 0,
+  cnx_balance: 0
+})
+
+const taskStatus = reactive({
+  status: 'waiting',
+  num_today: 0,
+  num_total: 0
+})
+
+let systemUpdateInterval
+onMounted(async () => {
+  await updateSystemInfo()
+  systemUpdateInterval = setInterval(updateSystemInfo, 5000)
+
+  if (accountStatus.address === '') {
+    accountEditor.value.showModal()
+  }
+})
+onBeforeUnmount(() => {
+  clearInterval(systemUpdateInterval)
+})
+
+const updateSystemInfo = async () => {
+  const systemResp = await systemAPI.getSystemInfo()
+  Object.assign(systemInfo, systemResp)
+
+  const nodeResp = await nodeAPI.getNodeStatus()
+  Object.assign(nodeStatus, nodeResp)
+
+  const taskResp = await taskAPI.getTaskRunningStatus()
+  Object.assign(taskStatus, taskResp)
+}
 </script>
 
 <template>
@@ -11,14 +81,75 @@ import EditAccount from './edit-account.vue'
       <a-card title="Node Status" :bordered="false" style="height: 100%">
         <a-row>
           <a-col :span="12">
-            <a-progress type="circle" :size="70" :percent="100" />
+            <a-progress
+              type="circle"
+              :size="70"
+              :percent="100"
+              v-if="nodeStatus.status === nodeAPI.NODE_STATUS_RUNNING"
+            />
+            <a-progress
+              type="circle"
+              :size="70"
+              :percent="100"
+              status="exception"
+              v-if="nodeStatus.status === nodeAPI.NODE_STATUS_ERROR"
+            >
+            </a-progress>
+            <a-progress
+              type="circle"
+              :size="70"
+              :percent="100"
+              :stroke-color="'lightgray'"
+              v-if="
+                [
+                  nodeAPI.NODE_STATUS_PAUSED,
+                  nodeAPI.NODE_STATUS_STOPPED,
+                  nodeAPI.NODE_STATUS_INITIALIZING,
+                  nodeAPI.NODE_STATUS_PENDING
+                ].indexOf(nodeStatus.status) !== -1
+              "
+            >
+              <template #format="percent">
+                <span style="font-size: 14px; color: lightgray">
+                  <span v-if="nodeStatus.status === nodeAPI.NODE_STATUS_INITIALIZING"
+                    >Preparing</span
+                  >
+                  <span v-if="nodeStatus.status === nodeAPI.NODE_STATUS_PAUSED">Paused</span>
+                  <span v-if="nodeStatus.status === nodeAPI.NODE_STATUS_STOPPED">Stopped</span>
+                </span>
+              </template>
+            </a-progress>
+            <a-progress
+              type="circle"
+              :size="70"
+              :percent="100"
+              :stroke-color="'cornflowerblue'"
+              v-if="nodeStatus.status === nodeAPI.NODE_STATUS_PENDING"
+            >
+              <template #format="percent">
+                <span style="font-size: 14px; color: cornflowerblue">Stopping</span>
+              </template>
+            </a-progress>
           </a-col>
           <a-col :span="12">
-            <div class="node-op-btn">
+            <div class="node-op-btn" v-if="nodeStatus.status === nodeAPI.NODE_STATUS_RUNNING">
               <a-button :icon="h(PauseCircleOutlined)">Pause</a-button>
             </div>
-            <div class="node-op-btn" style="margin-top: 8px">
+            <div
+              class="node-op-btn"
+              style="margin-top: 8px"
+              v-if="nodeStatus.status === nodeAPI.NODE_STATUS_RUNNING"
+            >
               <a-button :icon="h(LogoutOutlined)">Quit</a-button>
+            </div>
+            <div class="node-op-btn" v-if="nodeStatus.status === nodeAPI.NODE_STATUS_STOPPED">
+              <a-button type="primary" :icon="h(PlayCircleOutlined)">Start</a-button>
+            </div>
+            <div class="node-op-btn" v-if="nodeStatus.status === nodeAPI.NODE_STATUS_PAUSED">
+              <a-button type="primary" :icon="h(PlayCircleOutlined)">Resume</a-button>
+            </div>
+            <div class="node-op-btn" v-if="nodeStatus.status === nodeAPI.NODE_STATUS_INITIALIZING">
+              <a-button type="primary" :icon="h(PlayCircleOutlined)" disabled>Start</a-button>
             </div>
           </a-col>
         </a-row>
@@ -26,19 +157,27 @@ import EditAccount from './edit-account.vue'
     </a-col>
 
     <a-col :span="8">
-      <a-card title="Account" :bordered="false" style="height: 100%">
+      <a-card title="Wallet" :bordered="false" style="height: 100%">
         <template #extra>
-          <edit-account></edit-account>
+          <edit-account ref="accountEditor" :account-status="accountStatus"></edit-account>
         </template>
         <a-row>
           <a-col :span="12">
-            <a-statistic title="Address" :value="'0xA1d5e...27cFE'"></a-statistic>
+            <a-statistic title="Address" :value="accountStatus.address"></a-statistic>
           </a-col>
           <a-col :span="6">
-            <a-statistic title="ETH" :precision="2" :value="242"></a-statistic>
+            <a-statistic
+              title="ETH"
+              :precision="2"
+              :value="accountStatus.eth_balance"
+            ></a-statistic>
           </a-col>
           <a-col :span="6">
-            <a-statistic title="CNX" :precision="2" :value="766"></a-statistic>
+            <a-statistic
+              title="CNX"
+              :precision="2"
+              :value="accountStatus.cnx_balance"
+            ></a-statistic>
           </a-col>
         </a-row>
       </a-card>
@@ -48,17 +187,47 @@ import EditAccount from './edit-account.vue'
       <a-card title="Task Execution" :bordered="false" style="height: 100%">
         <a-row>
           <a-col :span="8">
-            <a-progress type="circle" :size="70" :percent="100" :stroke-color="'cornflowerblue'">
+            <a-progress
+              type="circle"
+              :size="70"
+              :percent="100"
+              :stroke-color="'cornflowerblue'"
+              v-if="taskStatus.status === 'idle'"
+            >
               <template #format="percent">
                 <span style="font-size: 14px; color: cornflowerblue">Idle</span>
               </template>
             </a-progress>
+
+            <a-progress
+              type="circle"
+              :size="70"
+              :percent="100"
+              :stroke-color="'lightgray'"
+              v-if="taskStatus.status === 'waiting'"
+            >
+              <template #format="percent">
+                <span style="font-size: 14px; color: lightgray">Waiting</span>
+              </template>
+            </a-progress>
+
+            <a-progress
+              type="circle"
+              :size="70"
+              :percent="100"
+              status="success"
+              v-if="taskStatus.status === 'running'"
+            >
+              <template #format="percent">
+                <span style="font-size: 14px">Running</span>
+              </template>
+            </a-progress>
           </a-col>
           <a-col :span="8">
-            <a-statistic title="Today" :precision="0" :value="144"></a-statistic>
+            <a-statistic title="Today" :precision="0" :value="taskStatus.num_today"></a-statistic>
           </a-col>
           <a-col :span="8">
-            <a-statistic title="Total" :precision="0" :value="2769"></a-statistic>
+            <a-statistic title="Total" :precision="0" :value="taskStatus.num_total"></a-statistic>
           </a-col>
         </a-row>
       </a-card>
@@ -69,30 +238,33 @@ import EditAccount from './edit-account.vue'
       <a-card title="GPU" :bordered="false" style="height: 100%">
         <a-row>
           <a-col :span="8">
-            <a-progress type="circle" :size="70" :percent="90" />
+            <a-progress type="dashboard" :size="80" :percent="systemInfo.gpu.usage" />
           </a-col>
           <a-col :span="16">
             <a-row>
               <a-col :span="24">
-                <a-statistic
-                  value="ROG Strix RTX4090 O24 Gaming"
-                  :value-style="{ 'font-size': '14px' }"
-                >
+                <a-statistic :value="systemInfo.gpu.model" :value-style="{ 'font-size': '14px' }">
                   <template #title><span style="font-size: 12px">Card Model</span></template>
                 </a-statistic>
               </a-col>
             </a-row>
             <a-row style="margin-top: 12px">
               <a-col :span="12">
-                <a-statistic :value="14" :value-style="{ 'font-size': '14px' }">
+                <a-statistic
+                  :value="systemInfo.gpu.vram_used"
+                  :value-style="{ 'font-size': '14px' }"
+                >
                   <template #title><span style="font-size: 12px">VRAM Used</span></template>
-                  <template #suffix>GB</template>
+                  <template #suffix>MB</template>
                 </a-statistic>
               </a-col>
               <a-col :span="12">
-                <a-statistic :value="24" :value-style="{ 'font-size': '14px' }">
+                <a-statistic
+                  :value="systemInfo.gpu.vram_total"
+                  :value-style="{ 'font-size': '14px' }"
+                >
                   <template #title><span style="font-size: 12px">VRAM Total</span></template>
-                  <template #suffix>GB</template>
+                  <template #suffix>MB</template>
                 </a-statistic>
               </a-col>
             </a-row>
@@ -104,19 +276,25 @@ import EditAccount from './edit-account.vue'
       <a-card title="CPU" :bordered="false" style="height: 100%">
         <a-row>
           <a-col :span="12">
-            <a-progress type="circle" :size="70" :percent="60" />
+            <a-progress type="dashboard" :size="80" :percent="systemInfo.cpu.usage" />
           </a-col>
           <a-col :span="12">
             <a-row>
               <a-col :span="24">
-                <a-statistic value="16" :value-style="{ 'font-size': '14px' }">
+                <a-statistic
+                  :value="systemInfo.cpu.num_cores"
+                  :value-style="{ 'font-size': '14px' }"
+                >
                   <template #title><span style="font-size: 12px">Num of Cores</span></template>
                 </a-statistic>
               </a-col>
             </a-row>
             <a-row style="margin-top: 12px">
               <a-col :span="24">
-                <a-statistic value="5800" :value-style="{ 'font-size': '14px' }">
+                <a-statistic
+                  :value="systemInfo.cpu.frequency"
+                  :value-style="{ 'font-size': '14px' }"
+                >
                   <template #title><span style="font-size: 12px">Frequency</span></template>
                   <template #suffix>MHz</template>
                 </a-statistic>
@@ -130,21 +308,37 @@ import EditAccount from './edit-account.vue'
       <a-card title="Memory" :bordered="false" style="height: 100%">
         <a-row>
           <a-col :span="12">
-            <a-progress type="circle" :size="70" :percent="87" />
+            <a-progress
+              type="dashboard"
+              :size="80"
+              :percent="
+                Math.round(
+                  ((systemInfo.memory.total - systemInfo.memory.available) /
+                    systemInfo.memory.total) *
+                    100
+                )
+              "
+            />
           </a-col>
           <a-col :span="12">
             <a-row>
               <a-col :span="24">
-                <a-statistic value="2418" :value-style="{ 'font-size': '14px' }">
-                  <template #title><span style="font-size: 12px">Memory Avail</span></template>
+                <a-statistic
+                  :value="systemInfo.memory.total - systemInfo.memory.available"
+                  :value-style="{ 'font-size': '14px' }"
+                >
+                  <template #title><span style="font-size: 12px">RAM Used</span></template>
                   <template #suffix>MB</template>
                 </a-statistic>
               </a-col>
             </a-row>
             <a-row style="margin-top: 12px">
               <a-col :span="24">
-                <a-statistic value="13252" :value-style="{ 'font-size': '14px' }">
-                  <template #title><span style="font-size: 12px">Memory Total</span></template>
+                <a-statistic
+                  :value="systemInfo.memory.total"
+                  :value-style="{ 'font-size': '14px' }"
+                >
+                  <template #title><span style="font-size: 12px">RAM Total</span></template>
                   <template #suffix>MB</template>
                 </a-statistic>
               </a-col>
@@ -155,32 +349,31 @@ import EditAccount from './edit-account.vue'
     </a-col>
     <a-col :span="4">
       <a-card title="Disk" :bordered="false" style="height: 100%">
-        <template #extra><a href="javascript:void(0)">Clear</a></template>
         <a-row>
           <a-col :span="12">
-            <a-statistic :value="14" :value-style="{ 'font-size': '14px' }">
+            <a-statistic
+              :value="systemInfo.disk.base_models"
+              :value-style="{ 'font-size': '14px' }"
+            >
               <template #title><span style="font-size: 12px">Base Models</span></template>
               <template #suffix>GB</template>
             </a-statistic>
           </a-col>
           <a-col :span="12">
-            <a-statistic :value="24" :value-style="{ 'font-size': '14px' }">
+            <a-statistic
+              :value="systemInfo.disk.lora_models"
+              :value-style="{ 'font-size': '14px' }"
+            >
               <template #title><span style="font-size: 12px">Lora Models</span></template>
-              <template #suffix>GB</template>
+              <template #suffix>MB</template>
             </a-statistic>
           </a-col>
         </a-row>
         <a-row style="margin-top: 12px">
           <a-col :span="12">
-            <a-statistic :value="14" :value-style="{ 'font-size': '14px' }">
+            <a-statistic :value="systemInfo.disk.logs" :value-style="{ 'font-size': '14px' }">
               <template #title><span style="font-size: 12px">Logs</span></template>
-              <template #suffix>MB</template>
-            </a-statistic>
-          </a-col>
-          <a-col :span="12">
-            <a-statistic :value="7" :value-style="{ 'font-size': '14px' }">
-              <template #title><span style="font-size: 12px">System</span></template>
-              <template #suffix>GB</template>
+              <template #suffix>KB</template>
             </a-statistic>
           </a-col>
         </a-row>

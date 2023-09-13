@@ -1,6 +1,6 @@
 module imhash
 
-go 1.21.0
+go 1.20
 
 require (
 	github.com/corona10/goimagehash v1.1.0 // indirect

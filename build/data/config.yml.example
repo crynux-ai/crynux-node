@@ -7,9 +7,9 @@ ethereum:
   provider: "https://block-node.crynux.ai/rpc"
 
   contract:
-    token: "0xf051527Ab3Db231a0b5A556f5201FC474970F00B"
-    node: "0xcF8432a6CBa43C68D50b72C22a5914318C26D63E"
-    task: "0xc2D48388833F6b9401CA6027f086E0B5a26fA034"
+    token: "0x96183Fc94C2ACF309e60B548d6D93eee02b46Eb2"
+    node: "0x9f445eaf2227C230556B2F4C8A7bFDF48b2476d6"
+    task: "0xE15C43088402AE6Ed644FF02423dB4022A72c416"
 
 task_dir: tasks
 db: sqlite+aiosqlite:///db/server.db
