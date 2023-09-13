@@ -1,14 +1,16 @@
-FROM nvidia/cuda:11.8.0-cudnn8-runtime-ubuntu22.04 as builder
+FROM nvidia/cuda:11.8.0-cudnn8-runtime-ubuntu22.04 as base
 
 RUN apt update
-RUN apt install python3.10 python3.10-venv ffmpeg libsm6 libxext6 curl -y
+RUN apt install python3.10 python3.10-venv ffmpeg libsm6 libxext6 -y
+
+FROM base as builder1
+
+RUN apt install curl -y
 
 RUN curl -O -L "https://golang.org/dl/go1.21.0.linux-amd64.tar.gz" && tar -C /usr/local -xzf go1.21.0.linux-amd64.tar.gz
 ENV PATH="${PATH}:/usr/local/go/bin"
 
 WORKDIR /app
-
-COPY remote-lora-scripts lora-scripts
 
 RUN python3 -m venv venv
 ENV PATH="/app/venv/bin:${PATH}"
@@ -20,6 +22,12 @@ COPY pyproject.toml pyproject.toml
 COPY requirements.txt requirements.txt
 RUN pip install -r requirements.txt && pip install .
 
+FROM base as builder2
+
+WORKDIR /app
+
+COPY remote-lora-scripts lora-scripts
+
 WORKDIR /app/lora-scripts
 
 RUN python3 -m venv venv
@@ -30,13 +38,10 @@ RUN pip install torch==2.0.0+cu118 torchvision==0.15.1+cu118 --extra-index-url h
 RUN pip install -r requirements.txt
 RUN pip install lion-pytorch lycoris-lora dadaptation fastapi uvicorn wandb network==0.1 xformers==0.0.19 tensorrt==8.6.1
 
-FROM nvidia/cuda:11.8.0-cudnn8-runtime-ubuntu22.04
+FROM base as final
 
-RUN apt update
-RUN apt install python3.10 python3.10-venv ffmpeg libsm6 libxext6 -y
-
-COPY --from=builder /app/venv /app/venv
-COPY --from=builder /app/lora-scripts /app/lora-scripts
+COPY --from=builder1 /app/venv /app/venv
+COPY --from=builder2 /app/lora-scripts /app/lora-scripts
 
 ENV PATH="/app/venv/bin:${PATH}"
 
