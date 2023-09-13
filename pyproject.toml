@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "h-node"
-authors = [{ name = "iwehf", email = "mh739025250@gmail.com" }]
+authors = [{ name = "iwehf", email = "henry.lee@crynux.ai" }]
 description = "Crynux Network Node for training and inferencing"
 readme = "README.md"
 requires-python = ">=3.8"
@@ -23,8 +23,9 @@ dependencies = [
     "pydantic~=2.2.1",
     "pydantic-settings~=2.0.3",
     "pydantic-settings-yaml~=0.2.0",
+    "importlib-resources~=6.0.0"
 ]
-version = "0.0.5"
+version = "0.0.6"
 
 [tool.setuptools.packages.find]
 where = ["src"]
