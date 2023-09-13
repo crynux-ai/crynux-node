@@ -35,14 +35,14 @@ async def test_upload_task_result(client: TestClient):
         "hashes": [result_hash],
     }
     files = (("files", (result_file, open(result_file, "rb"), "image/png")),)
-    resp = client.post(f"/v1/tasks/{task_id}/result", data=data, files=files)
+    resp = client.post(f"/manager/v1/tasks/{task_id}/result", data=data, files=files)
     resp.raise_for_status()
     resp_data = resp.json()
     assert resp_data["success"]
 
 
 async def test_get_task_stats(client: TestClient):
-    resp = client.get("/v1/tasks")
+    resp = client.get("/manager/v1/tasks")
     resp.raise_for_status()
     resp_data = resp.json()
     assert resp_data["status"] == "idle"

@@ -2,7 +2,7 @@ from fastapi.testclient import TestClient
 
 
 async def test_system_api(client: TestClient):
-    resp = client.get("/v1/system")
+    resp = client.get("/manager/v1/system")
     resp.raise_for_status()
 
     resp_data = resp.json()

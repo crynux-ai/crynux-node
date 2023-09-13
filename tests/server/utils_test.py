@@ -23,7 +23,7 @@ async def test_memory_info():
 
 
 async def test_disk_info():
-    disk_info = utils.get_disk_info("build/data/pretrained-models", "build/data/workspace/model", "build/data/inference-logs")
+    disk_info = await utils.get_disk_info("build/data/pretrained-models", "build/data/workspace/model", "logs", "build/data/inference-logs")
     assert disk_info.base_models > 0
     assert disk_info.lora_models > 0
     assert disk_info.logs > 0

@@ -1,14 +1,13 @@
 import json
-import os
 import re
 from collections import OrderedDict
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
+from anyio import run_process, Path
 from pydantic import BaseModel
 from web3 import Web3
-from anyio import run_process
-from h_server.models.task import PoseConfig, TaskConfig
 
+from h_server.models.task import PoseConfig, TaskConfig
 
 __all__ = [
     "sort_dict",
@@ -145,22 +144,39 @@ class DiskInfo(BaseModel):
     logs: int = 0
 
 
-def get_disk_info(base_model_dir: str, lora_model_dir: str, log_dir: str) -> DiskInfo:
-    base_models = [
-        path
-        for path in os.listdir(base_model_dir)
-        if os.path.isdir(os.path.join(base_model_dir, path))
-    ]
-    lora_models = [
-        path
-        for path in os.listdir(lora_model_dir)
-        if os.path.isdir(os.path.join(lora_model_dir, path))
-    ]
-    log_files = [
-        path
-        for path in os.listdir(log_dir)
-        if os.path.isfile(os.path.join(log_dir, path))
-    ]
-    return DiskInfo(
-        base_models=len(base_models), lora_models=len(lora_models), logs=len(log_files)
-    )
+async def get_disk_info(
+    base_model_dir: str,
+    lora_model_dir: str,
+    log_dir: str,
+    inference_log_dir: Optional[str] = None,
+) -> DiskInfo:
+    info = DiskInfo()
+    if await Path(base_model_dir).exists():
+        res = await run_process(["du", "-s", base_model_dir])
+        output = res.stdout.decode()
+        m = re.search(r"(\d+)", output)
+        if m is not None:
+            info.base_models = round(int(m.group(1)) / (1024 ** 2))
+
+    if await Path(lora_model_dir).exists():
+        res = await run_process(["du", "-s", lora_model_dir])
+        output = res.stdout.decode()
+        m = re.search(r"(\d+)", output)
+        if m is not None:
+            info.lora_models = round(int(m.group(1)) / 1024)
+
+    if await Path(log_dir).exists():
+        res = await run_process(["du", "-s", log_dir])
+        output = res.stdout.decode()
+        m = re.search(r"(\d+)", output)
+        if m is not None:
+            info.logs += int(m.group(1))
+
+    if inference_log_dir is not None and await Path(inference_log_dir).exists():
+        res = await run_process(["du", "-s", inference_log_dir])
+        output = res.stdout.decode()
+        m = re.search(r"(\d+)", output)
+        if m is not None:
+            info.logs += int(m.group(1))
+
+    return info

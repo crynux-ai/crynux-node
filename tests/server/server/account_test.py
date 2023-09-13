@@ -8,7 +8,7 @@ async def test_set_account(client: TestClient):
         "private_key": "0x420fcabfd5dbb55215490693062e6e530840c64de837d071f0d9da21aaac861e"
     }
 
-    resp = client.post("/v1/account", json=body)
+    resp = client.post("/manager/v1/account", json=body)
     resp.raise_for_status()
     resp_data = resp.json()
     assert resp_data["success"]
@@ -17,7 +17,7 @@ async def test_set_account(client: TestClient):
 
 
 async def test_get_account(client: TestClient, accounts):
-    resp = client.get("/v1/account")
+    resp = client.get("/manager/v1/account")
     resp.raise_for_status()
     resp_data = resp.json()
     assert resp_data["address"] == accounts[0]
