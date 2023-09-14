@@ -28,9 +28,10 @@ async def root_contracts(tx_option, privkeys):
 
     await c0.init(option=tx_option)
 
-    await c0.node_contract.update_task_contract_address(
+    waiter = await c0.node_contract.update_task_contract_address(
         c0.task_contract.address, option=tx_option
     )
+    await waiter.wait()
 
     for privkey in privkeys:
         provider.ethereum_tester.add_account(privkey)
@@ -56,8 +57,9 @@ async def contracts_with_tokens(root_contracts: Contracts, tx_option, privkeys):
         )
         amount = Web3.to_wei(1000, "ether")
         if (await contracts.token_contract.balance_of(contracts.account)) < amount:
-            await root_contracts.token_contract.transfer(
+            waiter = await root_contracts.token_contract.transfer(
                 contracts.account, amount, option=tx_option
             )
+            await waiter.wait()
         cs.append(contracts)
     return tuple(cs)

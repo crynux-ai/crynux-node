@@ -18,7 +18,8 @@ class NodeStatus(Enum):
     Paused = "paused"
     Stopped = "stopped"
     Error = "error"
-    Pending = "pending"
+    PendingPause = "pending_pause"
+    PendingStop = "pending_stop"
 
 
 def convert_node_status(chain_status: ChainNodeStatus) -> NodeStatus:
@@ -28,8 +29,10 @@ def convert_node_status(chain_status: ChainNodeStatus) -> NodeStatus:
         return NodeStatus.Running
     elif chain_status == ChainNodeStatus.PAUSED:
         return NodeStatus.Paused
-    elif chain_status in [ChainNodeStatus.PENDING_PAUSE, ChainNodeStatus.PENDING_QUIT]:
-        return NodeStatus.Pending
+    elif chain_status == ChainNodeStatus.PENDING_PAUSE:
+        return NodeStatus.PendingPause
+    elif chain_status == ChainNodeStatus.PENDING_QUIT:
+        return NodeStatus.PendingStop
     else:
         raise ValueError(f"unknown ChainNodeStatus: {chain_status}")
 

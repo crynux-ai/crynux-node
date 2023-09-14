@@ -78,7 +78,6 @@ class TaskSystem(object):
                             with fail_after(5, shield=True):
                                 if finished:
                                     del self._runners[task_id]
-                                    await self._state_cache.delete(task_id)
                                     _logger.debug(f"Task {event.task_id} finished")
                                 await self.event_queue.ack(ack_id)
                                 _logger.debug(
@@ -116,22 +115,10 @@ class TaskSystem(object):
             self._stop_event = None
 
     def stop(self):
-        assert self._stop_event is not None, "The TaskSystem has not been started."
-        assert self._tg is not None, "The TaskSystem has not been started."
-        self._stop_event.set()
-        if not self._tg.cancel_scope.cancel_called:
+        if self._stop_event is not None:
+            self._stop_event.set()
+        if self._tg is not None and not self._tg.cancel_scope.cancel_called:
             self._tg.cancel_scope.cancel()
-
-    async def has_task(self, task_id: int) -> bool:
-        if task_id in self._runners:
-            return True
-        return await self._state_cache.has(task_id)
-
-    async def is_running(self) -> bool:
-        if len(self._runners) > 0:
-            return True
-        n = await self._state_cache.count(deleted=False)
-        return n > 0
 
 
 _default_task_system: Optional[TaskSystem] = None

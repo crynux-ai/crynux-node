@@ -6,7 +6,7 @@ from web3.contract.async_contract import AsyncContractEvent
 
 from h_server.models import ChainTask
 
-from .utils import ContractWrapperBase
+from .utils import ContractWrapperBase, TxWaiter
 
 if TYPE_CHECKING:
     from h_server.config import TxOption
@@ -27,7 +27,7 @@ class TaskContract(ContractWrapperBase):
         data_hash: Union[str, bytes],
         *,
         option: "Optional[TxOption]" = None,
-    ):
+    ) -> TxWaiter:
         return await self._transaction_call(
             "createTask", option=option, taskHash=task_hash, dataHash=data_hash
         )
@@ -47,7 +47,7 @@ class TaskContract(ContractWrapperBase):
         nonce: bytes,
         *,
         option: "Optional[TxOption]" = None,
-    ):
+    ) -> TxWaiter:
         return await self._transaction_call(
             "submitTaskResultCommitment",
             option=option,
@@ -64,7 +64,7 @@ class TaskContract(ContractWrapperBase):
         result: Union[str, bytes],
         *,
         option: "Optional[TxOption]" = None,
-    ):
+    ) -> TxWaiter:
         return await self._transaction_call(
             "discloseTaskResult",
             option=option,
@@ -73,7 +73,7 @@ class TaskContract(ContractWrapperBase):
             result=result,
         )
     
-    async def report_task_error(self, task_id: int, round: int, *, option: "Optional[TxOption]" = None):
+    async def report_task_error(self, task_id: int, round: int, *, option: "Optional[TxOption]" = None) -> TxWaiter:
         return await self._transaction_call(
             "reportTaskError",
             option=option,

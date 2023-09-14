@@ -38,7 +38,7 @@ PrivkeyType = Literal["private_key", "keystore"]
 
 class PrivkeyInput(BaseModel):
     type: PrivkeyType
-    private_key: str = Field("", pattern=r"^0x[0-9a-fA-F]+$")
+    private_key: str = Field("", pattern=r"^0x[0-9a-fA-F]{64}$")
     keystore: str = ""
     passphrase: SecretStr = SecretStr("")
 
@@ -46,14 +46,16 @@ class PrivkeyInput(BaseModel):
 @router.post("", response_model=CommonResponse)
 async def set_account(input: Annotated[PrivkeyInput, Body()]):
     if input.type == "private_key":
-        assert len(input.private_key) > 0, HTTPException(400, "Private key is empty")
         await set_privkey(input.private_key)
     if input.type == "keystore":
         assert len(input.keystore) > 0 and len(input.passphrase) > 0
 
-        privkey = await to_thread.run_sync(
-            Account.decrypt, input.keystore, input.passphrase.get_secret_value()
-        )
+        try:
+            privkey = await to_thread.run_sync(
+                Account.decrypt, input.keystore, input.passphrase.get_secret_value()
+            )
+        except (TypeError, ValueError) as e:
+            raise HTTPException(400, str(e))
         await set_privkey(privkey.hex())
 
     return CommonResponse()

@@ -19,38 +19,50 @@ async def contracts_for_task(
     task_contract_address = c1.task_contract.address
     task_amount = Web3.to_wei(400, "ether")
     if (await c1.token_contract.allowance(task_contract_address)) < task_amount:
-        await c1.token_contract.approve(task_contract_address, task_amount, option=tx_option)
+        waiter = await c1.token_contract.approve(task_contract_address, task_amount, option=tx_option)
+        await waiter.wait()
     if (await c2.token_contract.allowance(task_contract_address)) < task_amount:
-        await c2.token_contract.approve(task_contract_address, task_amount, option=tx_option)
+        waiter = await c2.token_contract.approve(task_contract_address, task_amount, option=tx_option)
+        await waiter.wait()
     if (await c3.token_contract.allowance(task_contract_address)) < task_amount:
-        await c3.token_contract.approve(task_contract_address, task_amount, option=tx_option)
+        waiter = await c3.token_contract.approve(task_contract_address, task_amount, option=tx_option)
+        await waiter.wait()
 
     node_amount = Web3.to_wei(400, "ether")
     if (await c1.token_contract.allowance(node_contract_address)) < node_amount:
-        await c1.token_contract.approve(node_contract_address, node_amount, option=tx_option)
+        waiter = await c1.token_contract.approve(node_contract_address, node_amount, option=tx_option)
+        await waiter.wait()
     if (await c2.token_contract.allowance(node_contract_address)) < node_amount:
-        await c2.token_contract.approve(node_contract_address, node_amount, option=tx_option)
+        waiter = await c2.token_contract.approve(node_contract_address, node_amount, option=tx_option)
+        await waiter.wait()
     if (await c3.token_contract.allowance(node_contract_address)) < node_amount:
-        await c3.token_contract.approve(node_contract_address, node_amount, option=tx_option)
-    
+        waiter = await c3.token_contract.approve(node_contract_address, node_amount, option=tx_option)
+        await waiter.wait()
+
     try:
-        await c1.node_contract.join(option=tx_option)
+        waiter = await c1.node_contract.join(option=tx_option)
+        await waiter.wait()
     except TxRevertedError as e:
         pass
     try:
-        await c2.node_contract.join(option=tx_option)
+        waiter = await c2.node_contract.join(option=tx_option)
+        await waiter.wait()
     except TxRevertedError as e:
         pass
     try:
-        await c3.node_contract.join(option=tx_option)
+        waiter = await c3.node_contract.join(option=tx_option)
+        await waiter.wait()
     except TxRevertedError as e:
         pass
     try:
         yield c1, c2, c3
     finally:
-        await c1.node_contract.quit(option=tx_option)
-        await c2.node_contract.quit(option=tx_option)
-        await c3.node_contract.quit(option=tx_option)
+        waiter = await c1.node_contract.quit(option=tx_option)
+        await waiter.wait()
+        waiter = await c2.node_contract.quit(option=tx_option)
+        await waiter.wait()
+        waiter = await c3.node_contract.quit(option=tx_option)
+        await waiter.wait()
 
 
 async def test_task(contracts_for_task: Tuple[Contracts, Contracts, Contracts], tx_option):
@@ -59,7 +71,8 @@ async def test_task(contracts_for_task: Tuple[Contracts, Contracts, Contracts], 
     task_hash = Web3.keccak(text="task_hash")
     data_hash = Web3.keccak(text="data_hash")
 
-    receipt = await c1.task_contract.create_task(task_hash, data_hash, option=tx_option)
+    waiter = await c1.task_contract.create_task(task_hash, data_hash, option=tx_option)
+    receipt = await waiter.wait()
 
     events = await c1.task_contract.get_events(
         "TaskCreated",
@@ -85,9 +98,10 @@ async def test_task(contracts_for_task: Tuple[Contracts, Contracts, Contracts], 
         nonce = secrets.token_bytes(32)
         commitment = Web3.solidity_keccak(["bytes", "bytes32"], [result, nonce])
 
-        receipt = await c.task_contract.submit_task_result_commitment(
+        waiter = await c.task_contract.submit_task_result_commitment(
             task_id, round_map[c.account], commitment, nonce, option=tx_option
         )
+        receipt = await waiter.wait()
     events = await c1.task_contract.get_events(
         "TaskResultCommitmentsReady", from_block=receipt["blockNumber"]
     )
@@ -97,12 +111,13 @@ async def test_task(contracts_for_task: Tuple[Contracts, Contracts, Contracts], 
 
     from_block = receipt["blockNumber"]
     for c in contracts_for_task:
-        receipt = await c.task_contract.disclose_task_result(
+        waiter = await c.task_contract.disclose_task_result(
             task_id=task_id,
             round=round_map[c.account],
             result=result,
             option=tx_option
         )
+        receipt = await waiter.wait()
     to_block = receipt["blockNumber"]
     events = await c1.task_contract.get_events(
         "TaskSuccess", from_block=from_block, to_block=to_block
@@ -133,7 +148,8 @@ async def test_task_with_event_watcher(
         watcher.watch_event(
             "task", "TaskCreated", _push_event, filter_args={"creator": c1.account}
         )
-        await c1.task_contract.create_task(task_hash, data_hash, option=tx_option)
+        waiter = await c1.task_contract.create_task(task_hash, data_hash, option=tx_option)
+        await waiter.wait()
 
         task_id: int = -1
         selected_nodes = []
@@ -162,21 +178,23 @@ async def test_task_with_event_watcher(
             nonce = secrets.token_bytes(32)
             commitment = Web3.solidity_keccak(["bytes", "bytes32"], [result, nonce])
 
-            await c.task_contract.submit_task_result_commitment(
+            waiter = await c.task_contract.submit_task_result_commitment(
                 task_id, round_map[c.account], commitment, nonce, option=tx_option
             )
+            await waiter.wait()
 
         event = await event_recv.receive()
         assert event["args"]["taskId"] == task_id
 
         watcher.watch_event("task", "TaskSuccess", _push_event, filter_args={"taskId": task_id})
         for c in contracts_for_task:
-            await c.task_contract.disclose_task_result(
+            waiter = await c.task_contract.disclose_task_result(
                 task_id=task_id,
                 round=round_map[c.account],
                 result=result,
                 option=tx_option
             )
+            await waiter.wait()
 
         event = await event_recv.receive()
         assert event["args"]["taskId"] == task_id

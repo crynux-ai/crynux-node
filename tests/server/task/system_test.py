@@ -88,7 +88,7 @@ async def test_task_system():
         await system.event_queue.put(events[3])
         await queue.wait_ack()
     
-        exist = await system.has_task(task_id)
+        exist = await cache.has(task_id=task_id)
         assert not exist
 
         system.stop()

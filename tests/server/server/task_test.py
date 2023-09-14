@@ -1,32 +1,73 @@
-import secrets
+from typing import List
 
-from anyio import sleep
+from anyio import create_task_group, sleep
 from fastapi.testclient import TestClient
-from web3 import Web3
 
 from h_server import models
-from h_server.event_queue import get_event_queue
+from h_server.contracts import Contracts
+from h_server.models.task import PoseConfig, TaskConfig
+from h_server.node_manager import NodeManager, start
+from h_server.relay import Relay
+from h_server.utils import get_task_data_hash, get_task_hash
 
 
-async def test_upload_task_result(client: TestClient):
-    task_id = 1
-    creator = Web3.to_checksum_address("0xd075aB490857256e6fc85d75d8315e7c9914e008")
-    address = Web3.to_checksum_address("0x577887519278199ce8F8D80bAcc70fc32b48daD4")
-    task_hash = "0x" + secrets.token_bytes(32).hex()
-    data_hash = "0x" + secrets.token_bytes(32).hex()
-    round = 1
+async def test_get_task_stats_empty(client: TestClient):
+    resp = client.get("/manager/v1/tasks")
+    resp.raise_for_status()
+    resp_data = resp.json()
+    assert resp_data["status"] == "waiting"
+    assert resp_data["num_today"] == 0
+    assert resp_data["num_total"] == 0
 
-    event = models.TaskCreated(
-        task_id=task_id,
-        creator=creator,
-        selected_node=address,
-        task_hash=task_hash,
-        data_hash=data_hash,
-        round=round,
+
+async def create_task(
+    node_contracts: List[Contracts],
+    managers: List[NodeManager],
+    relay: Relay,
+    tx_option,
+):
+    waits = [
+        await start(c, n.node_state_manager) for c, n in zip(node_contracts, managers)
+    ]
+    async with create_task_group() as tg:
+        for w in waits:
+            tg.start_soon(w)
+
+    task = models.RelayTaskInput(
+        task_id=1,
+        base_model="stable-diffusion-v1-5-pruned",
+        prompt="a mame_cat lying under the window, in anime sketch style, red lips, blush, black eyes, dashed outline, brown pencil outline",
+        lora_model="f4fab20c-4694-430e-8937-22cdb713da9",
+        task_config=TaskConfig(
+            image_width=512,
+            image_height=512,
+            lora_weight=100,
+            num_images=1,
+            seed=255728798,
+            steps=40,
+        ),
+        pose=PoseConfig(data_url="", pose_weight=100, preprocess=False),
     )
-    queue = get_event_queue()
-    await queue.put(event)
 
+    task_hash = get_task_hash(task.task_config)
+    data_hash = get_task_data_hash(
+        base_model=task.base_model,
+        lora_model=task.lora_model,
+        prompt=task.prompt,
+        pose=task.pose,
+    )
+    await relay.create_task(task=task)
+    waiter = await node_contracts[0].task_contract.create_task(
+        task_hash=task_hash, data_hash=data_hash, option=tx_option
+    )
+    await waiter.wait()
+    return task.task_id
+
+
+async def test_upload_task_result(
+    running_client: TestClient, node_contracts, managers, relay, tx_option
+):
+    task_id = await create_task(node_contracts, managers, relay, tx_option)
     await sleep(1)
 
     result_file = "test.png"
@@ -35,16 +76,30 @@ async def test_upload_task_result(client: TestClient):
         "hashes": [result_hash],
     }
     files = (("files", (result_file, open(result_file, "rb"), "image/png")),)
-    resp = client.post(f"/manager/v1/tasks/{task_id}/result", data=data, files=files)
+    resp = running_client.post(
+        f"/manager/v1/tasks/{task_id}/result", data=data, files=files
+    )
     resp.raise_for_status()
     resp_data = resp.json()
     assert resp_data["success"]
 
 
-async def test_get_task_stats(client: TestClient):
-    resp = client.get("/manager/v1/tasks")
+async def test_get_task_stats(
+    running_client: TestClient, node_contracts, managers, relay, tx_option
+):
+    resp = running_client.get("/manager/v1/tasks")
     resp.raise_for_status()
     resp_data = resp.json()
     assert resp_data["status"] == "idle"
+    assert resp_data["num_today"] == 0
+    assert resp_data["num_total"] == 0
+
+    await create_task(node_contracts, managers, relay, tx_option)
+    await sleep(1)
+
+    resp = running_client.get("/manager/v1/tasks")
+    resp.raise_for_status()
+    resp_data = resp.json()
+    assert resp_data["status"] == "running"
     assert resp_data["num_today"] == 0
     assert resp_data["num_total"] == 0

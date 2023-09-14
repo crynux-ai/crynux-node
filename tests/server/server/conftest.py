@@ -1,8 +1,7 @@
-from contextlib import asynccontextmanager
 from typing import List
 
 import pytest
-from anyio import create_task_group
+from anyio import create_task_group, sleep
 from eth_account import Account
 from fastapi.testclient import TestClient
 from web3 import Web3
@@ -11,8 +10,8 @@ from h_server import models
 from h_server.config import Config, TxOption, set_config
 from h_server.contracts import Contracts, set_contracts
 from h_server.event_queue import EventQueue, MemoryEventQueue, set_event_queue
-from h_server.node_manager import NodeManager, set_node_manager
-from h_server.node_manager.state_cache import MemoryNodeStateCache
+from h_server.node_manager import NodeManager, set_node_manager, NodeStateManager, set_node_state_manager
+from h_server.node_manager.state_cache import MemoryNodeStateCache, MemoryTxStateCache
 from h_server.relay import MockRelay, Relay, set_relay
 from h_server.server import Server
 from h_server.task import (MemoryTaskStateCache, MockTaskRunner, TaskSystem,
@@ -21,12 +20,12 @@ from h_server.task.state_cache import TaskStateCache
 from h_server.watcher import EventWatcher, MemoryBlockNumberCache, set_watcher
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture
 def tx_option():
     return {}
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture
 def accounts():
     return [
         "0x577887519278199ce8F8D80bAcc70fc32b48daD4",
@@ -34,7 +33,7 @@ def accounts():
         "0xEa1A669fd6A705d28239011A074adB3Cfd6cd82B"
     ]
 
-@pytest.fixture(scope="module")
+@pytest.fixture
 def privkeys():
     return [
         "0xa627246a109551432ac5db6535566af34fdddfaa11df17b8afd53eb987e209a2",
@@ -43,7 +42,7 @@ def privkeys():
     ]
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture
 async def root_contracts(tx_option, privkeys):
     from web3.providers.eth_tester import AsyncEthereumTesterProvider
 
@@ -52,9 +51,10 @@ async def root_contracts(tx_option, privkeys):
 
     await c0.init(option=tx_option)
 
-    await c0.node_contract.update_task_contract_address(
+    waiter = await c0.node_contract.update_task_contract_address(
         c0.task_contract.address, option=tx_option
     )
+    await waiter.wait()
 
     for privkey in privkeys:
         provider.ethereum_tester.add_account(privkey)
@@ -65,7 +65,7 @@ async def root_contracts(tx_option, privkeys):
     return c0
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture
 def config():
     test_config = Config.model_validate(
         {
@@ -95,7 +95,7 @@ def config():
     return test_config
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture
 async def node_contracts(
     root_contracts: Contracts, tx_option: TxOption, privkeys: List[str]
 ):
@@ -111,37 +111,40 @@ async def node_contracts(
         )
         amount = Web3.to_wei(1000, "ether")
         if (await contracts.token_contract.balance_of(contracts.account)) < amount:
-            await root_contracts.token_contract.transfer(
+            waiter = await root_contracts.token_contract.transfer(
                 contracts.account, amount, option=tx_option
             )
+            await waiter.wait()
         task_amount = Web3.to_wei(400, "ether")
         if (
             await contracts.token_contract.allowance(task_contract_address)
         ) < task_amount:
-            await contracts.token_contract.approve(
+            waiter = await contracts.token_contract.approve(
                 task_contract_address, task_amount, option=tx_option
             )
+            await waiter.wait()
         node_amount = Web3.to_wei(400, "ether")
         if (
             await contracts.token_contract.allowance(node_contract_address)
         ) < node_amount:
-            await contracts.token_contract.approve(
+            waiter = await contracts.token_contract.approve(
                 node_contract_address, node_amount, option=tx_option
             )
+            await waiter.wait()
 
         cs.append(contracts)
     return cs
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture
 def relay():
     relay = MockRelay()
     set_relay(relay)
     return relay
 
 
-@pytest.fixture(scope="function", autouse=True)
-async def prepare_enviroment(
+@pytest.fixture
+async def managers(
     privkeys: List[str], node_contracts: List[Contracts], relay: Relay, config: Config
 ):
     managers: List[NodeManager] = []
@@ -184,18 +187,20 @@ async def prepare_enviroment(
             set_task_state_cache(task_state_cache)
             set_task_system(system)
 
-        def make_runner_cls():
-            class _MockTaskRunner(MockTaskRunner):
-                def __init__(self, task_id: int, state_cache: TaskStateCache, queue: EventQueue, task_name: str, distributed: bool):
-                    super().__init__(task_id, state_cache, queue, task_name, distributed)
+        system.set_runner_cls(MockTaskRunner)
 
-            return _MockTaskRunner
-
-        system.set_runner_cls(make_runner_cls())
+        state_manager = NodeStateManager(
+            node_state_cache_cls=MemoryNodeStateCache,
+            tx_state_cache_cls=MemoryTxStateCache
+        )
+        if i == 0:
+            set_node_state_manager(state_manager)
+        # set init state to stopped to bypass prefetch stage
+        await state_manager.set_node_state(models.NodeStatus.Stopped)
 
         manager = NodeManager(
             config=config,
-            node_state_cache_cls=MemoryNodeStateCache,
+            node_state_manager=state_manager,
             privkey=privkey,
             event_queue=queue,
             contracts=contracts,
@@ -206,22 +211,24 @@ async def prepare_enviroment(
         if i == 0:
             set_node_manager(manager)
         managers.append(manager)
+    
+    return managers
 
-    @asynccontextmanager
-    async def context():
-        async with create_task_group() as tg:
-            for manager in managers:
-                tg.start_soon(manager.run)
-            try:
-                yield
-            finally:
-                for manager in managers:
-                    await manager.finish()
-                tg.cancel_scope.cancel()
 
-    async with context():
-        yield
+@pytest.fixture
+async def running_client(managers):
+    client = TestClient(Server().app)
+    async with create_task_group() as tg:
+        for manager in managers:
+            tg.start_soon(manager.run)
+        yield client
+        for manager in managers:
+            await manager.finish()
+        tg.cancel_scope.cancel()
 
-@pytest.fixture(scope="module")
+
+@pytest.fixture
 def client():
-    return TestClient(Server().app)
+    client = TestClient(Server().app)
+    yield client
+    client.close()

@@ -2,9 +2,8 @@ from typing import TYPE_CHECKING, Optional
 
 from eth_typing import ChecksumAddress
 from web3 import AsyncWeb3
-from web3.types import TxReceipt
 
-from .utils import ContractWrapperBase
+from .utils import ContractWrapperBase, TxWaiter
 
 if TYPE_CHECKING:
     from h_server.config import TxOption
@@ -32,7 +31,7 @@ class TokenContract(ContractWrapperBase):
         amount: int,
         *,
         option: "Optional[TxOption]" = None,
-    ) -> TxReceipt:
+    ) -> TxWaiter:
         return await self._transaction_call(
             "transfer", option=option, to=to, amount=amount
         )
@@ -43,7 +42,7 @@ class TokenContract(ContractWrapperBase):
         amount: int,
         *,
         option: "Optional[TxOption]" = None,
-    ) -> TxReceipt:
+    ) -> TxWaiter:
         return await self._transaction_call(
             "approve", option=option, spender=spender, amount=amount
         )

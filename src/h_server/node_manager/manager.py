@@ -1,16 +1,17 @@
 import logging
 import os
+from contextlib import asynccontextmanager
 from typing import Optional, Type
 
 from anyio import (Event, create_task_group, fail_after,
-                   get_cancelled_exc_class, to_thread)
+                   get_cancelled_exc_class, sleep, to_thread)
 from anyio.abc import TaskGroup
 from web3 import Web3
 from web3.types import EventData
 
 from h_server import models
 from h_server.config import Config, wait_privkey
-from h_server.contracts import Contracts, set_contracts
+from h_server.contracts import Contracts, TxRevertedError, set_contracts
 from h_server.event_queue import DbEventQueue, EventQueue, set_event_queue
 from h_server.relay import Relay, WebRelay, set_relay
 from h_server.task import (DbTaskStateCache, InferenceTaskRunner,
@@ -19,13 +20,24 @@ from h_server.task import (DbTaskStateCache, InferenceTaskRunner,
 from h_server.watcher import (BlockNumberCache, DbBlockNumberCache,
                               EventWatcher, set_watcher)
 
-from .state_cache import DbNodeStateCache, NodeStateCache, set_node_state_cache
+from .state_cache import DbNodeStateCache, DbTxStateCache, StateCache
 
 _logger = logging.getLogger(__name__)
 
 
-def _make_contracts(privkey: str, provider: str) -> Contracts:
+async def _make_contracts(
+    privkey: str,
+    provider: str,
+    token_contract_address: str,
+    node_contract_address: str,
+    task_contract_address: str,
+) -> Contracts:
     contracts = Contracts(provider_path=provider, privkey=privkey)
+    await contracts.init(
+        token_contract_address=token_contract_address,
+        node_contract_address=node_contract_address,
+        task_contract_address=task_contract_address,
+    )
     set_contracts(contracts)
     return contracts
 
@@ -79,12 +91,208 @@ def _make_task_system(
     return system
 
 
+class NodeStateManager(object):
+    def __init__(
+        self,
+        node_state_cache_cls: Type[StateCache[models.NodeState]] = DbNodeStateCache,
+        tx_state_cache_cls: Type[StateCache[models.TxState]] = DbTxStateCache,
+    ) -> None:
+        self.node_state_cache = node_state_cache_cls()
+        self.tx_state_cache = tx_state_cache_cls()
+
+    async def get_node_state(self) -> models.NodeState:
+        return await self.node_state_cache.get()
+
+    async def get_tx_state(self) -> models.TxState:
+        return await self.tx_state_cache.get()
+
+    async def set_node_state(self, status: models.NodeStatus, message: str = ""):
+        return await self.node_state_cache.set(
+            models.NodeState(status=status, message=message)
+        )
+
+    async def set_tx_state(self, status: models.TxStatus, error: str = ""):
+        return await self.tx_state_cache.set(models.TxState(status=status, error=error))
+
+
+_default_state_manager: Optional[NodeStateManager] = None
+
+
+def get_node_state_manager() -> NodeStateManager:
+    assert _default_state_manager is not None, "Node state manager has not been set."
+
+    return _default_state_manager
+
+
+def set_node_state_manager(manager: NodeStateManager):
+    global _default_state_manager
+
+    _default_state_manager = manager
+
+
+@asynccontextmanager
+async def _wrap_tx_error(state_manager: NodeStateManager):
+    try:
+        yield
+    except KeyboardInterrupt:
+        raise
+    except get_cancelled_exc_class():
+        raise
+    except (TxRevertedError, AssertionError, ValueError) as e:
+        _logger.error(f"tx error {str(e)}")
+        with fail_after(5, shield=True):
+            await state_manager.set_tx_state(models.TxStatus.Error, str(e))
+        raise
+    except Exception as e:
+        _logger.exception(e)
+        _logger.error("unknown tx error")
+        raise
+
+
+async def start(contracts: Contracts, state_manager: NodeStateManager):
+    async with _wrap_tx_error(state_manager):
+        node_status = (await state_manager.get_node_state()).status
+        tx_status = (await state_manager.get_tx_state()).status
+        assert (
+            node_status == models.NodeStatus.Stopped
+        ), "Cannot start node. Node is not stopped."
+        assert (
+            tx_status != models.TxStatus.Pending
+        ), "Cannot start node. Last transaction is in pending."
+
+        node_amount = Web3.to_wei(400, "ether")
+        balance = await contracts.token_contract.balance_of(contracts.account)
+        if balance < node_amount:
+            raise ValueError("Node token balance is not enough to join.")
+        allowance = await contracts.token_contract.allowance(
+            contracts.node_contract.address
+        )
+        if allowance < node_amount:
+            waiter = await contracts.token_contract.approve(
+                contracts.node_contract.address, node_amount
+            )
+            await waiter.wait()
+
+        waiter = await contracts.node_contract.join()
+        await state_manager.set_tx_state(models.TxStatus.Pending)
+
+    async def wait():
+        async with _wrap_tx_error(state_manager):
+            await waiter.wait()
+            await state_manager.set_tx_state(models.TxStatus.Success)
+
+            status = await contracts.node_contract.get_node_status(contracts.account)
+            local_status = models.convert_node_status(status)
+            assert (
+                local_status == models.NodeStatus.Running
+            ), "Node status on chain is not running."
+            await state_manager.set_node_state(local_status)
+
+    return wait
+
+
+async def stop(contracts: Contracts, state_manager: NodeStateManager):
+    async with _wrap_tx_error(state_manager):
+        node_status = (await state_manager.get_node_state()).status
+        tx_status = (await state_manager.get_tx_state()).status
+        assert (
+            node_status == models.NodeStatus.Running
+        ), "Cannot stop node. Node is not running."
+        assert (
+            tx_status != models.TxStatus.Pending
+        ), "Cannot start node. Last transaction is in pending."
+
+        waiter = await contracts.node_contract.quit()
+
+    async def wait():
+        async with _wrap_tx_error(state_manager):
+            await waiter.wait()
+            await state_manager.set_tx_state(models.TxStatus.Success)
+
+            while True:
+                status = await contracts.node_contract.get_node_status(
+                    contracts.account
+                )
+                local_status = models.convert_node_status(status)
+                assert local_status in [
+                    models.NodeStatus.Stopped,
+                    models.NodeStatus.PendingStop,
+                ], "Node status on chain is not stopped or pending."
+                await state_manager.set_node_state(local_status)
+                if local_status == models.NodeStatus.Stopped:
+                    break
+
+    return wait
+
+
+async def pause(contracts: Contracts, state_manager: NodeStateManager):
+    async with _wrap_tx_error(state_manager):
+        node_status = (await state_manager.get_node_state()).status
+        tx_status = (await state_manager.get_tx_state()).status
+        assert (
+            node_status == models.NodeStatus.Running
+        ), "Cannot stop node. Node is not running."
+        assert (
+            tx_status != models.TxStatus.Pending
+        ), "Cannot start node. Last transaction is in pending."
+
+        waiter = await contracts.node_contract.pause()
+
+    async def wait():
+        async with _wrap_tx_error(state_manager):
+            await waiter.wait()
+            await state_manager.set_tx_state(models.TxStatus.Success)
+
+            while True:
+                status = await contracts.node_contract.get_node_status(
+                    contracts.account
+                )
+                local_status = models.convert_node_status(status)
+                assert local_status in [
+                    models.NodeStatus.Paused,
+                    models.NodeStatus.PendingPause,
+                ], "Node status on chain is not paused or pending"
+                await state_manager.set_node_state(local_status)
+                if local_status == models.NodeStatus.Paused:
+                    break
+
+    return wait
+
+
+async def resume(contracts: Contracts, state_manager: NodeStateManager):
+    async with _wrap_tx_error(state_manager):
+        node_status = (await state_manager.get_node_state()).status
+        tx_status = (await state_manager.get_tx_state()).status
+        assert (
+            node_status == models.NodeStatus.Paused
+        ), "Cannot stop node. Node is not running."
+        assert (
+            tx_status != models.TxStatus.Pending
+        ), "Cannot start node. Last transaction is in pending."
+
+        waiter = await contracts.node_contract.resume()
+
+    async def wait():
+        async with _wrap_tx_error(state_manager):
+            await waiter.wait()
+            await state_manager.set_tx_state(models.TxStatus.Success)
+
+            status = await contracts.node_contract.get_node_status(contracts.account)
+            local_status = models.convert_node_status(status)
+            assert (
+                local_status == models.NodeStatus.Running
+            ), "Node status on chain is not running"
+            await state_manager.set_node_state(local_status)
+
+    return wait
+
+
 class NodeManager(object):
     def __init__(
         self,
         config: Config,
+        node_state_manager: Optional[NodeStateManager] = None,
         event_queue_cls: Type[EventQueue] = DbEventQueue,
-        node_state_cache_cls: Type[NodeStateCache] = DbNodeStateCache,
         block_number_cache_cls: Type[BlockNumberCache] = DbBlockNumberCache,
         task_state_cache_cls: Type[TaskStateCache] = DbTaskStateCache,
         privkey: Optional[str] = None,
@@ -93,10 +301,13 @@ class NodeManager(object):
         relay: Optional[Relay] = None,
         watcher: Optional[EventWatcher] = None,
         task_system: Optional[TaskSystem] = None,
+        restart_delay: float = 5,
     ) -> None:
         self.config = config
-        self.node_state_cache = node_state_cache_cls()
-        set_node_state_cache(self.node_state_cache)
+        if node_state_manager is None:
+            node_state_manager = NodeStateManager()
+            set_node_state_manager(node_state_manager)
+        self.node_state_manager = node_state_manager
 
         self.event_queue_cls = event_queue_cls
         self.block_number_cache_cls = block_number_cache_cls
@@ -108,6 +319,8 @@ class NodeManager(object):
         self._relay = relay
         self._watcher = watcher
         self._task_system = task_system
+        # restart delay equals 0 means do not restart and raise error, for test only
+        self._restart_delay = restart_delay
 
         self._tg: Optional[TaskGroup] = None
         self._finish_event: Optional[Event] = None
@@ -118,35 +331,6 @@ class NodeManager(object):
             self._finish_event = Event()
         return self._finish_event
 
-    async def get_state(self) -> models.NodeState:
-        current_state = await self.node_state_cache.get()
-        if (
-            current_state.status == models.NodeStatus.Pending
-            and self._contracts is not None
-        ):
-            status = await self._contracts.node_contract.get_node_status(
-                self._contracts.account
-            )
-            remote_status = models.convert_node_status(status)
-            if remote_status != current_state.status:
-                await self.node_state_cache.set(models.NodeState(status=remote_status))
-                current_state.status = remote_status
-        return current_state
-
-    async def _get_status(self) -> models.NodeStatus:
-        return (await self.get_state()).status
-
-    async def _set_status(self, status: models.NodeStatus):
-        await self.node_state_cache.set(models.NodeState(status=status))
-
-    async def _set_error(self, error_msg: str):
-        await self.node_state_cache.set(
-            models.NodeState(
-                status=models.NodeStatus.Error,
-                message=error_msg,
-            )
-        )
-
     async def _init_components(self):
         _logger.info("Initializing node manager components.")
         if self._contracts is None or self._relay is None:
@@ -154,8 +338,13 @@ class NodeManager(object):
                 self._privkey = await wait_privkey()
 
             if self._contracts is None:
-                self._contracts = _make_contracts(self._privkey, self.config.ethereum.provider)
-                await self._contracts.init()
+                self._contracts = await _make_contracts(
+                    privkey=self._privkey,
+                    provider=self.config.ethereum.provider,
+                    token_contract_address=self.config.ethereum.contract.token,
+                    node_contract_address=self.config.ethereum.contract.node,
+                    task_contract_address=self.config.ethereum.contract.task,
+                )
             if self._relay is None:
                 self._relay = _make_relay(self._privkey, self.config.relay_url)
 
@@ -177,7 +366,7 @@ class NodeManager(object):
         _logger.info("Node manager components initializing complete.")
 
     async def _init(self):
-        status = await self._get_status()
+        status = (await self.node_state_manager.get_node_state()).status
         if status in (models.NodeStatus.Init, models.NodeStatus.Error):
             _logger.info("Initialize node manager")
 
@@ -196,7 +385,7 @@ class NodeManager(object):
                     cancellable=True,
                 )
 
-            await self._set_status(models.NodeStatus.Stopped)
+            await self.node_state_manager.set_node_state(models.NodeStatus.Stopped)
             _logger.info("Node manager initializing complete.")
 
     async def _run(self):
@@ -235,8 +424,17 @@ class NodeManager(object):
             except Exception as e:
                 _logger.exception(e)
                 _logger.error(f"Node manager error: {str(e)}")
-                with fail_after(2, shield=True):
-                    await self._set_error(str(e))
+                with fail_after(5, shield=True):
+                    await self.node_state_manager.set_node_state(
+                        models.NodeStatus.Error, str(e)
+                    )
+                if self._restart_delay > 0:
+                    _logger.error(
+                        f"Node manager restart in {self._restart_delay} seconds"
+                    )
+                    await sleep(self._restart_delay)
+                else:
+                    raise e
 
     async def finish(self):
         self.finish_event.set()
@@ -252,109 +450,6 @@ class NodeManager(object):
             self._tg.cancel_scope.cancel()
 
         self._finish_event = None
-
-    async def start(self):
-        assert (
-            await self._get_status() == models.NodeStatus.Stopped
-        ), "Cannot start node. Node should be stopped."
-
-        assert self._contracts is not None, "Contracts is not initialized."
-        status = await self._contracts.node_contract.get_node_status(
-            self._contracts.account
-        )
-        assert (
-            status == models.ChainNodeStatus.QUIT
-        ), "Cannot start node. Node should be stopped."
-        node_amount = Web3.to_wei(400, "ether")
-        balance = await self._contracts.token_contract.balance_of(
-            self._contracts.account
-        )
-        if balance < node_amount:
-            raise ValueError("Node token balance is not enough to join.")
-        allowance = await self._contracts.token_contract.allowance(
-            self._contracts.node_contract.address
-        )
-        if allowance < node_amount:
-            await self._contracts.token_contract.approve(
-                self._contracts.node_contract.address, node_amount
-            )
-
-        await self._contracts.node_contract.join()
-        status = await self._contracts.node_contract.get_node_status(
-            self._contracts.account
-        )
-        local_status = models.convert_node_status(status)
-        assert (
-            local_status == models.NodeStatus.Running
-        ), f"Error node status from chain {status}"
-        await self._set_status(local_status)
-
-    async def stop(self):
-        assert (
-            await self._get_status() == models.NodeStatus.Running
-        ), "Cannot start node. Node should be running."
-        assert self._contracts is not None, "Contracts is not initialized."
-        status = await self._contracts.node_contract.get_node_status(
-            self._contracts.account
-        )
-        assert status in [
-            models.ChainNodeStatus.AVAILABLE,
-            models.ChainNodeStatus.BUSY,
-        ], "Cannot stop node. Node should be running."
-        await self._contracts.node_contract.quit()
-        status = await self._contracts.node_contract.get_node_status(
-            self._contracts.account
-        )
-        local_status = models.convert_node_status(status)
-        assert local_status in [
-            models.NodeStatus.Stopped,
-            models.NodeStatus.Pending,
-        ], f"Error node status from chain {status}"
-        await self._set_status(local_status)
-
-    async def resume(self):
-        assert (
-            await self._get_status() == models.NodeStatus.Paused
-        ), "Cannot resume node. Node should be paused."
-        assert self._contracts is not None, "Contracts is not initialized."
-        status = await self._contracts.node_contract.get_node_status(
-            self._contracts.account
-        )
-        assert (
-            status == models.ChainNodeStatus.PAUSED
-        ), "Cannot resume node. Node should be paused."
-        await self._contracts.node_contract.resume()
-        status = await self._contracts.node_contract.get_node_status(
-            self._contracts.account
-        )
-        local_status = models.convert_node_status(status)
-        assert (
-            local_status == models.NodeStatus.Running
-        ), f"Error node status from chain {status}"
-        await self._set_status(local_status)
-
-    async def pause(self):
-        assert (
-            await self._get_status() == models.NodeStatus.Running
-        ), "Cannot pause node. Node should be running."
-        assert self._contracts is not None, "Contracts is not initialized."
-        status = await self._contracts.node_contract.get_node_status(
-            self._contracts.account
-        )
-        assert status in [
-            models.ChainNodeStatus.AVAILABLE,
-            models.ChainNodeStatus.BUSY,
-        ], "Cannot pause node. Node should be running."
-        await self._contracts.node_contract.pause()
-        status = await self._contracts.node_contract.get_node_status(
-            self._contracts.account
-        )
-        local_status = models.convert_node_status(status)
-        assert local_status in [
-            models.NodeStatus.Paused,
-            models.NodeStatus.Pending,
-        ], f"Error node status from chain {status}"
-        await self._set_status(local_status)
 
 
 _node_manager: Optional[NodeManager] = None
