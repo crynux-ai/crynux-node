@@ -1,11 +1,12 @@
 <script setup>
-import { h, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
+import { computed, h, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { PauseCircleOutlined, LogoutOutlined, PlayCircleOutlined } from '@ant-design/icons-vue'
 import EditAccount from './edit-account.vue'
 
 import systemAPI from '../api/v1/system'
 import nodeAPI from '../api/v1/node'
 import taskAPI from '../api/v1/task'
+import accountAPI from '../api/v1/account'
 
 const accountEditor = ref(null)
 
@@ -49,6 +50,23 @@ const taskStatus = reactive({
   num_total: 0
 })
 
+const shortAddress = computed(() => {
+  if (accountStatus.address === '') {
+    return 'N/A'
+  } else {
+    return (
+      accountStatus.address.substring(0, 6) +
+      '...' +
+      accountStatus.address.substring(accountStatus.address.length - 4)
+    )
+  }
+})
+
+const toEtherValue = (bigNum) => {
+  if (bigNum === 0) return 0
+  return bigNum.dividedBy(1e18).toString()
+}
+
 let systemUpdateInterval
 onMounted(async () => {
   await updateSystemInfo()
@@ -68,6 +86,9 @@ const updateSystemInfo = async () => {
 
   const nodeResp = await nodeAPI.getNodeStatus()
   Object.assign(nodeStatus, nodeResp)
+
+  const accountResp = await accountAPI.getAccountInfo()
+  Object.assign(accountStatus, accountResp)
 
   const taskResp = await taskAPI.getTaskRunningStatus()
   Object.assign(taskStatus, taskResp)
@@ -159,24 +180,28 @@ const updateSystemInfo = async () => {
     <a-col :span="8">
       <a-card title="Wallet" :bordered="false" style="height: 100%">
         <template #extra>
-          <edit-account ref="accountEditor" :account-status="accountStatus"></edit-account>
+          <edit-account
+            ref="accountEditor"
+            :account-status="accountStatus"
+            @private-key-updated="updateSystemInfo"
+          ></edit-account>
         </template>
         <a-row>
           <a-col :span="12">
-            <a-statistic title="Address" :value="accountStatus.address"></a-statistic>
+            <a-statistic title="Address" :value="shortAddress"></a-statistic>
           </a-col>
           <a-col :span="6">
             <a-statistic
               title="ETH"
               :precision="2"
-              :value="accountStatus.eth_balance"
+              :value="toEtherValue(accountStatus.eth_balance)"
             ></a-statistic>
           </a-col>
           <a-col :span="6">
             <a-statistic
               title="CNX"
               :precision="2"
-              :value="accountStatus.cnx_balance"
+              :value="toEtherValue(accountStatus.cnx_balance)"
             ></a-statistic>
           </a-col>
         </a-row>

@@ -76,7 +76,9 @@ class V1Client {
 
   processErrorStatus(status, errorData) {
     if (status === 400) {
-      return Promise.reject(new ApiError(ApiError.Type.Validation, errorData))
+      return Promise.reject(new ApiError(ApiError.Type.Validation, errorData.message))
+    } else if (status === 422) {
+      return Promise.reject(new ApiError(ApiError.Type.Validation, errorData.detail[0].msg))
     } else if (status === 403) {
       if (typeof this.apiForbiddenErrorHandler === 'function') {
         let handler = this.apiForbiddenErrorHandler
