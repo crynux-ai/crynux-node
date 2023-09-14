@@ -275,11 +275,13 @@ class NodeManager(object):
             self._contracts.node_contract.address
         )
         if allowance < node_amount:
-            await self._contracts.token_contract.approve(
+            waiter = await self._contracts.token_contract.approve(
                 self._contracts.node_contract.address, node_amount
             )
+            await waiter.wait()
 
-        await self._contracts.node_contract.join()
+        waiter = await self._contracts.node_contract.join()
+        await waiter.wait()
         status = await self._contracts.node_contract.get_node_status(
             self._contracts.account
         )
@@ -301,7 +303,8 @@ class NodeManager(object):
             models.ChainNodeStatus.AVAILABLE,
             models.ChainNodeStatus.BUSY,
         ], "Cannot stop node. Node should be running."
-        await self._contracts.node_contract.quit()
+        waiter = await self._contracts.node_contract.quit()
+        await waiter.wait()
         status = await self._contracts.node_contract.get_node_status(
             self._contracts.account
         )
@@ -323,7 +326,8 @@ class NodeManager(object):
         assert (
             status == models.ChainNodeStatus.PAUSED
         ), "Cannot resume node. Node should be paused."
-        await self._contracts.node_contract.resume()
+        waiter = await self._contracts.node_contract.resume()
+        await waiter.wait()
         status = await self._contracts.node_contract.get_node_status(
             self._contracts.account
         )
@@ -345,7 +349,8 @@ class NodeManager(object):
             models.ChainNodeStatus.AVAILABLE,
             models.ChainNodeStatus.BUSY,
         ], "Cannot pause node. Node should be running."
-        await self._contracts.node_contract.pause()
+        waiter = await self._contracts.node_contract.pause()
+        await waiter.wait()
         status = await self._contracts.node_contract.get_node_status(
             self._contracts.account
         )

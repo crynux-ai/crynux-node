@@ -32,6 +32,35 @@ Contract_Func = Callable[[], AsyncContract]
 T = TypeVar("T")
 P = ParamSpec("P")
 
+class TxWaiter(object):
+    def __init__(self, w3: AsyncWeb3, method: str, tx_hash: HexBytes, timeout: float = 120,interval: float = 0.1):
+        self.w3 = w3
+        self.method = method
+        self.tx_hash = tx_hash
+        self.timeout = timeout
+        self.interval = interval
+
+    async def wait(self):
+        receipt = await self.w3.eth.wait_for_transaction_receipt(
+            self.tx_hash, self.timeout, self.interval
+        )
+        if not receipt["status"]:
+            tx = await self.w3.eth.get_transaction(self.tx_hash)
+            try:
+                await self.w3.eth.call(
+                    {
+                        "to": tx["to"],
+                        "from": tx["from"],
+                        "value": tx["value"],
+                        "data": tx["input"],
+                    },
+                    tx["blockNumber"] - 1,
+                )
+            except Exception as e:
+                reason = str(e)
+                raise TxRevertedError(method=self.method, reason=reason)
+        return receipt
+        
 
 class ContractWrapperBase(object):
     def __init__(
@@ -146,7 +175,7 @@ class ContractWrapperBase(object):
             tx_func: AsyncContractFunction = getattr(self.contract.functions, method)
             tx_hash: HexBytes = await tx_func(*args, **kwargs).transact(opt)
 
-        return await self.wait_for_receipt(method, tx_hash, timeout, interval)
+        return TxWaiter(w3=self.w3, method=method, tx_hash=tx_hash, timeout=timeout, interval=interval)
 
     async def _function_call(self, method: str, *args, **kwargs):
         opt: TxParams = {}

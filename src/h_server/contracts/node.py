@@ -3,9 +3,9 @@ from typing import TYPE_CHECKING, Optional
 from eth_typing import ChecksumAddress
 from web3 import AsyncWeb3
 
-from .utils import ContractWrapperBase
-
 from h_server.models import ChainNodeStatus
+
+from .utils import ContractWrapperBase, TxWaiter
 
 if TYPE_CHECKING:
     from h_server.config import TxOption
@@ -20,16 +20,16 @@ class NodeContract(ContractWrapperBase):
     ):
         super().__init__(w3, "Node", contract_address)
 
-    async def join(self, *, option: "Optional[TxOption]" = None):
+    async def join(self, *, option: "Optional[TxOption]" = None) -> TxWaiter:
         return await self._transaction_call("join", option=option)
 
-    async def quit(self, *, option: "Optional[TxOption]" = None):
+    async def quit(self, *, option: "Optional[TxOption]" = None) -> TxWaiter:
         return await self._transaction_call("quit", option=option)
 
-    async def pause(self, *, option: "Optional[TxOption]" = None):
+    async def pause(self, *, option: "Optional[TxOption]" = None) -> TxWaiter:
         return await self._transaction_call("pause", option=option)
 
-    async def resume(self, *, option: "Optional[TxOption]" = None):
+    async def resume(self, *, option: "Optional[TxOption]" = None) -> TxWaiter:
         return await self._transaction_call("resume", option=option)
 
     async def total_nodes(self) -> int:
@@ -40,7 +40,7 @@ class NodeContract(ContractWrapperBase):
 
     async def update_task_contract_address(
         self, address: str, *, option: "Optional[TxOption]" = None
-    ):
+    ) -> TxWaiter:
         return await self._transaction_call(
             "updateTaskContractAddress", option=option, taskContract=address
         )

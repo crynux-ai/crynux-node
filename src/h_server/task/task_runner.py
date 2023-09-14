@@ -192,7 +192,8 @@ class InferenceTaskRunner(TaskRunner):
 
         round = self._state.round
 
-        await self.contracts.task_contract.report_task_error(self.task_id, round)
+        waiter = await self.contracts.task_contract.report_task_error(self.task_id, round)
+        await waiter.wait()
 
     @asynccontextmanager
     async def report_error_context(self):
@@ -334,13 +335,13 @@ class InferenceTaskRunner(TaskRunner):
             ), "Task status is not executing when receive event TaskResultReady."
 
             result, commitment, nonce = make_result_commitments(event.hashes)
-            await self.contracts.task_contract.submit_task_result_commitment(
+            waiter = await self.contracts.task_contract.submit_task_result_commitment(
                 task_id=self.task_id,
                 round=self._state.round,
                 commitment=commitment,
                 nonce=nonce,
             )
-
+            await waiter.wait()
             self._state.status = models.TaskStatus.ResultUploaded
             self._state.files = event.files
             self._state.result = result
@@ -354,10 +355,10 @@ class InferenceTaskRunner(TaskRunner):
             assert (
                 len(self._state.result) > 0
             ), "Task result not found when receive event TaskResultCommitmentsReady."
-            await self.contracts.task_contract.disclose_task_result(
+            waiter = await self.contracts.task_contract.disclose_task_result(
                 task_id=self.task_id, round=self._state.round, result=self._state.result
             )
-
+            await waiter.wait()
             self._state.status = models.TaskStatus.Disclosed
 
         self.watcher.unwatch_event(self._commitment_watch_id)
