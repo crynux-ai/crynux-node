@@ -19,6 +19,12 @@ async def test_get_account_empty(client: TestClient):
 
 
 async def test_set_account(running_client: TestClient, privkeys):
+    body = {"type": "keystore", "keystore": "123", "passphrase": "possward"}
+    with pytest.raises(HTTPStatusError) as e:
+        resp = running_client.post("/manager/v1/account", json=body)
+        assert resp.status_code == 422
+        resp.raise_for_status()
+
     # test keystore file
     privkey = privkeys[1]
     password = "password"
@@ -34,9 +40,9 @@ async def test_set_account(running_client: TestClient, privkeys):
     body = {"type": "keystore", "keystore": keystore_str, "passphrase": "possward"}
     with pytest.raises(HTTPStatusError) as e:
         resp = running_client.post("/manager/v1/account", json=body)
+        assert resp.status_code == 400
         resp.raise_for_status()
 
-    assert resp.status_code == 400
     # test private key
     privkey = privkeys[0]
     body = {

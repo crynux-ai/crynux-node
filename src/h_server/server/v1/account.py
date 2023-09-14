@@ -1,9 +1,10 @@
 from fastapi import APIRouter, Body, HTTPException
-from typing import Literal
+from typing import Literal, Dict
 
+from anyio import get_cancelled_exc_class
 from eth_account import Account
 from typing_extensions import Annotated
-from pydantic import BaseModel, Field, SecretStr
+from pydantic import BaseModel, Field, SecretStr, Json
 
 from anyio import to_thread
 from h_server.config import set_privkey
@@ -39,7 +40,7 @@ PrivkeyType = Literal["private_key", "keystore"]
 class PrivkeyInput(BaseModel):
     type: PrivkeyType
     private_key: str = Field("", pattern=r"^0x[0-9a-fA-F]{64}$")
-    keystore: str = ""
+    keystore: Json[Dict] = dict()
     passphrase: SecretStr = SecretStr("")
 
 
@@ -48,13 +49,13 @@ async def set_account(input: Annotated[PrivkeyInput, Body()]):
     if input.type == "private_key":
         await set_privkey(input.private_key)
     if input.type == "keystore":
-        assert len(input.keystore) > 0 and len(input.passphrase) > 0
-
         try:
             privkey = await to_thread.run_sync(
                 Account.decrypt, input.keystore, input.passphrase.get_secret_value()
             )
-        except (TypeError, ValueError) as e:
+        except get_cancelled_exc_class():
+            raise
+        except Exception as e:
             raise HTTPException(400, str(e))
         await set_privkey(privkey.hex())
 
