@@ -51,9 +51,12 @@ async def set_account(input: Annotated[PrivkeyInput, Body()]):
     if input.type == "keystore":
         assert len(input.keystore) > 0 and len(input.passphrase) > 0
 
-        privkey = await to_thread.run_sync(
-            Account.decrypt, input.keystore, input.passphrase.get_secret_value()
-        )
+        try:
+            privkey = await to_thread.run_sync(
+                Account.decrypt, input.keystore, input.passphrase.get_secret_value()
+            )
+        except (TypeError, ValueError) as e:
+            raise HTTPException(400, str(e))
         await set_privkey(privkey.hex())
 
     return CommonResponse()
