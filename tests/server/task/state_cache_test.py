@@ -53,7 +53,7 @@ async def test_memory_state_cache():
         await cache.dump(state)
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture
 async def init_db():
     await db.init("sqlite+aiosqlite://")
     yield

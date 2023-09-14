@@ -1,8 +1,8 @@
-from h_server import relay
+from h_server.relay.sign import Signer
 
 
 def test_sign():
-    signer = relay.Signer("0x420fcabfd5dbb55215490693062e6e530840c64de837d071f0d9da21aaac861e")
+    signer = Signer("0x420fcabfd5dbb55215490693062e6e530840c64de837d071f0d9da21aaac861e")
     timestamp, signature = signer.sign(
         {"task_id": 1},
         timestamp=1692446475

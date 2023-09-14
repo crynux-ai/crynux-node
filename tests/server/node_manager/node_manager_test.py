@@ -4,7 +4,7 @@ from io import BytesIO
 from typing import List
 
 import pytest
-from anyio import create_task_group, sleep
+from anyio import create_task_group
 from eth_account import Account
 from PIL import Image
 from web3 import Web3
@@ -14,8 +14,10 @@ from h_server.config import Config, TxOption
 from h_server.contracts import Contracts
 from h_server.event_queue import EventQueue, MemoryEventQueue
 from h_server.models.task import PoseConfig, TaskConfig
-from h_server.node_manager import NodeManager
-from h_server.node_manager.state_cache import MemoryNodeStateCache
+from h_server.node_manager import (NodeManager, NodeStateManager, pause,
+                                   resume, start, stop)
+from h_server.node_manager.state_cache import (MemoryNodeStateCache,
+                                               MemoryTxStateCache)
 from h_server.relay import MockRelay, Relay
 from h_server.task import InferenceTaskRunner, MemoryTaskStateCache, TaskSystem
 from h_server.task.state_cache import TaskStateCache
@@ -23,12 +25,12 @@ from h_server.utils import get_task_data_hash, get_task_hash
 from h_server.watcher import EventWatcher, MemoryBlockNumberCache
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture
 def tx_option():
     return {}
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture
 def privkeys():
     return [
         "0xa627246a109551432ac5db6535566af34fdddfaa11df17b8afd53eb987e209a2",
@@ -37,7 +39,7 @@ def privkeys():
     ]
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture
 async def root_contracts(tx_option, privkeys):
     from web3.providers.eth_tester import AsyncEthereumTesterProvider
 
@@ -46,9 +48,10 @@ async def root_contracts(tx_option, privkeys):
 
     await c0.init(option=tx_option)
 
-    await c0.node_contract.update_task_contract_address(
+    waiter = await c0.node_contract.update_task_contract_address(
         c0.task_contract.address, option=tx_option
     )
+    await waiter.wait()
 
     for privkey in privkeys:
         provider.ethereum_tester.add_account(privkey)
@@ -59,7 +62,7 @@ async def root_contracts(tx_option, privkeys):
     return c0
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture
 def config():
     test_config = Config.model_validate(
         {
@@ -88,7 +91,7 @@ def config():
     return test_config
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture
 async def node_contracts(
     root_contracts: Contracts, tx_option: TxOption, privkeys: List[str]
 ):
@@ -104,34 +107,37 @@ async def node_contracts(
         )
         amount = Web3.to_wei(1000, "ether")
         if (await contracts.token_contract.balance_of(contracts.account)) < amount:
-            await root_contracts.token_contract.transfer(
+            waiter = await root_contracts.token_contract.transfer(
                 contracts.account, amount, option=tx_option
             )
+            await waiter.wait()
         task_amount = Web3.to_wei(400, "ether")
         if (
             await contracts.token_contract.allowance(task_contract_address)
         ) < task_amount:
-            await contracts.token_contract.approve(
+            waiter = await contracts.token_contract.approve(
                 task_contract_address, task_amount, option=tx_option
             )
+            await waiter.wait()
         node_amount = Web3.to_wei(400, "ether")
         if (
             await contracts.token_contract.allowance(node_contract_address)
         ) < node_amount:
-            await contracts.token_contract.approve(
+            waiter = await contracts.token_contract.approve(
                 node_contract_address, node_amount, option=tx_option
             )
+            await waiter.wait()
 
         cs.append(contracts)
     return cs
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture
 def relay():
     return MockRelay()
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture
 async def node_managers(
     privkeys: List[str], node_contracts: List[Contracts], relay: Relay, config: Config
 ):
@@ -201,15 +207,23 @@ async def node_managers(
 
         system.set_runner_cls(make_runner_cls(contracts, relay, watcher, local_config))
 
+        state_manager = NodeStateManager(
+            node_state_cache_cls=MemoryNodeStateCache,
+            tx_state_cache_cls=MemoryTxStateCache,
+        )
+        # set init state to stopped to bypass prefetch stage
+        await state_manager.set_node_state(models.NodeStatus.Stopped)
+
         manager = NodeManager(
             config=config,
-            node_state_cache_cls=MemoryNodeStateCache,
+            node_state_manager=state_manager,
             privkey=privkey,
             event_queue=queue,
             contracts=contracts,
             relay=relay,
             watcher=watcher,
             task_system=system,
+            restart_delay=0,  # throw the error instead of retry
         )
         managers.append(manager)
 
@@ -227,32 +241,22 @@ async def test_node_manager(
     relay: Relay,
     tx_option,
 ):
-    n1, n2, n3 = node_managers
-    c1, c2, c3 = node_contracts
-
     async with create_task_group() as tg:
-        assert (await n1.get_state()).status == models.NodeStatus.Init
-        assert (await n2.get_state()).status == models.NodeStatus.Init
-        assert (await n3.get_state()).status == models.NodeStatus.Init
+        for n in node_managers:
+            tg.start_soon(n.run)
 
-        tg.start_soon(n1.run)
-        tg.start_soon(n2.run)
-        tg.start_soon(n3.run)
+        waits = [
+            await start(c, n.node_state_manager)
+            for c, n in zip(node_contracts, node_managers)
+        ]
+        async with create_task_group() as sub_tg:
+            for w in waits:
+                sub_tg.start_soon(w)
 
-        while (await n1.get_state()).status == models.NodeStatus.Init:
-            await sleep(0.1)
-        while (await n2.get_state()).status == models.NodeStatus.Init:
-            await sleep(0.1)
-        while (await n3.get_state()).status == models.NodeStatus.Init:
-            await sleep(0.1)
-
-        await n1.start()
-        await n2.start()
-        await n3.start()
-
-        assert (await n1.get_state()).status == models.NodeStatus.Running
-        assert (await n2.get_state()).status == models.NodeStatus.Running
-        assert (await n3.get_state()).status == models.NodeStatus.Running
+        for n in node_managers:
+            assert (
+                await n.node_state_manager.get_node_state()
+            ).status == models.NodeStatus.Running
 
         task = models.RelayTaskInput(
             task_id=1,
@@ -278,9 +282,10 @@ async def test_node_manager(
             pose=task.pose,
         )
         await relay.create_task(task=task)
-        await c1.task_contract.create_task(
+        waiter = await node_contracts[0].task_contract.create_task(
             task_hash=task_hash, data_hash=data_hash, option=tx_option
         )
+        await waiter.wait()
 
         with BytesIO() as dst:
             await relay.get_result(task_id=1, image_num=0, dst=dst)
@@ -289,31 +294,45 @@ async def test_node_manager(
             assert img.width == 512
             assert img.height == 512
 
-        await n1.pause()
-        await n2.pause()
-        await n3.pause()
+        waits = [
+            await pause(c, n.node_state_manager)
+            for c, n in zip(node_contracts, node_managers)
+        ]
+        async with create_task_group() as sub_tg:
+            for w in waits:
+                sub_tg.start_soon(w)
 
-        assert (await n1.get_state()).status == models.NodeStatus.Paused
-        assert (await n2.get_state()).status == models.NodeStatus.Paused
-        assert (await n3.get_state()).status == models.NodeStatus.Paused
+        for n in node_managers:
+            assert (
+                await n.node_state_manager.get_node_state()
+            ).status == models.NodeStatus.Paused
 
-        await n1.resume()
-        await n2.resume()
-        await n3.resume()
+        waits = [
+            await resume(c, n.node_state_manager)
+            for c, n in zip(node_contracts, node_managers)
+        ]
+        async with create_task_group() as sub_tg:
+            for w in waits:
+                sub_tg.start_soon(w)
 
-        assert (await n1.get_state()).status == models.NodeStatus.Running
-        assert (await n2.get_state()).status == models.NodeStatus.Running
-        assert (await n3.get_state()).status == models.NodeStatus.Running
+        for n in node_managers:
+            assert (
+                await n.node_state_manager.get_node_state()
+            ).status == models.NodeStatus.Running
 
-        await n1.stop()
-        await n2.stop()
-        await n3.stop()
+        waits = [
+            await stop(c, n.node_state_manager)
+            for c, n in zip(node_contracts, node_managers)
+        ]
+        async with create_task_group() as sub_tg:
+            for w in waits:
+                sub_tg.start_soon(w)
 
-        assert (await n1.get_state()).status == models.NodeStatus.Stopped
-        assert (await n2.get_state()).status == models.NodeStatus.Stopped
-        assert (await n3.get_state()).status == models.NodeStatus.Stopped
+        for n in node_managers:
+            assert (
+                await n.node_state_manager.get_node_state()
+            ).status == models.NodeStatus.Stopped
 
-        await n1.finish()
-        await n2.finish()
-        await n3.finish()
+        for n in node_managers:
+            await n.finish()
         tg.cancel_scope.cancel()
