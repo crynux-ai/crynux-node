@@ -177,6 +177,7 @@ class InferenceTaskRunner(TaskRunner):
                 round=0,
                 status=models.TaskStatus.Pending,
             )
+            await self.cache.dump(self._state)
 
     @asynccontextmanager
     async def state_context(self):
@@ -438,6 +439,7 @@ class MockTaskRunner(TaskRunner):
                 round=0,
                 status=models.TaskStatus.Pending,
             )
+            await self.cache.dump(self._state)
 
     @asynccontextmanager
     async def state_context(self):
