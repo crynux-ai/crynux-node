@@ -203,8 +203,7 @@ class EventWatcher(object):
             self._stop_event = None
 
     def stop(self):
-        assert self._stop_event is not None, "The watcher has not been started."
-        assert self._cancel_scope is not None, "The watcher has not been started."
-        self._stop_event.set()
-        if not self._cancel_scope.cancel_called:
+        if self._stop_event is not None:
+            self._stop_event.set()
+        if self._cancel_scope is not None and not self._cancel_scope.cancel_called:
             self._cancel_scope.cancel()
