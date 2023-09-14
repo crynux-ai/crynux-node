@@ -369,6 +369,7 @@ class NodeManager(object):
         status = (await self.node_state_manager.get_node_state()).status
         if status in (models.NodeStatus.Init, models.NodeStatus.Error):
             _logger.info("Initialize node manager")
+            await self.node_state_manager.set_node_state(models.NodeStatus.Init)
 
             if not self.config.distributed:
                 from h_worker.prefetch import prefetch
