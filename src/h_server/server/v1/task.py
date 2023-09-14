@@ -50,7 +50,7 @@ async def upload_result(
     event_queue: EventQueueDep
 ) -> CommonResponse:
     if event_queue is None or task_state_cache is None:
-        raise HTTPException(500, detail="Node is not running.")
+        raise HTTPException(400, detail="Node is not running.")
     if not (await task_state_cache.has(task_id=task_id)):
         raise HTTPException(status_code=400, detail=f"Task {task_id} does not exist.")
 

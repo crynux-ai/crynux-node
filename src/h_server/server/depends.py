@@ -6,13 +6,13 @@ from typing_extensions import Annotated
 from h_server.config import Config, get_config
 from h_server.contracts import Contracts, get_contracts
 from h_server.event_queue import EventQueue, get_event_queue
-from h_server.node_manager import NodeManager, get_node_manager
+from h_server.node_manager import NodeStateManager, get_node_state_manager
 from h_server.task import TaskStateCache, get_task_state_cache
 
 __all__ = [
     "ConfigDep",
+    "NodeStateManagerDep",
     "TaskStateCacheDep",
-    "NodeManagerDep",
     "ContractsDep",
     "EventQueueDep",
 ]
@@ -22,8 +22,8 @@ async def _get_config():
     return get_config()
 
 
-async def _get_node_manager():
-    return get_node_manager()
+async def _get_node_state_manager():
+    return get_node_state_manager()
 
 
 async def _get_event_queue():
@@ -54,7 +54,7 @@ async def _get_contracts():
 
 
 ConfigDep = Annotated[Config, Depends(_get_config)]
-NodeManagerDep = Annotated[NodeManager, Depends(_get_node_manager)]
+NodeStateManagerDep = Annotated[NodeStateManager, Depends(_get_node_state_manager)]
 EventQueueDep = Annotated[Optional[EventQueue], Depends(_get_event_queue)]
 TaskStateCacheDep = Annotated[Optional[TaskStateCache], Depends(_get_task_state_cache)]
 ContractsDep = Annotated[Optional[Contracts], Depends(_get_contracts)]
