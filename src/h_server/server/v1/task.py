@@ -12,7 +12,7 @@ from typing_extensions import Annotated
 
 from h_server.models import TaskResultReady, TaskStatus
 
-from ..depends import ConfigDep, TaskStateCacheDep, TaskSystemDep
+from ..depends import ConfigDep, TaskStateCacheDep, EventQueueDep
 from .utils import CommonResponse
 
 router = APIRouter(prefix="/tasks")
@@ -46,11 +46,12 @@ async def upload_result(
     files: Annotated[List[UploadFile], File(description="The task result files")],
     *,
     config: ConfigDep,
-    task_system: TaskSystemDep,
+    task_state_cache: TaskStateCacheDep,
+    event_queue: EventQueueDep
 ) -> CommonResponse:
-    if task_system is None:
-        raise HTTPException(500, detail="Task system has not been set.")
-    if not (await task_system.has_task(task_id=task_id)):
+    if event_queue is None or task_state_cache is None:
+        raise HTTPException(500, detail="Node is not running.")
+    if not (await task_state_cache.has(task_id=task_id)):
         raise HTTPException(status_code=400, detail=f"Task {task_id} does not exist.")
 
     for h in hashes:
@@ -68,7 +69,7 @@ async def upload_result(
     )
 
     event = TaskResultReady(task_id=task_id, hashes=hashes, files=dsts)
-    await task_system.event_queue.put(event)
+    await event_queue.put(event)
 
     return CommonResponse()
 
@@ -82,16 +83,16 @@ class TaskStats(BaseModel):
 @router.get("", response_model=TaskStats)
 async def get_task_stats(
     *,
-    task_system: TaskSystemDep,
     task_state_cache: TaskStateCacheDep,
 ):
-    if task_system is None:
+    if task_state_cache is None:
         return TaskStats(
             status="waiting",
             num_today=0,
             num_total=0
         )
-    if await task_system.is_running():
+    running_task_count = await task_state_cache.count(deleted=False)
+    if running_task_count > 0:
         status = "running"
     else:
         status = "idle"
