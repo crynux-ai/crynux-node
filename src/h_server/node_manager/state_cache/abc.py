@@ -1,13 +1,16 @@
 from abc import ABC, abstractmethod
+from typing import Generic, TypeVar
 
-from h_server.models import NodeState
+from h_server.models import NodeState, TxState
+
+T = TypeVar("T", NodeState, TxState)
 
 
-class NodeStateCache(ABC):
+class StateCache(ABC, Generic[T]):
     @abstractmethod
-    async def get(self) -> NodeState:
+    async def get(self) -> T:
         ...
 
     @abstractmethod
-    async def set(self, state: NodeState):
+    async def set(self, state: T):
         ...

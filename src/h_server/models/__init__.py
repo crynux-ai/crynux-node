@@ -1,16 +1,10 @@
-from .event import (
-    TaskAborted,
-    TaskCreated,
-    TaskEvent,
-    TaskKind,
-    TaskResultCommitmentsReady,
-    TaskResultReady,
-    TaskSuccess,
-    load_event_from_json,
-    load_event_from_contracts,
-)
-from .node import ChainNodeStatus, NodeStatus, NodeState, convert_node_status
+from .event import (TaskAborted, TaskCreated, TaskEvent, TaskKind,
+                    TaskResultCommitmentsReady, TaskResultReady, TaskSuccess,
+                    load_event_from_contracts, load_event_from_json)
+from .node import (ChainNodeStatus, NodeState, NodeStatus,
+                   convert_node_status)
 from .task import ChainTask, RelayTask, RelayTaskInput, TaskState, TaskStatus
+from .tx import TxStatus, TxState
 
 __all__ = [
     "TaskKind",
@@ -30,5 +24,7 @@ __all__ = [
     "NodeState",
     "TaskStatus",
     "TaskState",
-    "RelayTaskInput"
+    "RelayTaskInput",
+    "TxStatus",
+    "TxState",
 ]
