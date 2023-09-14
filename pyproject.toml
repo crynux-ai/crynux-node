@@ -26,7 +26,7 @@ dependencies = [
     "importlib-resources~=6.0.0",
     "python-multipart==0.0.6"
 ]
-version = "0.0.9"
+version = "0.1.0"
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -34,3 +34,9 @@ include = ["h_server*", "h_worker*"]
 
 [tool.setuptools.package-data]
 "h_server.contracts.abi" = ["*.json"]
+
+[project.optional-dependencies]
+test = [
+    "pytest~=7.4.0",
+    "Pillow"
+]
