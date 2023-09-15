@@ -203,6 +203,7 @@ async def stop(contracts: Contracts, state_manager: NodeStateManager):
         ), "Cannot start node. Last transaction is in pending."
 
         waiter = await contracts.node_contract.quit()
+        await state_manager.set_tx_state(models.TxStatus.Pending)
 
     async def wait():
         async with _wrap_tx_error(state_manager):
@@ -237,6 +238,7 @@ async def pause(contracts: Contracts, state_manager: NodeStateManager):
         ), "Cannot start node. Last transaction is in pending."
 
         waiter = await contracts.node_contract.pause()
+        await state_manager.set_tx_state(models.TxStatus.Pending)
 
     async def wait():
         async with _wrap_tx_error(state_manager):
@@ -271,6 +273,7 @@ async def resume(contracts: Contracts, state_manager: NodeStateManager):
         ), "Cannot start node. Last transaction is in pending."
 
         waiter = await contracts.node_contract.resume()
+        await state_manager.set_tx_state(models.TxStatus.Pending)
 
     async def wait():
         async with _wrap_tx_error(state_manager):

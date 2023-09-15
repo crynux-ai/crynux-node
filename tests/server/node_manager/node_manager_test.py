@@ -249,6 +249,8 @@ async def test_node_manager(
             await start(c, n.node_state_manager)
             for c, n in zip(node_contracts, node_managers)
         ]
+        for n in node_managers:
+            assert (await n.node_state_manager.get_tx_state()).status == models.TxStatus.Pending
         async with create_task_group() as sub_tg:
             for w in waits:
                 sub_tg.start_soon(w)
@@ -298,6 +300,8 @@ async def test_node_manager(
             await pause(c, n.node_state_manager)
             for c, n in zip(node_contracts, node_managers)
         ]
+        for n in node_managers:
+            assert (await n.node_state_manager.get_tx_state()).status == models.TxStatus.Pending
         async with create_task_group() as sub_tg:
             for w in waits:
                 sub_tg.start_soon(w)
@@ -311,6 +315,8 @@ async def test_node_manager(
             await resume(c, n.node_state_manager)
             for c, n in zip(node_contracts, node_managers)
         ]
+        for n in node_managers:
+            assert (await n.node_state_manager.get_tx_state()).status == models.TxStatus.Pending
         async with create_task_group() as sub_tg:
             for w in waits:
                 sub_tg.start_soon(w)
@@ -324,6 +330,8 @@ async def test_node_manager(
             await stop(c, n.node_state_manager)
             for c, n in zip(node_contracts, node_managers)
         ]
+        for n in node_managers:
+            assert (await n.node_state_manager.get_tx_state()).status == models.TxStatus.Pending
         async with create_task_group() as sub_tg:
             for w in waits:
                 sub_tg.start_soon(w)
