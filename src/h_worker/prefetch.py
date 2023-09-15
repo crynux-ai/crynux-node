@@ -85,8 +85,13 @@ def prefetch(pretrained_models_dir: str, huggingface_cache_dir: str, script_dir:
     if not os.path.exists(huggingface_cache_dir):
         os.makedirs(huggingface_cache_dir, exist_ok=True)
 
-    with httpx.Client() as client:
-        for base_model in base_model_urls:
-            _prefetch_base_model(client, pretrained_models_dir, base_model)
+    try:
+        with httpx.Client() as client:
+            for base_model in base_model_urls:
+                _prefetch_base_model(client, pretrained_models_dir, base_model)
 
-    _prefetch_huggingface(huggingface_cache_dir, script_dir)
+        _prefetch_huggingface(huggingface_cache_dir, script_dir)
+    except Exception as e:
+        _logger.exception(e)
+        _logger.error("Prefetch error")
+        raise

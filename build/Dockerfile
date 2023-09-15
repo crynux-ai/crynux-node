@@ -1,3 +1,12 @@
+FROM node:18-buster-slim as web-builder
+
+WORKDIR /app
+
+COPY src/webui /app/
+RUN mv src/config.example.json src/config.json
+
+RUN yarn && yarn build
+
 FROM nvidia/cuda:11.8.0-cudnn8-runtime-ubuntu22.04 as base
 
 RUN apt update
@@ -57,6 +66,7 @@ WORKDIR /app
 
 COPY build/data/ data/
 RUN mv data/config.yml.example config.yml
+COPY --from=web-builder /app/dist/ dist/
 
 ENV H_SERVER_CONFIG="/app/config.yml"
 

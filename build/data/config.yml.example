@@ -17,6 +17,7 @@ ethereum:
 task_dir: tasks
 db: sqlite+aiosqlite:///db/server.db
 relay_url: "https://relay.h.crynux.ai"
+web_dist: dist
 
 distributed: 0
 task_config:
