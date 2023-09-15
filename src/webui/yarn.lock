@@ -773,7 +773,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"bignumber.js@npm:^9.0.0, bignumber.js@npm:^9.1.2":
+"bignumber.js@npm:^9.0.0":
   version: 9.1.2
   resolution: "bignumber.js@npm:9.1.2"
   checksum: 582c03af77ec9cb0ebd682a373ee6c66475db94a4325f92299621d544aa4bd45cb45fd60001610e94aef8ae98a0905fa538241d9638d4422d57abbeeac6fadaf
@@ -3169,7 +3169,7 @@ __metadata:
     "@vue/eslint-config-prettier": ^8.0.0
     ant-design-vue: 4.x
     axios: ^1.5.0
-    bignumber.js: ^9.1.2
+    bignumber.js: ^9.0.0
     eslint: ^8.46.0
     eslint-plugin-vue: ^9.16.1
     json-bigint: ^1.0.0
