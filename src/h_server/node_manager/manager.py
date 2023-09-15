@@ -179,7 +179,6 @@ async def start(contracts: Contracts, state_manager: NodeStateManager):
     async def wait():
         async with _wrap_tx_error(state_manager):
             await waiter.wait()
-            await state_manager.set_tx_state(models.TxStatus.Success)
 
             status = await contracts.node_contract.get_node_status(contracts.account)
             local_status = models.convert_node_status(status)
@@ -187,6 +186,7 @@ async def start(contracts: Contracts, state_manager: NodeStateManager):
                 local_status == models.NodeStatus.Running
             ), "Node status on chain is not running."
             await state_manager.set_node_state(local_status)
+            await state_manager.set_tx_state(models.TxStatus.Success)
 
     return wait
 
@@ -208,7 +208,7 @@ async def stop(contracts: Contracts, state_manager: NodeStateManager):
     async def wait():
         async with _wrap_tx_error(state_manager):
             await waiter.wait()
-            await state_manager.set_tx_state(models.TxStatus.Success)
+            pending = True
 
             while True:
                 status = await contracts.node_contract.get_node_status(
@@ -220,6 +220,9 @@ async def stop(contracts: Contracts, state_manager: NodeStateManager):
                     models.NodeStatus.PendingStop,
                 ], "Node status on chain is not stopped or pending."
                 await state_manager.set_node_state(local_status)
+                if pending:
+                    await state_manager.set_tx_state(models.TxStatus.Success)
+                    pending = False
                 if local_status == models.NodeStatus.Stopped:
                     break
 
@@ -243,7 +246,7 @@ async def pause(contracts: Contracts, state_manager: NodeStateManager):
     async def wait():
         async with _wrap_tx_error(state_manager):
             await waiter.wait()
-            await state_manager.set_tx_state(models.TxStatus.Success)
+            pending = True
 
             while True:
                 status = await contracts.node_contract.get_node_status(
@@ -255,6 +258,9 @@ async def pause(contracts: Contracts, state_manager: NodeStateManager):
                     models.NodeStatus.PendingPause,
                 ], "Node status on chain is not paused or pending"
                 await state_manager.set_node_state(local_status)
+                if pending:
+                    await state_manager.set_tx_state(models.TxStatus.Success)
+                    pending = False
                 if local_status == models.NodeStatus.Paused:
                     break
 
@@ -278,7 +284,6 @@ async def resume(contracts: Contracts, state_manager: NodeStateManager):
     async def wait():
         async with _wrap_tx_error(state_manager):
             await waiter.wait()
-            await state_manager.set_tx_state(models.TxStatus.Success)
 
             status = await contracts.node_contract.get_node_status(contracts.account)
             local_status = models.convert_node_status(status)
@@ -286,6 +291,7 @@ async def resume(contracts: Contracts, state_manager: NodeStateManager):
                 local_status == models.NodeStatus.Running
             ), "Node status on chain is not running"
             await state_manager.set_node_state(local_status)
+            await state_manager.set_tx_state(models.TxStatus.Success)
 
     return wait
 
