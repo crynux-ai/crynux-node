@@ -13,3 +13,4 @@ nodes
 config/*
 db/*
 logs/*
+config.json
