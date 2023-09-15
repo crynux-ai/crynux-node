@@ -1,64 +1,55 @@
-## Crynux Node for the Hydrogen(H) Network
+# Crynux Node for the Hydrogen(H) Network
 
 Crynux Node should be started on the machine with GPUs,
 and will connect to the Crynux Network to execute training, fine-tuning and inference
-tasks of Stable Diffusion models for other applications.
+tasks of the Stable Diffusion models for other applications.
 
-### Build the docker images
-The docker images are built using Dockerfiles which are all located under the ```build``` folder.
-The building commands, however, should be executed under the root folder of the project.
+## Run the node
 
-#### The server container
+1. Pull the Docker image from GitHub
 
-Build the server image:
-   
 ```shell
-$ docker build -t server:dev -f build/server.Dockerfile .
+# docker pull ghcr.io/crynux-ai/h-node:latest
+```
+
+2. Start the container
+
+The port ```7412``` is exposed for the WebUI. And GPUs must be provided to the container.
+
+```shell
+# docker run -d -p 127.0.0.1:7412:7412 --gpus all ghcr.io/crynux-ai/h-node:latest
 ```
 
 
-#### The worker container
-
-Build the worker image:
-   
-```shell
-$ docker build -t worker:dev -f build/worker.Dockerfile .
+3. Visit the WebUI in the browser
+```
+http://localhost:7412
 ```
 
-### Prepare the pretrained models
+4. Follow the instructions in the WebUI to join the network.
 
-Download the popular pretrained models into ```build/data/pretrained-models```.
-For example, download the Stable Diffusion 1.5 model, and place the ckpt file at:
+## Build the Docker image from the source code
 
-```build/data/pretrained-models/stable-diffusion-v1-5-pruned/stable-diffusion-v1-5-pruned.ckpt```
-
-
-### Start LoRA Runner using the docker images
-
-#### Create the configuration files
-
-The config files are located under ```/build/data```. Two files are required:
-```/build/data/config.yml``` for the application and ```/build/data/gunicorn.conf.py```
-for the Gunicorn http server.
-
-We have provided two example config files under the folder. To run with the default config,
-just rename the files, remove the trailing ```.example``` from the file names.
-
-If you have customized requirements, such as serving under HTTPS protocol,
-just modify the config files according to your needs.
-
-#### Start the docker containers
-
-All the related docker containers can be started easily
-using docker compose:
+1. Clone the project
 
 ```shell
-$ cd build
-$ docker compose up -d
+# git clone https://github.com/crynux-ai/h-node.git
 ```
 
-Docker compose will start 3 containers: the server, the worker, and a redis instance.
-The server and worker containers are started using the images we just built before.
-The redis container is started using the official image.
+2. Go to the root folder of the project
 
-After successfully startup, the server container will expose port ```5025``` to accept inbound requests.
+```shell
+# cd h-node
+```
+
+3. Build the Docker image
+
+```shell
+# docker build -t h_node:dev -f .\build\Dockerfile . 
+```
+
+4. Start the container
+
+```shell
+# docker run -d -p 127.0.0.1:7412:7412 --gpus all h_node:dev
+```
