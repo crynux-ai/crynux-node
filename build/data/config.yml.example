@@ -5,6 +5,9 @@ log:
 ethereum:
   privkey: ""
   provider: "https://block-node.crynux.ai/rpc"
+  chain_id: 42
+  gas: 4294967
+  gas_price: 1
 
   contract:
     token: "0x96183Fc94C2ACF309e60B548d6D93eee02b46Eb2"
