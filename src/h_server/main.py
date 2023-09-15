@@ -17,7 +17,7 @@ async def _main():
 
     await db.init(config.db)
 
-    server = Server()
+    server = Server(config.web_dist)
     node_manager = NodeManager(config=config)
     set_node_manager(node_manager)
 

@@ -3,6 +3,7 @@ from typing import Optional
 
 from anyio import Event, create_task_group
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
 from hypercorn.asyncio import serve
 from hypercorn.config import Config
 
@@ -11,10 +12,11 @@ from .middleware import add_middleware
 
 
 class Server(object):
-    def __init__(self) -> None:
+    def __init__(self, web_dist: str = "") -> None:
         self._app = FastAPI()
         self._app.include_router(v1_router, prefix="/manager")
-        
+        if web_dist != "":
+            self._app.mount("/", StaticFiles(directory=web_dist, html=True), name="web")
         add_middleware(self._app)
 
         self._shutdown_event: Optional[Event] = None
