@@ -14,7 +14,7 @@ class V1Client {
 
     this.httpClient = axios.create({
       baseURL: this.v1BaseURL,
-      timeout: 3000,
+      timeout: 10000,
       transformResponse: [
         (data) => {
           if (!data) {
@@ -45,6 +45,10 @@ class V1Client {
         if (error.response && error.response.status) {
           return this.processErrorStatus(error.response.status, error.response.data)
         } else {
+          if (typeof this.apiUnknownErrorHandler === 'function') {
+            let handler = this.apiUnknownErrorHandler
+            handler()
+          }
           return Promise.reject(new ApiError(ApiError.Type.Unknown))
         }
       }
@@ -52,6 +56,7 @@ class V1Client {
 
     this.apiForbiddenErrorHandler = null
     this.apiServerErrorHandler = null
+    this.apiUnknownErrorHandler = null
   }
 
   getBaseURL() {
@@ -76,7 +81,7 @@ class V1Client {
 
   processErrorStatus(status, errorData) {
     if (status === 400) {
-      return Promise.reject(new ApiError(ApiError.Type.Validation, errorData.message))
+      return Promise.reject(new ApiError(ApiError.Type.Validation, errorData.detail))
     } else if (status === 422) {
       return Promise.reject(new ApiError(ApiError.Type.Validation, errorData.detail[0].msg))
     } else if (status === 403) {
@@ -96,6 +101,11 @@ class V1Client {
 
       return Promise.reject(new ApiError(ApiError.Type.Server))
     } else {
+      if (typeof this.apiUnknownErrorHandler === 'function') {
+        let handler = this.apiUnknownErrorHandler
+        handler()
+      }
+
       return Promise.reject(new ApiError(ApiError.Type.Unknown))
     }
   }

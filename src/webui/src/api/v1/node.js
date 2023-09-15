@@ -11,33 +11,19 @@ class NodeAPI extends BaseAPI {
     this.NODE_STATUS_STOPPED = 'stopped'
     this.NODE_STATUS_ERROR = 'error'
     this.NODE_STATUS_PENDING = 'pending'
+
+    this.TX_STATUS_ERROR = 'error'
+    this.TX_STATUS_PENDING = 'pending'
+    this.TX_STATUS_NONE = ''
   }
 
   getNodeStatus() {
     return v1.get('/node')
   }
 
-  startNode() {
+  sendNodeAction(action) {
     return v1.post('/node', {
-      action: 'start'
-    })
-  }
-
-  stopNode() {
-    return v1.post('/node', {
-      action: 'stop'
-    })
-  }
-
-  pauseNode() {
-    return v1.post('/node', {
-      action: 'pause'
-    })
-  }
-
-  resumeNode() {
-    return v1.post('/node', {
-      action: 'resume'
+      action: action
     })
   }
 }

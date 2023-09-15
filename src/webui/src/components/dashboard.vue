@@ -1,5 +1,5 @@
 <script setup>
-import { computed, h, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
+import { computed, h, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { PauseCircleOutlined, LogoutOutlined, PlayCircleOutlined } from '@ant-design/icons-vue'
 import EditAccount from './edit-account.vue'
 
@@ -34,8 +34,10 @@ const systemInfo = reactive({
 })
 
 const nodeStatus = reactive({
-  status: 'initializing',
-  message: ''
+  status: '',
+  message: '',
+  tx_status: '',
+  tx_error: ''
 })
 
 const accountStatus = reactive({
@@ -70,7 +72,10 @@ const toEtherValue = (bigNum) => {
 let systemUpdateInterval
 onMounted(async () => {
   await updateSystemInfo()
-  systemUpdateInterval = setInterval(updateSystemInfo, 5000)
+  systemUpdateInterval = setInterval(async () => {
+    if (isTxSending.value) return
+    await updateSystemInfo()
+  }, 2000)
 
   if (accountStatus.address === '') {
     accountEditor.value.showModal()
@@ -79,6 +84,8 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   clearInterval(systemUpdateInterval)
 })
+
+let isTxSending = ref(false)
 
 const updateSystemInfo = async () => {
   const systemResp = await systemAPI.getSystemInfo()
@@ -93,10 +100,46 @@ const updateSystemInfo = async () => {
   const taskResp = await taskAPI.getTaskRunningStatus()
   Object.assign(taskStatus, taskResp)
 }
+
+const sendNodeAction = async (action) => {
+  isTxSending.value = true
+  try {
+    await nodeAPI.sendNodeAction(action)
+    await updateSystemInfo()
+  } finally {
+    isTxSending.value = false
+  }
+}
 </script>
 
 <template>
   <a-row style="height: 140px"></a-row>
+  <a-row>
+    <a-col :span="12" :offset="6" :style="{ height: '100px' }">
+      <a-alert
+        message="System is initializing. This may take a while, please be patient..."
+        :style="{ 'text-align': 'center' }"
+        v-if="nodeStatus.status === nodeAPI.NODE_STATUS_INITIALIZING"
+      ></a-alert>
+      <a-alert
+        type="error"
+        :message="'Node error: ' + nodeStatus.message + '. Please restart the Docker container.'"
+        :style="{ 'text-align': 'center' }"
+        v-if="nodeStatus.status === nodeAPI.NODE_STATUS_ERROR"
+      ></a-alert>
+      <a-alert
+        type="error"
+        :message="'Transaction error: ' + nodeStatus.tx_error + '. Please try again later.'"
+        :style="{ 'text-align': 'center' }"
+        v-if="nodeStatus.tx_status === nodeAPI.TX_STATUS_ERROR"
+      ></a-alert>
+      <a-alert
+        message="Waiting for the Blockchain confirmation..."
+        :style="{ 'text-align': 'center' }"
+        v-if="nodeStatus.tx_status === nodeAPI.TX_STATUS_PENDING"
+      ></a-alert>
+    </a-col>
+  </a-row>
   <a-row :gutter="16">
     <a-col :span="4" :offset="3">
       <a-card title="Node Status" :bordered="false" style="height: 100%">
@@ -125,7 +168,6 @@ const updateSystemInfo = async () => {
                 [
                   nodeAPI.NODE_STATUS_PAUSED,
                   nodeAPI.NODE_STATUS_STOPPED,
-                  nodeAPI.NODE_STATUS_INITIALIZING,
                   nodeAPI.NODE_STATUS_PENDING
                 ].indexOf(nodeStatus.status) !== -1
               "
@@ -145,29 +187,60 @@ const updateSystemInfo = async () => {
               :size="70"
               :percent="100"
               :stroke-color="'cornflowerblue'"
-              v-if="nodeStatus.status === nodeAPI.NODE_STATUS_PENDING"
+              v-if="
+                [nodeAPI.NODE_STATUS_PENDING, nodeAPI.NODE_STATUS_INITIALIZING].indexOf(
+                  nodeStatus.status
+                ) !== -1
+              "
             >
               <template #format="percent">
-                <span style="font-size: 14px; color: cornflowerblue">Stopping</span>
+                <span style="font-size: 14px; color: cornflowerblue">
+                  <span v-if="nodeStatus.status === nodeAPI.NODE_STATUS_PENDING">Stopping</span>
+                  <span v-if="nodeStatus.status === nodeAPI.NODE_STATUS_INITIALIZING"
+                    >Preparing</span
+                  >
+                </span>
               </template>
             </a-progress>
           </a-col>
           <a-col :span="12">
             <div class="node-op-btn" v-if="nodeStatus.status === nodeAPI.NODE_STATUS_RUNNING">
-              <a-button :icon="h(PauseCircleOutlined)">Pause</a-button>
+              <a-button
+                :icon="h(PauseCircleOutlined)"
+                @click="sendNodeAction('pause')"
+                :loading="isTxSending || nodeStatus.tx_status === nodeAPI.TX_STATUS_PENDING"
+                >Pause</a-button
+              >
             </div>
             <div
               class="node-op-btn"
               style="margin-top: 8px"
               v-if="nodeStatus.status === nodeAPI.NODE_STATUS_RUNNING"
             >
-              <a-button :icon="h(LogoutOutlined)">Quit</a-button>
+              <a-button
+                :icon="h(LogoutOutlined)"
+                @click="sendNodeAction('stop')"
+                :loading="isTxSending || nodeStatus.tx_status === nodeAPI.TX_STATUS_PENDING"
+                >Stop</a-button
+              >
             </div>
             <div class="node-op-btn" v-if="nodeStatus.status === nodeAPI.NODE_STATUS_STOPPED">
-              <a-button type="primary" :icon="h(PlayCircleOutlined)">Start</a-button>
+              <a-button
+                type="primary"
+                :icon="h(PlayCircleOutlined)"
+                @click="sendNodeAction('start')"
+                :loading="isTxSending || nodeStatus.tx_status === nodeAPI.TX_STATUS_PENDING"
+                >Start</a-button
+              >
             </div>
             <div class="node-op-btn" v-if="nodeStatus.status === nodeAPI.NODE_STATUS_PAUSED">
-              <a-button type="primary" :icon="h(PlayCircleOutlined)">Resume</a-button>
+              <a-button
+                type="primary"
+                :icon="h(PlayCircleOutlined)"
+                @click="sendNodeAction('resume')"
+                :loading="isTxSending || nodeStatus.tx_status === nodeAPI.TX_STATUS_PENDING"
+                >Resume</a-button
+              >
             </div>
             <div class="node-op-btn" v-if="nodeStatus.status === nodeAPI.NODE_STATUS_INITIALIZING">
               <a-button type="primary" :icon="h(PlayCircleOutlined)" disabled>Start</a-button>
