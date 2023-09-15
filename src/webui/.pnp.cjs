@@ -34,6 +34,7 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
             ["@vue/eslint-config-prettier", "virtual:0b07c0abb823d80d4120128c0d613edfcde4e028cfe3f21717aa4e310d50b8878887431fcdfce54c2190ac6c8b58e5e3023ee1e407ae277645af1441c8a34861#npm:8.0.0"],\
             ["ant-design-vue", "virtual:0b07c0abb823d80d4120128c0d613edfcde4e028cfe3f21717aa4e310d50b8878887431fcdfce54c2190ac6c8b58e5e3023ee1e407ae277645af1441c8a34861#npm:4.0.2"],\
             ["axios", "npm:1.5.0"],\
+            ["bignumber.js", "npm:9.1.2"],\
             ["eslint", "npm:8.48.0"],\
             ["eslint-plugin-vue", "virtual:0b07c0abb823d80d4120128c0d613edfcde4e028cfe3f21717aa4e310d50b8878887431fcdfce54c2190ac6c8b58e5e3023ee1e407ae277645af1441c8a34861#npm:9.17.0"],\
             ["json-bigint", "npm:1.0.0"],\
@@ -3780,6 +3781,7 @@ function $$SETUP_STATE(hydrateRuntimeState, basePath) {
             ["@vue/eslint-config-prettier", "virtual:0b07c0abb823d80d4120128c0d613edfcde4e028cfe3f21717aa4e310d50b8878887431fcdfce54c2190ac6c8b58e5e3023ee1e407ae277645af1441c8a34861#npm:8.0.0"],\
             ["ant-design-vue", "virtual:0b07c0abb823d80d4120128c0d613edfcde4e028cfe3f21717aa4e310d50b8878887431fcdfce54c2190ac6c8b58e5e3023ee1e407ae277645af1441c8a34861#npm:4.0.2"],\
             ["axios", "npm:1.5.0"],\
+            ["bignumber.js", "npm:9.1.2"],\
             ["eslint", "npm:8.48.0"],\
             ["eslint-plugin-vue", "virtual:0b07c0abb823d80d4120128c0d613edfcde4e028cfe3f21717aa4e310d50b8878887431fcdfce54c2190ac6c8b58e5e3023ee1e407ae277645af1441c8a34861#npm:9.17.0"],\
             ["json-bigint", "npm:1.0.0"],\

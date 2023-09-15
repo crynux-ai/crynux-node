@@ -1,7 +1,8 @@
 <script setup>
-import { computed, h, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
+import { computed, h, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { PauseCircleOutlined, LogoutOutlined, PlayCircleOutlined } from '@ant-design/icons-vue'
 import EditAccount from './edit-account.vue'
+import BigNumber from 'bignumber.js'
 
 import systemAPI from '../api/v1/system'
 import nodeAPI from '../api/v1/node'
@@ -69,13 +70,26 @@ const toEtherValue = (bigNum) => {
   return bigNum.dividedBy(1e18).toString()
 }
 
-let systemUpdateInterval
+const ethEnough = () => {
+  if (accountStatus.eth_balance === 0) return false
+  return accountStatus.eth_balance.gte(new BigNumber(1e16))
+}
+
+const cnxEnough = () => {
+  if (accountStatus.cnx_balance === 0) return false
+  return accountStatus.cnx_balance.gte(new BigNumber(4e20))
+}
+
+let systemUpdateInterval = null
 onMounted(async () => {
   await updateSystemInfo()
-  systemUpdateInterval = setInterval(async () => {
-    if (isTxSending.value) return
-    await updateSystemInfo()
-  }, 2000)
+
+  if (systemUpdateInterval == null) {
+    systemUpdateInterval = setInterval(async () => {
+      if (isTxSending.value) return
+      await updateSystemInfo()
+    }, 5000)
+  }
 
   if (accountStatus.address === '') {
     accountEditor.value.showModal()
@@ -83,6 +97,7 @@ onMounted(async () => {
 })
 onBeforeUnmount(() => {
   clearInterval(systemUpdateInterval)
+  systemUpdateInterval = null
 })
 
 let isTxSending = ref(false)
@@ -118,25 +133,41 @@ const sendNodeAction = async (action) => {
     <a-col :span="12" :offset="6" :style="{ height: '100px' }">
       <a-alert
         message="System is initializing. This may take a while, please be patient..."
-        :style="{ 'text-align': 'center' }"
+        class="top-alert"
         v-if="nodeStatus.status === nodeAPI.NODE_STATUS_INITIALIZING"
       ></a-alert>
       <a-alert
         type="error"
         :message="'Node error: ' + nodeStatus.message + '. Please restart the Docker container.'"
-        :style="{ 'text-align': 'center' }"
+        class="top-alert"
         v-if="nodeStatus.status === nodeAPI.NODE_STATUS_ERROR"
       ></a-alert>
       <a-alert
         type="error"
         :message="'Transaction error: ' + nodeStatus.tx_error + '. Please try again later.'"
-        :style="{ 'text-align': 'center' }"
+        class="top-alert"
         v-if="nodeStatus.tx_status === nodeAPI.TX_STATUS_ERROR"
       ></a-alert>
       <a-alert
         message="Waiting for the Blockchain confirmation..."
-        :style="{ 'text-align': 'center' }"
+        class="top-alert"
         v-if="nodeStatus.tx_status === nodeAPI.TX_STATUS_PENDING"
+      ></a-alert>
+      <a-alert
+        type="error"
+        message="Not enough ETH in the wallet. Please transfer at least 0.01 ETH to the wallet for the gas fee."
+        class="top-alert"
+        v-if="accountStatus.address !== '' && !ethEnough()"
+      ></a-alert>
+      <a-alert
+        type="error"
+        message="Not enough CNX in the wallet. Please transfer at least 400 CNX to the wallet for the staking."
+        class="top-alert"
+        v-if="
+          nodeStatus.status === nodeAPI.NODE_STATUS_STOPPED &&
+          accountStatus.address !== '' &&
+          !cnxEnough()
+        "
       ></a-alert>
     </a-col>
   </a-row>
@@ -209,6 +240,7 @@ const sendNodeAction = async (action) => {
                 :icon="h(PauseCircleOutlined)"
                 @click="sendNodeAction('pause')"
                 :loading="isTxSending || nodeStatus.tx_status === nodeAPI.TX_STATUS_PENDING"
+                :disabled="!ethEnough()"
                 >Pause</a-button
               >
             </div>
@@ -221,6 +253,7 @@ const sendNodeAction = async (action) => {
                 :icon="h(LogoutOutlined)"
                 @click="sendNodeAction('stop')"
                 :loading="isTxSending || nodeStatus.tx_status === nodeAPI.TX_STATUS_PENDING"
+                :disabled="!ethEnough()"
                 >Stop</a-button
               >
             </div>
@@ -230,6 +263,7 @@ const sendNodeAction = async (action) => {
                 :icon="h(PlayCircleOutlined)"
                 @click="sendNodeAction('start')"
                 :loading="isTxSending || nodeStatus.tx_status === nodeAPI.TX_STATUS_PENDING"
+                :disabled="!ethEnough() || !cnxEnough()"
                 >Start</a-button
               >
             </div>
@@ -239,6 +273,7 @@ const sendNodeAction = async (action) => {
                 :icon="h(PlayCircleOutlined)"
                 @click="sendNodeAction('resume')"
                 :loading="isTxSending || nodeStatus.tx_status === nodeAPI.TX_STATUS_PENDING"
+                :disabled="!ethEnough()"
                 >Resume</a-button
               >
             </div>
@@ -260,17 +295,20 @@ const sendNodeAction = async (action) => {
           ></edit-account>
         </template>
         <a-row>
-          <a-col :span="12">
-            <a-statistic title="Address" :value="shortAddress"></a-statistic>
+          <a-col :span="10">
+            <a-tooltip>
+              <template #title>{{ accountStatus.address }}</template>
+              <a-statistic title="Address" :value="shortAddress"></a-statistic>
+            </a-tooltip>
           </a-col>
-          <a-col :span="6">
+          <a-col :span="7">
             <a-statistic
               title="ETH"
               :precision="2"
               :value="toEtherValue(accountStatus.eth_balance)"
             ></a-statistic>
           </a-col>
-          <a-col :span="6">
+          <a-col :span="7">
             <a-statistic
               title="CNX"
               :precision="2"
@@ -302,10 +340,10 @@ const sendNodeAction = async (action) => {
               :size="70"
               :percent="100"
               :stroke-color="'lightgray'"
-              v-if="taskStatus.status === 'waiting'"
+              v-if="taskStatus.status === 'stopped'"
             >
               <template #format="percent">
-                <span style="font-size: 14px; color: lightgray">Waiting</span>
+                <span style="font-size: 14px; color: lightgray">Stopped</span>
               </template>
             </a-progress>
 
@@ -514,6 +552,10 @@ const sendNodeAction = async (action) => {
     margin-right 0!important
 </style>
 <style scoped lang="stylus">
+.top-alert
+    text-align center
+    margin-bottom 8px
+
 .footer-links
     color #666
     a
