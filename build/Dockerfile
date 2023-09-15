@@ -57,10 +57,9 @@ ENV PATH="/app/venv/bin:${PATH}"
 ENV LD_LIBRARY_PATH="/app/lora-scripts/venv/lib/python3.10/site-packages/tensorrt_libs:${LD_LIBRARY_PATH}"
 ENV LD_LIBRARY_PATH="/app/lora-scripts/venv/lib/python3.10/site-packages/torch/lib:${LD_LIBRARY_PATH}"
 
-WORKDIR /app/lora-scripts
-RUN ln -s venv/lib/python3.10/site-packages/tensorrt_libs/libnvinfer.so.8 venv/lib/python3.10/site-packages/tensorrt_libs/libnvinfer.so.7 && \ 
-    ln -s venv/lib/python3.10/site-packages/tensorrt_libs/libnvinfer_plugin.so.8 venv/lib/python3.10/site-packages/tensorrt_libs/libnvinfer_plugin.so.7 && \
-    ln -s venv/lib/python3.10/site-packages/torch/lib/libnvrtc-672ee683.so.11.2 venv/lib/python3.10/site-packages/torch/lib/libnvrtc.so
+RUN ln -s /app/lora-scriptsvenv/lib/python3.10/site-packages/tensorrt_libs/libnvinfer.so.8 /app/lora-scriptsvenv/lib/python3.10/site-packages/tensorrt_libs/libnvinfer.so.7 && \ 
+    ln -s /app/lora-scriptsvenv/lib/python3.10/site-packages/tensorrt_libs/libnvinfer_plugin.so.8 /app/lora-scriptsvenv/lib/python3.10/site-packages/tensorrt_libs/libnvinfer_plugin.so.7 && \
+    ln -s /app/lora-scriptsvenv/lib/python3.10/site-packages/torch/lib/libnvrtc-672ee683.so.11.2 /app/lora-scriptsvenv/lib/python3.10/site-packages/torch/lib/libnvrtc.so
 
 WORKDIR /app
 
