@@ -20,11 +20,9 @@ async def test_get_task_stats_empty(client: TestClient):
     assert resp_data["num_total"] == 0
 
 
-async def create_task(
+async def start_nodes(
     node_contracts: List[Contracts],
     managers: List[NodeManager],
-    relay: Relay,
-    tx_option,
 ):
     waits = [
         await start(c, n.node_state_manager) for c, n in zip(node_contracts, managers)
@@ -33,6 +31,12 @@ async def create_task(
         for w in waits:
             tg.start_soon(w)
 
+
+async def create_task(
+    node_contracts: List[Contracts],
+    relay: Relay,
+    tx_option,
+):
     task = models.RelayTaskInput(
         task_id=1,
         base_model="stable-diffusion-v1-5-pruned",
@@ -67,7 +71,8 @@ async def create_task(
 async def test_upload_task_result(
     running_client: TestClient, node_contracts, managers, relay, tx_option
 ):
-    task_id = await create_task(node_contracts, managers, relay, tx_option)
+    await start_nodes(node_contracts=node_contracts, managers=managers)
+    task_id = await create_task(node_contracts=node_contracts, relay=relay, tx_option=tx_option)
     await sleep(1)
 
     result_file = "test.png"
@@ -90,11 +95,19 @@ async def test_get_task_stats(
     resp = running_client.get("/manager/v1/tasks")
     resp.raise_for_status()
     resp_data = resp.json()
+    assert resp_data["status"] == "stopped"
+    assert resp_data["num_today"] == 0
+    assert resp_data["num_total"] == 0
+
+    await start_nodes(node_contracts=node_contracts, managers=managers)
+    resp = running_client.get("/manager/v1/tasks")
+    resp.raise_for_status()
+    resp_data = resp.json()
     assert resp_data["status"] == "idle"
     assert resp_data["num_today"] == 0
     assert resp_data["num_total"] == 0
 
-    await create_task(node_contracts, managers, relay, tx_option)
+    await create_task(node_contracts=node_contracts, relay=relay, tx_option=tx_option)
     await sleep(1)
 
     resp = running_client.get("/manager/v1/tasks")

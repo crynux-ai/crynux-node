@@ -203,6 +203,7 @@ async def stop(contracts: Contracts, state_manager: NodeStateManager):
         ), "Cannot start node. Last transaction is in pending."
 
         waiter = await contracts.node_contract.quit()
+        await state_manager.set_tx_state(models.TxStatus.Pending)
 
     async def wait():
         async with _wrap_tx_error(state_manager):
@@ -237,6 +238,7 @@ async def pause(contracts: Contracts, state_manager: NodeStateManager):
         ), "Cannot start node. Last transaction is in pending."
 
         waiter = await contracts.node_contract.pause()
+        await state_manager.set_tx_state(models.TxStatus.Pending)
 
     async def wait():
         async with _wrap_tx_error(state_manager):
@@ -271,6 +273,7 @@ async def resume(contracts: Contracts, state_manager: NodeStateManager):
         ), "Cannot start node. Last transaction is in pending."
 
         waiter = await contracts.node_contract.resume()
+        await state_manager.set_tx_state(models.TxStatus.Pending)
 
     async def wait():
         async with _wrap_tx_error(state_manager):
@@ -369,6 +372,9 @@ class NodeManager(object):
         status = (await self.node_state_manager.get_node_state()).status
         if status in (models.NodeStatus.Init, models.NodeStatus.Error):
             _logger.info("Initialize node manager")
+            await self.node_state_manager.set_node_state(models.NodeStatus.Init)
+            # clear tx error when restart
+            await self.node_state_manager.set_tx_state(models.TxStatus.Success)
 
             if not self.config.distributed:
                 from h_worker.prefetch import prefetch

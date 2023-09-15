@@ -10,9 +10,9 @@ from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel
 from typing_extensions import Annotated
 
-from h_server.models import TaskResultReady, TaskStatus
+from h_server.models import TaskResultReady, TaskStatus, NodeStatus
 
-from ..depends import ConfigDep, TaskStateCacheDep, EventQueueDep
+from ..depends import ConfigDep, TaskStateCacheDep, EventQueueDep, NodeStateManagerDep
 from .utils import CommonResponse
 
 router = APIRouter(prefix="/tasks")
@@ -75,7 +75,7 @@ async def upload_result(
 
 
 class TaskStats(BaseModel):
-    status: Literal["running", "idle", "waiting"]
+    status: Literal["running", "idle", "stopped"]
     num_today: int
     num_total: int
 
@@ -84,10 +84,11 @@ class TaskStats(BaseModel):
 async def get_task_stats(
     *,
     task_state_cache: TaskStateCacheDep,
+    state_manager: NodeStateManagerDep
 ):
-    if task_state_cache is None:
+    if task_state_cache is None or (await state_manager.get_node_state()).status == NodeStatus.Stopped:
         return TaskStats(
-            status="waiting",
+            status="stopped",
             num_today=0,
             num_total=0
         )
