@@ -13,7 +13,6 @@
     "@ant-design/icons-vue": "^6.1.0",
     "ant-design-vue": "4.x",
     "axios": "^1.5.0",
-    "bignumber.js": "^9.0.0",
     "json-bigint": "^1.0.0",
     "pinia": "^2.1.6",
     "vue": "^3.3.4",

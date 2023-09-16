@@ -3169,7 +3169,6 @@ __metadata:
     "@vue/eslint-config-prettier": ^8.0.0
     ant-design-vue: 4.x
     axios: ^1.5.0
-    bignumber.js: ^9.0.0
     eslint: ^8.46.0
     eslint-plugin-vue: ^9.16.1
     json-bigint: ^1.0.0

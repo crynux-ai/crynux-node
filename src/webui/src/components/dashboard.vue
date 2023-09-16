@@ -2,7 +2,6 @@
 import { computed, h, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { PauseCircleOutlined, LogoutOutlined, PlayCircleOutlined } from '@ant-design/icons-vue'
 import EditAccount from './edit-account.vue'
-import BigNumber from 'bignumber.js'
 
 import systemAPI from '../api/v1/system'
 import nodeAPI from '../api/v1/node'
@@ -67,17 +66,24 @@ const shortAddress = computed(() => {
 
 const toEtherValue = (bigNum) => {
   if (bigNum === 0) return 0
-  return bigNum.dividedBy(1e18).toString()
+
+  const decimals = (bigNum / BigInt(1e18)).toString()
+
+  let fractions = ((bigNum / BigInt(1e16)) % 100n).toString()
+
+  if (fractions.length === 1) fractions += '0'
+
+  return decimals + '.' + fractions
 }
 
 const ethEnough = () => {
   if (accountStatus.eth_balance === 0) return false
-  return accountStatus.eth_balance.gte(new BigNumber(1e16))
+  return accountStatus.eth_balance >= 1e16
 }
 
 const cnxEnough = () => {
   if (accountStatus.cnx_balance === 0) return false
-  return accountStatus.cnx_balance.gte(new BigNumber(4e20))
+  return accountStatus.cnx_balance >= 4e20
 }
 
 let systemUpdateInterval = null
@@ -302,18 +308,10 @@ const sendNodeAction = async (action) => {
             </a-tooltip>
           </a-col>
           <a-col :span="7">
-            <a-statistic
-              title="ETH"
-              :precision="2"
-              :value="toEtherValue(accountStatus.eth_balance)"
-            ></a-statistic>
+            <a-statistic title="ETH" :value="toEtherValue(accountStatus.eth_balance)"></a-statistic>
           </a-col>
           <a-col :span="7">
-            <a-statistic
-              title="CNX"
-              :precision="2"
-              :value="toEtherValue(accountStatus.cnx_balance)"
-            ></a-statistic>
+            <a-statistic title="CNX" :value="toEtherValue(accountStatus.cnx_balance)"></a-statistic>
           </a-col>
         </a-row>
       </a-card>
