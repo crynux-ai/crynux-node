@@ -1,8 +1,6 @@
 # Crynux Node for the Hydrogen(H) Network
 
-Crynux Node should be started on the machine with GPUs,
-and will connect to the Crynux Network to execute training, fine-tuning and inference
-tasks of the Stable Diffusion models for other applications.
+Start a Crynux Node to share the spared local GPU to others in exchange for tokens. Crynux Node will join the Crynux Network, receive the AI inference/training/fine-tuning tasks from the network, and execute them locally.
 
 ## Run the node
 
