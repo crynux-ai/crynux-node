@@ -399,10 +399,6 @@ class NodeManager(object):
                     cancellable=True,
                 )
 
-            assert self._contracts is not None
-            remote_status = await self._contracts.node_contract.get_node_status(self._contracts.account)
-            local_status = models.convert_node_status(remote_status)
-            await self.node_state_manager.set_node_state(local_status)
             _logger.info("Node manager initializing complete.")
 
     async def _run(self):
@@ -412,8 +408,14 @@ class NodeManager(object):
             async with create_task_group() as tg:
                 self._tg = tg
 
-                await self._init_components()
-                await self._init()
+                async with create_task_group() as init_tg:
+                    init_tg.start_soon(self._init_components)
+                    init_tg.start_soon(self._init)
+
+                assert self._contracts is not None
+                remote_status = await self._contracts.node_contract.get_node_status(self._contracts.account)
+                local_status = models.convert_node_status(remote_status)
+                await self.node_state_manager.set_node_state(local_status)
 
                 assert self._watcher is not None
                 assert self._task_system is not None
