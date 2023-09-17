@@ -30,6 +30,7 @@ class Contracts(object):
         provider_path: Optional[str] = None,
         privkey: str = "",
         default_account_index: Optional[int] = None,
+        timeout: int = 3,
     ):
         if provider is None:
             if provider_path is None:
@@ -37,11 +38,11 @@ class Contracts(object):
             if provider_path.startswith("http"):
                 from web3 import AsyncHTTPProvider
 
-                provider = AsyncHTTPProvider(provider_path)
+                provider = AsyncHTTPProvider(provider_path, request_kwargs={"timeout": timeout})
             elif provider_path.startswith("ws"):
                 from web3 import WebsocketProviderV2
 
-                provider = WebsocketProviderV2(provider_path)
+                provider = WebsocketProviderV2(provider_path, call_timeout=timeout)
             else:
                 raise ValueError(f"unsupported provider {provider_path}")
 
