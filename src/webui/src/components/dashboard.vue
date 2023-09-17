@@ -1,6 +1,7 @@
 <script setup>
 import { computed, h, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { PauseCircleOutlined, LogoutOutlined, PlayCircleOutlined } from '@ant-design/icons-vue'
+import { Grid } from 'ant-design-vue'
 import EditAccount from './edit-account.vue'
 
 import systemAPI from '../api/v1/system'
@@ -131,12 +132,25 @@ const sendNodeAction = async (action) => {
     isTxSending.value = false
   }
 }
+const useBreakpoint = Grid.useBreakpoint
+const screens = useBreakpoint()
+
+const topRowClasses = computed(() => {
+  let classes = ['top-row']
+  for (let v in screens.value) {
+    if (screens.value[v]) {
+      classes.push(v)
+    }
+  }
+
+  return classes
+})
 </script>
 
 <template>
-  <a-row style="height: 140px"></a-row>
+  <a-row :class="topRowClasses"> </a-row>
   <a-row>
-    <a-col :span="12" :offset="6" :style="{ height: '100px' }">
+    <a-col :span="14" :offset="5">
       <a-alert
         message="System is initializing. This may take a while, please be patient..."
         class="top-alert"
@@ -177,8 +191,15 @@ const sendNodeAction = async (action) => {
       ></a-alert>
     </a-col>
   </a-row>
-  <a-row :gutter="16">
-    <a-col :span="4" :offset="3">
+  <a-row :gutter="[16, 16]">
+    <a-col
+      :xs="{ span: 24, offset: 0, order: 1 }"
+      :sm="{ span: 12, offset: 0, order: 1 }"
+      :md="{ span: 12, offset: 0, order: 1 }"
+      :lg="{ span: 5, offset: 0, order: 1 }"
+      :xl="{ span: 5, offset: 1, order: 1 }"
+      :xxl="{ span: 4, offset: 3, order: 1 }"
+    >
       <a-card title="Node Status" :bordered="false" style="height: 100%">
         <a-row>
           <a-col :span="12">
@@ -291,7 +312,14 @@ const sendNodeAction = async (action) => {
       </a-card>
     </a-col>
 
-    <a-col :span="8">
+    <a-col
+      :xs="{ span: 24, order: 3 }"
+      :sm="{ span: 24, order: 3 }"
+      :md="{ span: 24, order: 3 }"
+      :lg="{ span: 12, order: 2 }"
+      :xl="{ span: 11, order: 2 }"
+      :xxl="{ span: 9, order: 2 }"
+    >
       <a-card title="Wallet" :bordered="false" style="height: 100%">
         <template #extra>
           <edit-account
@@ -317,7 +345,14 @@ const sendNodeAction = async (action) => {
       </a-card>
     </a-col>
 
-    <a-col :span="6">
+    <a-col
+      :xs="{ span: 24, order: 2 }"
+      :sm="{ span: 12, order: 2 }"
+      :md="{ span: 12, order: 2 }"
+      :lg="{ span: 7, order: 3 }"
+      :xl="{ span: 6, order: 3 }"
+      :xxl="{ span: 5, order: 3 }"
+    >
       <a-card title="Task Execution" :bordered="false" style="height: 100%">
         <a-row>
           <a-col :span="8">
@@ -367,8 +402,15 @@ const sendNodeAction = async (action) => {
       </a-card>
     </a-col>
   </a-row>
-  <a-row :gutter="16" style="margin-top: 16px">
-    <a-col :span="6" :offset="3">
+  <a-row :gutter="[16, 16]" style="margin-top: 16px">
+    <a-col
+      :xs="{ span: 24, offset: 0 }"
+      :sm="{ span: 16, offset: 0 }"
+      :md="{ span: 16, offset: 0 }"
+      :lg="{ span: 9, offset: 0 }"
+      :xl="{ span: 7, offset: 1 }"
+      :xxl="{ span: 6, offset: 3 }"
+    >
       <a-card title="GPU" :bordered="false" style="height: 100%">
         <a-row>
           <a-col :span="8">
@@ -406,7 +448,7 @@ const sendNodeAction = async (action) => {
         </a-row>
       </a-card>
     </a-col>
-    <a-col :span="4">
+    <a-col :xs="12" :sm="8" :md="8" :lg="5" :xxl="4">
       <a-card title="CPU" :bordered="false" style="height: 100%">
         <a-row>
           <a-col :span="12">
@@ -438,7 +480,7 @@ const sendNodeAction = async (action) => {
         </a-row>
       </a-card>
     </a-col>
-    <a-col :span="4">
+    <a-col :xs="12" :sm="12" :md="12" :lg="5" :xxl="4">
       <a-card title="Memory" :bordered="false" style="height: 100%">
         <a-row>
           <a-col :span="12">
@@ -481,7 +523,7 @@ const sendNodeAction = async (action) => {
         </a-row>
       </a-card>
     </a-col>
-    <a-col :span="4">
+    <a-col :xs="12" :sm="12" :md="12" :lg="5" :xxl="4">
       <a-card title="Disk" :bordered="false" style="height: 100%">
         <a-row>
           <a-col :span="12">
@@ -562,4 +604,17 @@ const sendNodeAction = async (action) => {
             text-decoration underline
 .footer-logo
     opacity 0.5
+.top-row
+    &.xs
+        height 16px
+    &.sm
+        height 20px
+    &.md
+        height 40px
+    &.lg
+        height 40px
+    &.xl
+        height 80px
+    &.xxl
+        height 100px
 </style>
