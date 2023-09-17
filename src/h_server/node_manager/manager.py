@@ -311,6 +311,7 @@ class NodeManager(object):
         watcher: Optional[EventWatcher] = None,
         task_system: Optional[TaskSystem] = None,
         restart_delay: float = 5,
+        retry_count: int = 3,
     ) -> None:
         self.config = config
         if node_state_manager is None:
@@ -330,6 +331,7 @@ class NodeManager(object):
         self._task_system = task_system
         # restart delay equals 0 means do not restart and raise error, for test only
         self._restart_delay = restart_delay
+        self._retry_count = retry_count
 
         self._tg: Optional[TaskGroup] = None
         self._finish_event: Optional[Event] = None
@@ -397,7 +399,6 @@ class NodeManager(object):
                     cancellable=True,
                 )
 
-            await self.node_state_manager.set_node_state(models.NodeStatus.Stopped)
             _logger.info("Node manager initializing complete.")
 
     async def _run(self):
@@ -410,6 +411,11 @@ class NodeManager(object):
                 async with create_task_group() as init_tg:
                     init_tg.start_soon(self._init_components)
                     init_tg.start_soon(self._init)
+
+                assert self._contracts is not None
+                remote_status = await self._contracts.node_contract.get_node_status(self._contracts.account)
+                local_status = models.convert_node_status(remote_status)
+                await self.node_state_manager.set_node_state(local_status)
 
                 assert self._watcher is not None
                 assert self._task_system is not None
@@ -426,6 +432,7 @@ class NodeManager(object):
     async def run(self):
         assert self._tg is None, "Node manager is running."
 
+        retry_count = 0
         while not self.finish_event.is_set():
             try:
                 await self._run()
@@ -440,9 +447,10 @@ class NodeManager(object):
                     await self.node_state_manager.set_node_state(
                         models.NodeStatus.Error, str(e)
                     )
-                if self._restart_delay > 0:
+                if self._restart_delay > 0 and retry_count < self._retry_count:
+                    retry_count += 1
                     _logger.error(
-                        f"Node manager restart in {self._restart_delay} seconds"
+                        f"Node manager restart in {self._restart_delay} seconds, {retry_count}/{self._retry_count} times"
                     )
                     await sleep(self._restart_delay)
                 else:
