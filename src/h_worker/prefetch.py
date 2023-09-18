@@ -14,7 +14,7 @@ base_model_urls = {
 
 base_model_cksum = {
     "stable-diffusion-2-1": "71f860473d5df49d5a09197d5b7a65d7",
-    "stable-diffusion-v1-5-pruned": "fde08ee6f4fac7ab26592bf519cbb405"
+    "stable-diffusion-v1-5-pruned": "fde08ee6f4fac7ab26592bf519cbb405",
 }
 
 
@@ -26,12 +26,12 @@ def _check_model_checksum(path: str, model: str) -> bool:
         while chunk:
             m.update(chunk)
             chunk = f.read(8192)
-    
+
     cksum = m.hexdigest()
     return cksum == base_model_cksum[model]
 
 
-def _prefetch_base_model(
+def prefetch_base_model(
     client: httpx.Client, pretrained_models_dir: str, base_model: str
 ):
     base_model_path = os.path.join(
@@ -57,26 +57,40 @@ def _prefetch_base_model(
                     f.write(chunk)
         _logger.info(f"Base model {base_model} download finished")
 
+huggingface_script = """
+import os
+from transformers import CLIPTextModel, CLIPTokenizer
 
-def _prefetch_huggingface(huggingface_cache_dir: str, script_dir: str):
+try:
+    os.environ["TRANSFORMERS_OFFLINE"] = "1"
+    CLIPTokenizer.from_pretrained('openai/clip-vit-large-patch14')
+    CLIPTextModel.from_pretrained('openai/clip-vit-large-patch14')
+except OSError:
+    os.environ["TRANSFORMERS_OFFLINE"] = "0"
+    CLIPTokenizer.from_pretrained('openai/clip-vit-large-patch14')
+    CLIPTextModel.from_pretrained('openai/clip-vit-large-patch14')
+"""
+
+def prefetch_huggingface(huggingface_cache_dir: str, script_dir: str):
     exe = "python"
     worker_venv = os.path.abspath(os.path.join(script_dir, "venv"))
     if os.path.exists(worker_venv):
         exe = os.path.join(worker_venv, "bin", "python")
 
-    args = [
-        exe,
-        "-c",
-        "from transformers import CLIPTextModel, CLIPTokenizer;"
-        "CLIPTokenizer.from_pretrained('openai/clip-vit-large-patch14');"
-        "CLIPTextModel.from_pretrained('openai/clip-vit-large-patch14')",
-    ]
+    script_file = os.path.abspath(os.path.join(script_dir, "prefetch.py"))
+    with open(script_file, mode="w", encoding="utf-8") as f:
+        f.write(huggingface_script)
 
-    envs = os.environ.copy()
-    envs["HF_HOME"] = os.path.abspath(huggingface_cache_dir)
-    subprocess.check_call(args, env=envs, cwd=script_dir)
-    _logger.info(f"Model openai/clip-vit-large-patch14 download finished")
+    try:
+        args = [exe, script_file]
 
+        envs = os.environ.copy()
+        hf_home = os.path.abspath(huggingface_cache_dir)
+        envs["HF_HOME"] = hf_home
+        subprocess.check_call(args, env=envs, cwd=script_dir)
+        _logger.info(f"Model openai/clip-vit-large-patch14 download finished")
+    finally:
+        os.remove(script_file)
 
 def prefetch(pretrained_models_dir: str, huggingface_cache_dir: str, script_dir: str):
     if not os.path.exists(pretrained_models_dir):
@@ -88,9 +102,9 @@ def prefetch(pretrained_models_dir: str, huggingface_cache_dir: str, script_dir:
     try:
         with httpx.Client() as client:
             for base_model in base_model_urls:
-                _prefetch_base_model(client, pretrained_models_dir, base_model)
+                prefetch_base_model(client, pretrained_models_dir, base_model)
 
-        _prefetch_huggingface(huggingface_cache_dir, script_dir)
+        prefetch_huggingface(huggingface_cache_dir, script_dir)
     except Exception as e:
         _logger.exception(e)
         _logger.error("Prefetch error")

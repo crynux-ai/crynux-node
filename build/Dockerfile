@@ -14,10 +14,11 @@ RUN apt install python3.10 python3.10-venv ffmpeg libsm6 libxext6 -y
 
 FROM base as builder1
 
-RUN apt install curl -y
+RUN apt install curl build-essential libssl-dev libffi-dev python3.10-dev -y
 
 RUN curl -O -L "https://golang.org/dl/go1.21.0.linux-amd64.tar.gz" && tar -C /usr/local -xzf go1.21.0.linux-amd64.tar.gz
 ENV PATH="${PATH}:/usr/local/go/bin"
+ENV CGO_ENABLED="1"
 
 WORKDIR /app
 
@@ -28,7 +29,11 @@ WORKDIR /app/h-node
 
 COPY src src
 COPY pyproject.toml pyproject.toml
+COPY setup.py setup.py
 COPY requirements.txt requirements.txt
+COPY MANIFEST.in MANIFEST.in
+COPY go.mod go.mod
+COPY go.sum go.sum
 RUN pip install -r requirements.txt && pip install .
 
 FROM base as builder2

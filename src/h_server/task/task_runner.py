@@ -89,7 +89,7 @@ def wrap_task_error():
     except Exception as e:
         _logger.exception(e)
         _logger.error("Task unknown error")
-        raise TaskError(str(e), TaskErrorSource.Unknown, retry=False)
+        raise TaskError(str(e), TaskErrorSource.Unknown, retry=True)
 
 
 class InferenceTaskRunner(TaskRunner):
@@ -104,6 +104,7 @@ class InferenceTaskRunner(TaskRunner):
         relay: Optional[Relay] = None,
         watcher: Optional[EventWatcher] = None,
         local_config: Optional[LocalConfig] = None,
+        retry_count: Optional[int] = 5,
     ) -> None:
         super().__init__(
             task_id=task_id,
@@ -137,6 +138,9 @@ class InferenceTaskRunner(TaskRunner):
                 self.local_config = local_config
         else:
             self.local_config = None
+
+        # Error retry count limit. None means no limit.
+        self._retry_count = retry_count
 
         self._state: Optional[models.TaskState] = None
 
@@ -192,9 +196,23 @@ class InferenceTaskRunner(TaskRunner):
         assert self._state is not None, "The task runner has not been initialized."
 
         round = self._state.round
+        self._state.status = models.TaskStatus.Error
 
-        waiter = await self.contracts.task_contract.report_task_error(self.task_id, round)
-        await waiter.wait()
+        try:
+            waiter = await self.contracts.task_contract.report_task_error(
+                self.task_id, round
+            )
+            await waiter.wait()
+            await self.cleanup()
+        except TxRevertedError as e:
+            _logger.exception(e)
+            _logger.error("Task report error being reverted")
+            # cannot report error, need retry
+            raise TaskError(str(e), TaskErrorSource.Contracts, retry=True)
+        except Exception as e:
+            _logger.exception(e)
+            _logger.error("Task report error unexpected error")
+            raise TaskError(str(e), TaskErrorSource.Unknown, retry=True)
 
     @asynccontextmanager
     async def report_error_context(self):
@@ -203,11 +221,18 @@ class InferenceTaskRunner(TaskRunner):
         except get_cancelled_exc_class() as e:
             raise
         except TaskError as e:
+            # limit error retry count
+            if self._retry_count is not None and e.retry:
+                if self._retry_count == 0:
+                    e.retry = False
+                else:
+                    self._retry_count -= 1
             if not e.retry:
                 await self._report_error()
-            raise
+            raise e
         except Exception as e:
             await self._report_error()
+            raise e
 
     @property
     def lock(self) -> Lock:
@@ -388,10 +413,11 @@ class InferenceTaskRunner(TaskRunner):
 
     async def cleanup(self):
         assert self._state is not None, "The task runner has not been initialized."
-        assert (
-            self._state.status == models.TaskStatus.Success
-            or self._state.status == models.TaskStatus.Aborted
-        ), "Task status is not success or aborted when shutdown."
+        assert self._state.status in [
+            models.TaskStatus.Success,
+            models.TaskStatus.Aborted,
+            models.TaskStatus.Error,
+        ], "Task status is not success or aborted when shutdown."
 
         self.watcher.unwatch_event(self._success_watch_id)
         self.watcher.unwatch_event(self._aborted_watch_id)

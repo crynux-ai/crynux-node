@@ -10,14 +10,19 @@ from PIL import Image
 from web3 import Web3
 
 from h_server import models
-from h_server.config import Config, TxOption
+from h_server.config import Config, TxOption, set_config
 from h_server.contracts import Contracts
 from h_server.event_queue import EventQueue, MemoryEventQueue
 from h_server.models.task import PoseConfig, TaskConfig
-from h_server.node_manager import (NodeManager, NodeStateManager, pause,
-                                   resume, start, stop)
-from h_server.node_manager.state_cache import (MemoryNodeStateCache,
-                                               MemoryTxStateCache)
+from h_server.node_manager import (
+    NodeManager,
+    NodeStateManager,
+    pause,
+    resume,
+    start,
+    stop,
+)
+from h_server.node_manager.state_cache import MemoryNodeStateCache, MemoryTxStateCache
 from h_server.relay import MockRelay, Relay
 from h_server.task import InferenceTaskRunner, MemoryTaskStateCache, TaskSystem
 from h_server.task.state_cache import TaskStateCache
@@ -70,6 +75,9 @@ def config():
             "ethereum": {
                 "privkey": "",
                 "provider": "",
+                "chain_id": None,
+                "gas": None,
+                "gas_price": None,
                 "contract": {"token": "", "node": "", "task": ""},
             },
             "task_dir": "task",
@@ -88,6 +96,7 @@ def config():
             },
         }
     )
+    set_config(test_config)
     return test_config
 
 
@@ -103,7 +112,10 @@ async def node_contracts(
     for privkey in privkeys:
         contracts = Contracts(provider=root_contracts.provider, privkey=privkey)
         await contracts.init(
-            token_contract_address, node_contract_address, task_contract_address
+            token_contract_address=token_contract_address,
+            node_contract_address=node_contract_address,
+            task_contract_address=task_contract_address,
+            option=tx_option
         )
         amount = Web3.to_wei(1000, "ether")
         if (await contracts.token_contract.balance_of(contracts.account)) < amount:
@@ -246,11 +258,13 @@ async def test_node_manager(
             tg.start_soon(n.run)
 
         waits = [
-            await start(c, n.node_state_manager)
+            await start(c, n.node_state_manager, option=tx_option)
             for c, n in zip(node_contracts, node_managers)
         ]
         for n in node_managers:
-            assert (await n.node_state_manager.get_tx_state()).status == models.TxStatus.Pending
+            assert (
+                await n.node_state_manager.get_tx_state()
+            ).status == models.TxStatus.Pending
         async with create_task_group() as sub_tg:
             for w in waits:
                 sub_tg.start_soon(w)
@@ -297,11 +311,13 @@ async def test_node_manager(
             assert img.height == 512
 
         waits = [
-            await pause(c, n.node_state_manager)
+            await pause(c, n.node_state_manager, option=tx_option)
             for c, n in zip(node_contracts, node_managers)
         ]
         for n in node_managers:
-            assert (await n.node_state_manager.get_tx_state()).status == models.TxStatus.Pending
+            assert (
+                await n.node_state_manager.get_tx_state()
+            ).status == models.TxStatus.Pending
         async with create_task_group() as sub_tg:
             for w in waits:
                 sub_tg.start_soon(w)
@@ -312,11 +328,13 @@ async def test_node_manager(
             ).status == models.NodeStatus.Paused
 
         waits = [
-            await resume(c, n.node_state_manager)
+            await resume(c, n.node_state_manager, option=tx_option)
             for c, n in zip(node_contracts, node_managers)
         ]
         for n in node_managers:
-            assert (await n.node_state_manager.get_tx_state()).status == models.TxStatus.Pending
+            assert (
+                await n.node_state_manager.get_tx_state()
+            ).status == models.TxStatus.Pending
         async with create_task_group() as sub_tg:
             for w in waits:
                 sub_tg.start_soon(w)
@@ -327,11 +345,13 @@ async def test_node_manager(
             ).status == models.NodeStatus.Running
 
         waits = [
-            await stop(c, n.node_state_manager)
+            await stop(c, n.node_state_manager, option=tx_option)
             for c, n in zip(node_contracts, node_managers)
         ]
         for n in node_managers:
-            assert (await n.node_state_manager.get_tx_state()).status == models.TxStatus.Pending
+            assert (
+                await n.node_state_manager.get_tx_state()
+            ).status == models.TxStatus.Pending
         async with create_task_group() as sub_tg:
             for w in waits:
                 sub_tg.start_soon(w)

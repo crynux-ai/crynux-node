@@ -96,6 +96,12 @@ class TaskSystem(object):
                                     _logger.debug(f"Retry {event} for {event.task_id}")
                                     await sleep(self._retry_delay)
                                     await self.event_queue.no_ack(ack_id=ack_id)
+                            else:
+                                # a no-retry error means the task is finished with error
+                                with fail_after(5, shield=True):
+                                    await self.event_queue.ack(ack_id=ack_id)
+                                    del self._runners[task_id]
+                                    _logger.debug(f"Task {event.task_id} finished with error")
                         except Exception as e:
                             _logger.exception(e)
                             _logger.error(
