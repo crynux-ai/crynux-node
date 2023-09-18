@@ -10,7 +10,7 @@ from web3 import Web3
 from web3.types import EventData
 
 from h_server import models
-from h_server.config import Config, wait_privkey
+from h_server.config import Config, wait_privkey, TxOption
 from h_server.contracts import Contracts, TxRevertedError, set_contracts
 from h_server.event_queue import DbEventQueue, EventQueue, set_event_queue
 from h_server.relay import Relay, WebRelay, set_relay
@@ -149,7 +149,7 @@ async def _wrap_tx_error(state_manager: NodeStateManager):
         raise
 
 
-async def start(contracts: Contracts, state_manager: NodeStateManager):
+async def start(contracts: Contracts, state_manager: NodeStateManager, *, option: "Optional[TxOption]" = None):
     async with _wrap_tx_error(state_manager):
         node_status = (await state_manager.get_node_state()).status
         tx_status = (await state_manager.get_tx_state()).status
@@ -169,11 +169,11 @@ async def start(contracts: Contracts, state_manager: NodeStateManager):
         )
         if allowance < node_amount:
             waiter = await contracts.token_contract.approve(
-                contracts.node_contract.address, node_amount
+                contracts.node_contract.address, node_amount, option=option
             )
             await waiter.wait()
 
-        waiter = await contracts.node_contract.join()
+        waiter = await contracts.node_contract.join(option=option)
         await state_manager.set_tx_state(models.TxStatus.Pending)
 
     async def wait():
@@ -191,7 +191,7 @@ async def start(contracts: Contracts, state_manager: NodeStateManager):
     return wait
 
 
-async def stop(contracts: Contracts, state_manager: NodeStateManager):
+async def stop(contracts: Contracts, state_manager: NodeStateManager, *, option: "Optional[TxOption]" = None):
     async with _wrap_tx_error(state_manager):
         node_status = (await state_manager.get_node_state()).status
         tx_status = (await state_manager.get_tx_state()).status
@@ -202,7 +202,7 @@ async def stop(contracts: Contracts, state_manager: NodeStateManager):
             tx_status != models.TxStatus.Pending
         ), "Cannot start node. Last transaction is in pending."
 
-        waiter = await contracts.node_contract.quit()
+        waiter = await contracts.node_contract.quit(option=option)
         await state_manager.set_tx_state(models.TxStatus.Pending)
 
     async def wait():
@@ -229,7 +229,7 @@ async def stop(contracts: Contracts, state_manager: NodeStateManager):
     return wait
 
 
-async def pause(contracts: Contracts, state_manager: NodeStateManager):
+async def pause(contracts: Contracts, state_manager: NodeStateManager, *, option: "Optional[TxOption]" = None):
     async with _wrap_tx_error(state_manager):
         node_status = (await state_manager.get_node_state()).status
         tx_status = (await state_manager.get_tx_state()).status
@@ -240,7 +240,7 @@ async def pause(contracts: Contracts, state_manager: NodeStateManager):
             tx_status != models.TxStatus.Pending
         ), "Cannot start node. Last transaction is in pending."
 
-        waiter = await contracts.node_contract.pause()
+        waiter = await contracts.node_contract.pause(option=option)
         await state_manager.set_tx_state(models.TxStatus.Pending)
 
     async def wait():
@@ -267,7 +267,7 @@ async def pause(contracts: Contracts, state_manager: NodeStateManager):
     return wait
 
 
-async def resume(contracts: Contracts, state_manager: NodeStateManager):
+async def resume(contracts: Contracts, state_manager: NodeStateManager, *, option: "Optional[TxOption]" = None):
     async with _wrap_tx_error(state_manager):
         node_status = (await state_manager.get_node_state()).status
         tx_status = (await state_manager.get_tx_state()).status
@@ -278,7 +278,7 @@ async def resume(contracts: Contracts, state_manager: NodeStateManager):
             tx_status != models.TxStatus.Pending
         ), "Cannot start node. Last transaction is in pending."
 
-        waiter = await contracts.node_contract.resume()
+        waiter = await contracts.node_contract.resume(option=option)
         await state_manager.set_tx_state(models.TxStatus.Pending)
 
     async def wait():
