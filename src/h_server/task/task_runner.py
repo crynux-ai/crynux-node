@@ -193,8 +193,19 @@ class InferenceTaskRunner(TaskRunner):
 
         round = self._state.round
 
-        waiter = await self.contracts.task_contract.report_task_error(self.task_id, round)
-        await waiter.wait()
+        try:
+            waiter = await self.contracts.task_contract.report_task_error(
+                self.task_id, round
+            )
+            await waiter.wait()
+        except TxRevertedError as e:
+            _logger.exception(e)
+            _logger.error("Task report error being reverted")
+            raise TaskError(str(e), TaskErrorSource.Contracts, retry=True)
+        except Exception as e:
+            _logger.exception(e)
+            _logger.error("Task report error unexpected error")
+            raise TaskError(str(e), TaskErrorSource.Unknown, retry=True)
 
     @asynccontextmanager
     async def report_error_context(self):
@@ -205,9 +216,10 @@ class InferenceTaskRunner(TaskRunner):
         except TaskError as e:
             if not e.retry:
                 await self._report_error()
-            raise
+            raise e
         except Exception as e:
             await self._report_error()
+            raise e
 
     @property
     def lock(self) -> Lock:
