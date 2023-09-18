@@ -14,7 +14,7 @@ base_model_urls = {
 
 base_model_cksum = {
     "stable-diffusion-2-1": "71f860473d5df49d5a09197d5b7a65d7",
-    "stable-diffusion-v1-5-pruned": "fde08ee6f4fac7ab26592bf519cbb405"
+    "stable-diffusion-v1-5-pruned": "fde08ee6f4fac7ab26592bf519cbb405",
 }
 
 
@@ -26,7 +26,7 @@ def _check_model_checksum(path: str, model: str) -> bool:
         while chunk:
             m.update(chunk)
             chunk = f.read(8192)
-    
+
     cksum = m.hexdigest()
     return cksum == base_model_cksum[model]
 
@@ -73,8 +73,16 @@ def _prefetch_huggingface(huggingface_cache_dir: str, script_dir: str):
     ]
 
     envs = os.environ.copy()
-    envs["HF_HOME"] = os.path.abspath(huggingface_cache_dir)
-    subprocess.check_call(args, env=envs, cwd=script_dir)
+    hf_home = os.path.abspath(huggingface_cache_dir)
+    envs["HF_HOME"] = hf_home
+    # check model in offline mode
+    envs["TRANSFORMERS_OFFLINE"] = "1"
+    try:
+        subprocess.check_call(args, env=envs, cwd=script_dir)
+    except OSError:
+        # model not exists, download model in online mode
+        envs["TRANSFORMERS_OFFLINE"] = "0"
+        subprocess.check_call(args, env=envs, cwd=script_dir)
     _logger.info(f"Model openai/clip-vit-large-patch14 download finished")
 
 
