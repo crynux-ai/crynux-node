@@ -60,6 +60,7 @@ class TaskStatus(Enum):
     Disclosed = "disclosed"
     Success = "success"
     Aborted = "aborted"
+    Error = "error"
 
 
 class TaskState(BaseModel):
