@@ -173,6 +173,16 @@ const topRowClasses = computed(() => {
         class="top-alert"
         v-if="nodeStatus.tx_status === nodeAPI.TX_STATUS_PENDING"
       ></a-alert>
+        <a-alert
+            message="Node will stop after finishing the current task"
+            class="top-alert"
+            v-if="nodeStatus.status === nodeAPI.NODE_STATUS_PENDING_STOP"
+        ></a-alert>
+        <a-alert
+            message="Node will pause after finishing the current task"
+            class="top-alert"
+            v-if="nodeStatus.status === nodeAPI.NODE_STATUS_PENDING_PAUSE"
+        ></a-alert>
       <a-alert
         type="error"
         message="Not enough ETH in the wallet. Please transfer at least 0.01 ETH to the wallet for the gas fee."
@@ -246,14 +256,15 @@ const topRowClasses = computed(() => {
               :percent="100"
               :stroke-color="'cornflowerblue'"
               v-if="
-                [nodeAPI.NODE_STATUS_PENDING, nodeAPI.NODE_STATUS_INITIALIZING].indexOf(
+                [nodeAPI.NODE_STATUS_PENDING_PAUSE, nodeAPI.NODE_STATUS_PENDING_STOP, nodeAPI.NODE_STATUS_INITIALIZING].indexOf(
                   nodeStatus.status
                 ) !== -1
               "
             >
               <template #format="percent">
                 <span style="font-size: 14px; color: cornflowerblue">
-                  <span v-if="nodeStatus.status === nodeAPI.NODE_STATUS_PENDING">Stopping</span>
+                    <span v-if="nodeStatus.status === nodeAPI.NODE_STATUS_PENDING_PAUSE">Pausing</span>
+                  <span v-if="nodeStatus.status === nodeAPI.NODE_STATUS_PENDING_STOP">Stopping</span>
                   <span v-if="nodeStatus.status === nodeAPI.NODE_STATUS_INITIALIZING"
                     >Preparing</span
                   >
@@ -556,7 +567,7 @@ const topRowClasses = computed(() => {
       </a-card>
     </a-col>
   </a-row>
-  <a-row style="margin-top: 64px">
+  <a-row style="margin-top: 32px">
     <a-col :span="14" :offset="5" style="text-align: center">
       <a-space class="footer-links">
         <a-typography-link href="https://crynux.ai" target="_blank">Home</a-typography-link>
@@ -579,7 +590,7 @@ const topRowClasses = computed(() => {
       </a-space>
     </a-col>
   </a-row>
-  <a-row style="margin-top: 36px">
+  <a-row style="margin-top: 12px">
     <a-col :span="24" style="text-align: center">
       <img class="footer-logo" src="./logo-full-black.png" width="140" alt="Crynux logo" />
     </a-col>
@@ -594,7 +605,7 @@ const topRowClasses = computed(() => {
 <style scoped lang="stylus">
 .top-alert
     text-align center
-    margin-bottom 8px
+    margin-bottom 16px
 
 .footer-links
     color #666

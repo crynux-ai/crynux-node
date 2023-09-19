@@ -10,7 +10,8 @@ class NodeAPI extends BaseAPI {
     this.NODE_STATUS_PAUSED = 'paused'
     this.NODE_STATUS_STOPPED = 'stopped'
     this.NODE_STATUS_ERROR = 'error'
-    this.NODE_STATUS_PENDING = 'pending'
+    this.NODE_STATUS_PENDING_PAUSE = 'pending_pause'
+    this.NODE_STATUS_PENDING_STOP = 'pending_stop'
 
     this.TX_STATUS_ERROR = 'error'
     this.TX_STATUS_PENDING = 'pending'
