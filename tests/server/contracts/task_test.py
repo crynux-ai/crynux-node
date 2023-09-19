@@ -5,6 +5,7 @@ from anyio import create_task_group, create_memory_object_stream
 import pytest
 from web3 import Web3
 
+from h_server.models import ChainNodeStatus
 from h_server.contracts import Contracts, TxRevertedError
 from h_server.watcher import EventWatcher
 
@@ -67,6 +68,7 @@ async def contracts_for_task(
 
 async def test_task(contracts_for_task: Tuple[Contracts, Contracts, Contracts], tx_option):
     c1, c2, c3 = contracts_for_task
+    contracts_map = {c.account: c for c in contracts_for_task}
 
     task_hash = Web3.keccak(text="task_hash")
     data_hash = Web3.keccak(text="data_hash")
@@ -127,11 +129,24 @@ async def test_task(contracts_for_task: Tuple[Contracts, Contracts, Contracts], 
     assert event["args"]["taskId"] == task_id
     assert event["args"]["result"] == result
 
+    result_account = event["args"]["resultNode"]
+    result_node = contracts_map[result_account]
+    waiter = await result_node.task_contract.report_task_success(
+        task_id=task_id, round=round_map[result_account], option=tx_option
+    )
+    await waiter.wait()
+    
+    for c in contracts_for_task:
+        task_id = await c.task_contract.get_node_task(c.account)
+        assert task_id == 0
+        status = await c.node_contract.get_node_status(c.account)
+        assert status == ChainNodeStatus.AVAILABLE
 
 async def test_task_with_event_watcher(
     contracts_for_task: Tuple[Contracts, Contracts, Contracts], tx_option
 ):
     c1, c2, c3 = contracts_for_task
+    contracts_map = {c.account: c for c in contracts_for_task}
 
     watcher = EventWatcher.from_contracts(c1)
     event_send, event_recv = create_memory_object_stream()
@@ -199,6 +214,19 @@ async def test_task_with_event_watcher(
         event = await event_recv.receive()
         assert event["args"]["taskId"] == task_id
         assert event["args"]["result"] == result
+
+        result_account = event["args"]["resultNode"]
+        result_node = contracts_map[result_account]
+        waiter = await result_node.task_contract.report_task_success(
+            task_id=task_id, round=round_map[result_account], option=tx_option
+        )
+        await waiter.wait()
+        
+        for c in contracts_for_task:
+            task_id = await c.task_contract.get_node_task(c.account)
+            assert task_id == 0
+            status = await c.node_contract.get_node_status(c.account)
+            assert status == ChainNodeStatus.AVAILABLE
 
         await event_recv.aclose()
         await event_send.aclose()

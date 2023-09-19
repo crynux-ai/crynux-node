@@ -72,8 +72,20 @@ class TaskContract(ContractWrapperBase):
             round=round,
             result=result,
         )
-    
-    async def report_task_error(self, task_id: int, round: int, *, option: "Optional[TxOption]" = None) -> TxWaiter:
+
+    async def report_task_success(
+        self, task_id: int, round: int, *, option: "Optional[TxOption]" = None
+    ) -> TxWaiter:
+        return await self._transaction_call(
+            "reportTaskSuccess",
+            option=option,
+            taskId=task_id,
+            round=round,
+        )
+
+    async def report_task_error(
+        self, task_id: int, round: int, *, option: "Optional[TxOption]" = None
+    ) -> TxWaiter:
         return await self._transaction_call(
             "reportTaskError",
             option=option,
@@ -93,11 +105,11 @@ class TaskContract(ContractWrapperBase):
             commitments=res[6],
             nonces=res[7],
             results=res[8],
-            result_disclosed_rounds=res[9]
+            result_disclosed_rounds=res[9],
         )
 
     async def get_node_task(self, address: str) -> int:
-        return await self._function_call("getNodeTask", address=address)
+        return await self._function_call("getNodeTask", nodeAddress=address)
 
     async def get_events(
         self,
