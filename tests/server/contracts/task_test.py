@@ -131,6 +131,10 @@ async def test_task(contracts_for_task: Tuple[Contracts, Contracts, Contracts], 
 
     result_account = event["args"]["resultNode"]
     result_node = contracts_map[result_account]
+
+    task = await result_node.task_contract.get_task(task_id=task_id)
+    assert task.result_node == result_account
+
     waiter = await result_node.task_contract.report_task_success(
         task_id=task_id, round=round_map[result_account], option=tx_option
     )
@@ -217,6 +221,10 @@ async def test_task_with_event_watcher(
 
         result_account = event["args"]["resultNode"]
         result_node = contracts_map[result_account]
+
+        task = await result_node.task_contract.get_task(task_id=task_id)
+        assert task.result_node == result_account
+
         waiter = await result_node.task_contract.report_task_success(
             task_id=task_id, round=round_map[result_account], option=tx_option
         )

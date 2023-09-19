@@ -43,6 +43,10 @@ class TaskSystem(object):
         self._runner_cls = runner_cls
 
     @property
+    def state_cache(self) -> TaskStateCache:
+        return self._state_cache
+
+    @property
     def event_queue(self) -> EventQueue:
         return self._queue
 

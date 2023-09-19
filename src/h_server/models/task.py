@@ -15,6 +15,7 @@ class ChainTask(BaseModel):
     nonces: List[bytes]
     results: List[bytes]
     result_disclosed_rounds: List[int]
+    result_node: str
 
 
 class TaskConfig(BaseModel):

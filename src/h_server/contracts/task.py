@@ -106,6 +106,7 @@ class TaskContract(ContractWrapperBase):
             nonces=res[7],
             results=res[8],
             result_disclosed_rounds=res[9],
+            result_node=res[10]
         )
 
     async def get_node_task(self, address: str) -> int:
