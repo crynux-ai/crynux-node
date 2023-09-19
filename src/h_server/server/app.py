@@ -21,13 +21,14 @@ class Server(object):
 
         self._shutdown_event: Optional[Event] = None
 
-    async def start(self, host: str, port: int):
+    async def start(self, host: str, port: int, access_log: bool = True):
         assert self._shutdown_event is None, "Server has already been started."
 
         self._shutdown_event = Event()
         config = Config()
         config.bind = [f"{host}:{port}"]
-        config.accesslog = "-"
+        if access_log:
+            config.accesslog = "-"
         config.errorlog = "-"
 
         try:

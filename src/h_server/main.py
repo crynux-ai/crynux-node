@@ -35,7 +35,7 @@ async def _main():
 
             tg.start_soon(node_manager.run)
 
-            tg.start_soon(server.start, config.server_host, config.server_port)
+            tg.start_soon(server.start, config.server_host, config.server_port, config.log.level == "DEBUG")
     finally:
         with move_on_after(2, shield=True):
             await db.close()
