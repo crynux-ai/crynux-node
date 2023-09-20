@@ -70,3 +70,4 @@ class TaskState(BaseModel):
     status: TaskStatus
     files: List[str] = []
     result: bytes = b""
+    result_node: str = ""
