@@ -3,8 +3,14 @@ import os
 from contextlib import asynccontextmanager
 from typing import Optional, Type
 
-from anyio import (Event, create_task_group, fail_after,
-                   get_cancelled_exc_class, sleep, to_thread)
+from anyio import (
+    Event,
+    create_task_group,
+    fail_after,
+    get_cancelled_exc_class,
+    sleep,
+    to_thread,
+)
 from anyio.abc import TaskGroup
 from web3 import Web3
 from web3.types import EventData
@@ -14,11 +20,20 @@ from h_server.config import Config, wait_privkey, TxOption
 from h_server.contracts import Contracts, TxRevertedError, set_contracts
 from h_server.event_queue import DbEventQueue, EventQueue, set_event_queue
 from h_server.relay import Relay, WebRelay, set_relay
-from h_server.task import (DbTaskStateCache, InferenceTaskRunner,
-                           TaskStateCache, TaskSystem, set_task_state_cache,
-                           set_task_system)
-from h_server.watcher import (BlockNumberCache, DbBlockNumberCache,
-                              EventWatcher, set_watcher)
+from h_server.task import (
+    DbTaskStateCache,
+    InferenceTaskRunner,
+    TaskStateCache,
+    TaskSystem,
+    set_task_state_cache,
+    set_task_system,
+)
+from h_server.watcher import (
+    BlockNumberCache,
+    DbBlockNumberCache,
+    EventWatcher,
+    set_watcher,
+)
 
 from .state_cache import DbNodeStateCache, DbTxStateCache, StateCache
 
@@ -149,7 +164,12 @@ async def _wrap_tx_error(state_manager: NodeStateManager):
         raise
 
 
-async def start(contracts: Contracts, state_manager: NodeStateManager, *, option: "Optional[TxOption]" = None):
+async def start(
+    contracts: Contracts,
+    state_manager: NodeStateManager,
+    *,
+    option: "Optional[TxOption]" = None,
+):
     async with _wrap_tx_error(state_manager):
         node_status = (await state_manager.get_node_state()).status
         tx_status = (await state_manager.get_tx_state()).status
@@ -191,7 +211,12 @@ async def start(contracts: Contracts, state_manager: NodeStateManager, *, option
     return wait
 
 
-async def stop(contracts: Contracts, state_manager: NodeStateManager, *, option: "Optional[TxOption]" = None):
+async def stop(
+    contracts: Contracts,
+    state_manager: NodeStateManager,
+    *,
+    option: "Optional[TxOption]" = None,
+):
     async with _wrap_tx_error(state_manager):
         node_status = (await state_manager.get_node_state()).status
         tx_status = (await state_manager.get_tx_state()).status
@@ -229,7 +254,12 @@ async def stop(contracts: Contracts, state_manager: NodeStateManager, *, option:
     return wait
 
 
-async def pause(contracts: Contracts, state_manager: NodeStateManager, *, option: "Optional[TxOption]" = None):
+async def pause(
+    contracts: Contracts,
+    state_manager: NodeStateManager,
+    *,
+    option: "Optional[TxOption]" = None,
+):
     async with _wrap_tx_error(state_manager):
         node_status = (await state_manager.get_node_state()).status
         tx_status = (await state_manager.get_tx_state()).status
@@ -267,7 +297,12 @@ async def pause(contracts: Contracts, state_manager: NodeStateManager, *, option
     return wait
 
 
-async def resume(contracts: Contracts, state_manager: NodeStateManager, *, option: "Optional[TxOption]" = None):
+async def resume(
+    contracts: Contracts,
+    state_manager: NodeStateManager,
+    *,
+    option: "Optional[TxOption]" = None,
+):
     async with _wrap_tx_error(state_manager):
         node_status = (await state_manager.get_node_state()).status
         tx_status = (await state_manager.get_tx_state()).status
@@ -401,6 +436,64 @@ class NodeManager(object):
 
             _logger.info("Node manager initializing complete.")
 
+    async def _recover(self):
+        assert self._contracts is not None
+        assert self._task_system is not None
+
+        task_id = await self._contracts.task_contract.get_node_task(
+            self._contracts.account
+        )
+        if task_id == 0:
+            return
+        if await self._task_system.state_cache.has(task_id):
+            return
+
+        task = await self._contracts.task_contract.get_task(task_id=task_id)
+        round = task.selected_nodes.index(self._contracts.account)
+        state = models.TaskState(
+            task_id=task_id, round=round, status=models.TaskStatus.Pending
+        )
+
+        events = []
+        # task created
+        event = models.TaskCreated(
+            task_id=task_id,
+            creator=Web3.to_checksum_address(task.creator),
+            selected_node=self._contracts.account,
+            task_hash=Web3.to_hex(task.task_hash),
+            data_hash=Web3.to_hex(task.data_hash),
+            round=round,
+        )
+        events.append(event)
+
+        # has submitted result commitment
+        if round < len(task.commitments) and task.commitments[round] != bytes([0] * 32):
+            assert self.config.last_result is not None, (
+                f"Task {task_id} has submitted result commitment, but last result has not found in config."
+                " Please set the result in config file to rerun the task."
+            )
+            state.result = bytes.fromhex(self.config.last_result[2:])
+            event = models.TaskResultCommitmentsReady(task_id=task_id)
+            events.append(event)
+
+        # has disclosed
+        if round < len(task.results) and task.results[round] != b"":
+            # task is success
+            if task.result_node != "0x" + bytes([0] * 20).hex():
+                result = task.results[round]
+                event = models.TaskSuccess(
+                    task_id=task_id,
+                    result=Web3.to_hex(result),
+                    result_node=Web3.to_checksum_address(task.result_node),
+                )
+                state.result = result
+                state.result_node = task.result_node
+                events.append(event)
+        
+        for event in events:
+            await self._task_system.event_queue.put(event=event)
+        await self._task_system.state_cache.dump(state)
+
     async def _run(self):
         assert self._tg is None, "Node manager is running."
 
@@ -413,9 +506,13 @@ class NodeManager(object):
                     init_tg.start_soon(self._init)
 
                 assert self._contracts is not None
-                remote_status = await self._contracts.node_contract.get_node_status(self._contracts.account)
+                remote_status = await self._contracts.node_contract.get_node_status(
+                    self._contracts.account
+                )
                 local_status = models.convert_node_status(remote_status)
                 await self.node_state_manager.set_node_state(local_status)
+                
+                await self._recover()
 
                 assert self._watcher is not None
                 assert self._task_system is not None

@@ -166,6 +166,7 @@ class EventWatcher(object):
             if self._cache is not None:
                 await self._cache.set(from_block)
             start = from_block
+        start += 1
 
         def _should_stop(stop_event: Event, start: int):
             if stop_event.is_set():
@@ -195,7 +196,7 @@ class EventWatcher(object):
 
                         with fail_after(delay=5, shield=True):
                             if self._cache is not None:
-                                await self._cache.set(start + 1)
+                                await self._cache.set(start)
                     else:
                         await sleep(interval)
         finally:

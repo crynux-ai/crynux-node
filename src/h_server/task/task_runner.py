@@ -351,7 +351,7 @@ class InferenceTaskRunner(TaskRunner):
 
                 next_event = await to_thread.run_sync(run_local_task, cancellable=True)
                 self._state.status = models.TaskStatus.Executing
-                await self.queue.put(next_event)
+                await self.result_ready(next_event)
 
     async def result_ready(self, event: models.TaskResultReady):
         async with self.state_context():
@@ -360,17 +360,19 @@ class InferenceTaskRunner(TaskRunner):
                 self._state.status == models.TaskStatus.Executing
             ), "Task status is not executing when receive event TaskResultReady."
 
-            result, commitment, nonce = make_result_commitments(event.hashes)
-            waiter = await self.contracts.task_contract.submit_task_result_commitment(
-                task_id=self.task_id,
-                round=self._state.round,
-                commitment=commitment,
-                nonce=nonce,
-            )
-            await waiter.wait()
+            if len(self._state.result) == 0:
+                result, commitment, nonce = make_result_commitments(event.hashes)
+                waiter = await self.contracts.task_contract.submit_task_result_commitment(
+                    task_id=self.task_id,
+                    round=self._state.round,
+                    commitment=commitment,
+                    nonce=nonce,
+                )
+                await waiter.wait()
+                self._state.result = result
+            _logger.info(f"Task {self.task_id} result 0x{self._state.result.hex()}")
             self._state.status = models.TaskStatus.ResultUploaded
             self._state.files = event.files
-            self._state.result = result
 
     async def commitment_ready(self, event: models.TaskResultCommitmentsReady):
         async with self.state_context():
@@ -381,10 +383,13 @@ class InferenceTaskRunner(TaskRunner):
             assert (
                 len(self._state.result) > 0
             ), "Task result not found when receive event TaskResultCommitmentsReady."
-            waiter = await self.contracts.task_contract.disclose_task_result(
-                task_id=self.task_id, round=self._state.round, result=self._state.result
-            )
-            await waiter.wait()
+            if len(self._state.result_node) == 0:
+                waiter = await self.contracts.task_contract.disclose_task_result(
+                    task_id=self.task_id, round=self._state.round, result=self._state.result
+                )
+                await waiter.wait()
+                task = await self.contracts.task_contract.get_task(task_id=self.task_id)
+                self._state.result_node = task.result_node
             self._state.status = models.TaskStatus.Disclosed
 
         self.watcher.unwatch_event(self._commitment_watch_id)
@@ -398,6 +403,8 @@ class InferenceTaskRunner(TaskRunner):
 
             if event.result_node == self.contracts.account:
                 await self.relay.upload_task_result(self.task_id, self._state.files)
+                waiter = await self.contracts.task_contract.report_task_success(self.task_id, self._state.round)
+                await waiter.wait()
 
             self._state.status = models.TaskStatus.Success
 

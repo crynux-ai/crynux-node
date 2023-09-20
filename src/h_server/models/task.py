@@ -15,6 +15,7 @@ class ChainTask(BaseModel):
     nonces: List[bytes]
     results: List[bytes]
     result_disclosed_rounds: List[int]
+    result_node: str
 
 
 class TaskConfig(BaseModel):
@@ -69,3 +70,4 @@ class TaskState(BaseModel):
     status: TaskStatus
     files: List[str] = []
     result: bytes = b""
+    result_node: str = ""

@@ -1,3 +1,4 @@
+import secrets
 import os
 import shutil
 from io import BytesIO
@@ -115,7 +116,7 @@ async def node_contracts(
             token_contract_address=token_contract_address,
             node_contract_address=node_contract_address,
             task_contract_address=task_contract_address,
-            option=tx_option
+            option=tx_option,
         )
         amount = Web3.to_wei(1000, "ether")
         if (await contracts.token_contract.balance_of(contracts.account)) < amount:
@@ -343,6 +344,160 @@ async def test_node_manager(
             assert (
                 await n.node_state_manager.get_node_state()
             ).status == models.NodeStatus.Running
+
+        waits = [
+            await stop(c, n.node_state_manager, option=tx_option)
+            for c, n in zip(node_contracts, node_managers)
+        ]
+        for n in node_managers:
+            assert (
+                await n.node_state_manager.get_tx_state()
+            ).status == models.TxStatus.Pending
+        async with create_task_group() as sub_tg:
+            for w in waits:
+                sub_tg.start_soon(w)
+
+        for n in node_managers:
+            assert (
+                await n.node_state_manager.get_node_state()
+            ).status == models.NodeStatus.Stopped
+
+        for n in node_managers:
+            await n.finish()
+        tg.cancel_scope.cancel()
+
+
+async def partial_run_task(
+    config: Config,
+    node_managers: List[NodeManager],
+    node_contracts: List[Contracts],
+    relay: Relay,
+    tx_option,
+    stage: int,
+):
+    # start nodes
+    waits = [
+        await start(c, n.node_state_manager, option=tx_option)
+        for c, n in zip(node_contracts, node_managers)
+    ]
+    async with create_task_group() as sub_tg:
+        for w in waits:
+            sub_tg.start_soon(w)
+
+    for n in node_managers:
+        assert (
+            await n.node_state_manager.get_node_state()
+        ).status == models.NodeStatus.Running
+
+    # create task
+    task = models.RelayTaskInput(
+        task_id=1,
+        base_model="stable-diffusion-v1-5-pruned",
+        prompt="a mame_cat lying under the window, in anime sketch style, red lips, blush, black eyes, dashed outline, brown pencil outline",
+        lora_model="f4fab20c-4694-430e-8937-22cdb713da9",
+        task_config=TaskConfig(
+            image_width=512,
+            image_height=512,
+            lora_weight=100,
+            num_images=1,
+            seed=255728798,
+            steps=40,
+        ),
+        pose=PoseConfig(data_url="", pose_weight=100, preprocess=False),
+    )
+
+    task_hash = get_task_hash(task.task_config)
+    data_hash = get_task_data_hash(
+        base_model=task.base_model,
+        lora_model=task.lora_model,
+        prompt=task.prompt,
+        pose=task.pose,
+    )
+    waiter = await node_contracts[0].task_contract.create_task(
+        task_hash=task_hash, data_hash=data_hash, option=tx_option
+    )
+    receipt = await waiter.wait()
+
+    events = await node_contracts[0].task_contract.get_events(
+        "TaskCreated",
+        from_block=receipt["blockNumber"],
+    )
+    event = events[0]
+    task_id = event["args"]["taskId"]
+    task.task_id = task_id
+    await relay.create_task(task=task)
+
+    round_map = {
+        event["args"]["selectedNode"]: event["args"]["round"] for event in events
+    }
+
+    result = bytes.fromhex("0102030405060708")
+    if 1 <= stage:
+        # submit task result commitment
+        for c in node_contracts:
+            nonce = secrets.token_bytes(32)
+            commitment = Web3.solidity_keccak(["bytes", "bytes32"], [result, nonce])
+
+            waiter = await c.task_contract.submit_task_result_commitment(
+                task_id, round_map[c.account], commitment, nonce, option=tx_option
+            )
+            receipt = await waiter.wait()
+        events = await node_contracts[0].task_contract.get_events(
+            "TaskResultCommitmentsReady", from_block=receipt["blockNumber"]
+        )
+        assert len(events) == 1
+        event = events[0]
+        assert event["args"]["taskId"] == task_id
+        config.last_result = "0x0102030405060708"
+
+    if 2 <= stage:
+        # disclose task
+        from_block = receipt["blockNumber"]
+        for c in node_contracts:
+            waiter = await c.task_contract.disclose_task_result(
+                task_id=task_id,
+                round=round_map[c.account],
+                result=result,
+                option=tx_option,
+            )
+            receipt = await waiter.wait()
+        to_block = receipt["blockNumber"]
+        events = await node_contracts[0].task_contract.get_events(
+            "TaskSuccess", from_block=from_block, to_block=to_block
+        )
+        assert len(events) == 1
+        event = events[0]
+        assert event["args"]["taskId"] == task_id
+        assert event["args"]["result"] == result
+
+
+@pytest.mark.parametrize("stage", [0, 1, 2])
+async def test_node_manager_with_recover(
+    config: Config,
+    node_managers: List[NodeManager],
+    node_contracts: List[Contracts],
+    relay: Relay,
+    tx_option,
+    stage: int,
+):
+    await partial_run_task(
+        config, node_managers, node_contracts, relay, tx_option, stage
+    )
+    async with create_task_group() as tg:
+        for n in node_managers:
+            tg.start_soon(n.run)
+
+        for n in node_managers:
+            assert (
+                await n.node_state_manager.get_node_state()
+            ).status == models.NodeStatus.Running
+
+        with BytesIO() as dst:
+            await relay.get_result(task_id=1, image_num=0, dst=dst)
+            dst.seek(0)
+            img = Image.open(dst)
+            assert img.width == 512
+            assert img.height == 512
 
         waits = [
             await stop(c, n.node_state_manager, option=tx_option)
