@@ -6,13 +6,13 @@ ethereum:
   privkey: ""
   provider: "https://block-node.crynux.ai/rpc"
   chain_id: 42
-  gas: 4294967
+  gas: 42949670
   gas_price: 1
 
   contract:
-    token: "0x945e233B955B4b0Ae7bA080175040f690a4ceD3d"
-    node: "0x62519DEAF228E97D2CA9711dB285a13bF30BC02a"
-    task: "0x03be82e2E3F1Df6016c6974DBb7A500355d3874D"
+    token: "0x3FD95F125b6Db14D1662D250999DC63a679A70E5"
+    node: "0x49F07163a04Ee3Bf9D95304C14976ea54e91a272"
+    task: "0x619BaC4599BEb465e879Ac13e6ceEE7090bFC74a"
 
 task_dir: tasks
 db: sqlite+aiosqlite:///db/server.db
