@@ -2,7 +2,7 @@ import json
 from typing import TYPE_CHECKING, Callable, Optional, TypeVar, cast
 
 import importlib_resources as impresources
-from anyio import Lock
+from anyio import Lock, get_cancelled_exc_class
 from eth_typing import ChecksumAddress
 from hexbytes import HexBytes
 from typing_extensions import ParamSpec
@@ -45,17 +45,23 @@ class TxWaiter(object):
             self.tx_hash, self.timeout, self.interval
         )
         if not receipt["status"]:
-            tx = await self.w3.eth.get_transaction(self.tx_hash)
             try:
+                tx = await self.w3.eth.get_transaction(self.tx_hash)
                 await self.w3.eth.call(
                     {
                         "to": tx["to"],
                         "from": tx["from"],
                         "value": tx["value"],
                         "data": tx["input"],
+                        "chainId": tx["chainId"],
+                        "gas": tx["gas"],
+                        "gasPrice": tx["gasPrice"],
                     },
                     tx["blockNumber"] - 1,
                 )
+                raise TxRevertedError(method=self.method, reason="Unknown")
+            except (TxRevertedError, get_cancelled_exc_class()):
+                raise
             except Exception as e:
                 reason = str(e)
                 raise TxRevertedError(method=self.method, reason=reason)
@@ -106,7 +112,8 @@ class ContractWrapperBase(object):
             ).transact(  # type: ignore
                 option
             )
-        receipt = await self.wait_for_receipt("deploy", tx_hash)
+        waiter = TxWaiter(self.w3, "deploy", tx_hash=tx_hash)
+        receipt = await waiter.wait()
         address = receipt["contractAddress"]
         assert address is not None, "Deployed contract address is None"
         self._address = address
@@ -124,33 +131,6 @@ class ContractWrapperBase(object):
     def contract(self) -> AsyncContract:
         assert self._contract is not None, "Contract has not been deployed"
         return self._contract
-
-    async def wait_for_receipt(
-        self,
-        method: str,
-        tx_hash: HexBytes,
-        timeout: float = 120,
-        interval: float = 0.1,
-    ):
-        receipt = await self.w3.eth.wait_for_transaction_receipt(
-            tx_hash, timeout, interval
-        )
-        if not receipt["status"]:
-            tx = await self.w3.eth.get_transaction(tx_hash)
-            try:
-                await self.w3.eth.call(
-                    {
-                        "to": tx["to"],
-                        "from": tx["from"],
-                        "value": tx["value"],
-                        "data": tx["input"],
-                    },
-                    tx["blockNumber"] - 1,
-                )
-            except Exception as e:
-                reason = str(e)
-                raise TxRevertedError(method=method, reason=reason)
-        return receipt
 
     async def _transaction_call(
         self,
