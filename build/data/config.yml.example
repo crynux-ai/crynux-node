@@ -10,9 +10,9 @@ ethereum:
   gas_price: 1
 
   contract:
-    token: "0x96183Fc94C2ACF309e60B548d6D93eee02b46Eb2"
-    node: "0x9f445eaf2227C230556B2F4C8A7bFDF48b2476d6"
-    task: "0xE15C43088402AE6Ed644FF02423dB4022A72c416"
+    token: "0x945e233B955B4b0Ae7bA080175040f690a4ceD3d"
+    node: "0x62519DEAF228E97D2CA9711dB285a13bF30BC02a"
+    task: "0x03be82e2E3F1Df6016c6974DBb7A500355d3874D"
 
 task_dir: tasks
 db: sqlite+aiosqlite:///db/server.db
