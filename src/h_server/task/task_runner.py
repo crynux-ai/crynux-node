@@ -41,7 +41,7 @@ class TaskRunner(ABC):
         self.distributed = distributed
 
     @abstractmethod
-    async def init(self):
+    async def init(self) -> bool:
         ...
 
     @abstractmethod
@@ -169,19 +169,23 @@ class InferenceTaskRunner(TaskRunner):
             filter_args={"taskId": self.task_id},
         )
 
-    async def init(self):
+    async def init(self) -> bool:
         assert self._state is None, "The task runner has already been initialized."
 
-        if await self.cache.has(self.task_id):
-            state = await self.cache.load(self.task_id)
-            self._state = state
-        else:
-            self._state = models.TaskState(
-                task_id=self.task_id,
-                round=0,
-                status=models.TaskStatus.Pending,
-            )
-            await self.cache.dump(self._state)
+        try:
+            if await self.cache.has(self.task_id):
+                state = await self.cache.load(self.task_id)
+                self._state = state
+            else:
+                self._state = models.TaskState(
+                    task_id=self.task_id,
+                    round=0,
+                    status=models.TaskStatus.Pending,
+                )
+                await self.cache.dump(self._state)
+            return True
+        except KeyError:
+            return False
 
     @asynccontextmanager
     async def state_context(self):
@@ -198,21 +202,29 @@ class InferenceTaskRunner(TaskRunner):
         round = self._state.round
         self._state.status = models.TaskStatus.Error
 
-        try:
-            waiter = await self.contracts.task_contract.report_task_error(
-                self.task_id, round
-            )
-            await waiter.wait()
-            await self.cleanup()
-        except TxRevertedError as e:
-            _logger.exception(e)
-            _logger.error("Task report error being reverted")
-            # cannot report error, need retry
-            raise TaskError(str(e), TaskErrorSource.Contracts, retry=True)
-        except Exception as e:
-            _logger.exception(e)
-            _logger.error("Task report error unexpected error")
-            raise TaskError(str(e), TaskErrorSource.Unknown, retry=True)
+        retry_count = 3
+
+        while True:
+            try:
+                waiter = await self.contracts.task_contract.report_task_error(
+                    self.task_id, round
+                )
+                await waiter.wait()
+                await self.cleanup()
+                return
+            except TxRevertedError as e:
+                _logger.exception(e)
+                _logger.error("Task report error being reverted")
+                # cannot report error, need retry
+                raise TaskError(str(e), TaskErrorSource.Contracts, retry=False)
+            except Exception as e:
+                _logger.exception(e)
+                _logger.error("Task report error unexpected error")
+                if retry_count > 0:
+                    retry_count -= 1
+                    continue
+                else:
+                    raise TaskError(str(e), TaskErrorSource.Unknown, retry=False)
 
     @asynccontextmanager
     async def report_error_context(self):
@@ -460,19 +472,23 @@ class MockTaskRunner(TaskRunner):
         self._state: Optional[models.TaskState] = None
         self._lock: Optional[Lock] = None
 
-    async def init(self):
+    async def init(self) -> bool:
         assert self._state is None, "The task runner has already been initialized."
 
         try:
-            state = await self.cache.load(self.task_id)
-            self._state = state
+            if await self.cache.has(self.task_id):
+                state = await self.cache.load(self.task_id)
+                self._state = state
+            else:
+                self._state = models.TaskState(
+                    task_id=self.task_id,
+                    round=0,
+                    status=models.TaskStatus.Pending,
+                )
+                await self.cache.dump(self._state)
+            return True
         except KeyError:
-            self._state = models.TaskState(
-                task_id=self.task_id,
-                round=0,
-                status=models.TaskStatus.Pending,
-            )
-            await self.cache.dump(self._state)
+            return False
 
     @asynccontextmanager
     async def state_context(self):

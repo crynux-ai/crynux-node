@@ -67,18 +67,3 @@ def upload_result(result_url: str, images: List[str]):
         data={"hashes": hashes},
     )
     resp.raise_for_status()
-
-
-def print_gpu_info(log_file: TextIO):
-    torch = importlib.import_module("torch")
-
-    gpu_info = {
-        "cuda_available": torch.cuda.is_available(),
-        "device_count": torch.cuda.device_count(),
-        "current_device": torch.cuda.current_device(),
-    }
-
-    if gpu_info["cuda_available"]:
-        gpu_info["device_name"] = torch.cuda.get_device_name(gpu_info["current_device"])
-
-    print(gpu_info, file=log_file)

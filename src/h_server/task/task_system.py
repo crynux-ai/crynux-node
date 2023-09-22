@@ -24,7 +24,7 @@ class TaskSystem(object):
         queue: EventQueue,
         distributed: bool = False,
         retry_delay: float = 5,
-        task_name: str = "sd_lora_inference"
+        task_name: str = "sd_lora_inference",
     ) -> None:
         self._state_cache = state_cache
         self._queue = queue
@@ -72,9 +72,16 @@ class TaskSystem(object):
                             task_name=self._task_name,
                             distributed=self._distributed,
                         )
-                        await runner.init()
-                        self._runners[task_id] = runner
-                        _logger.debug(f"Create task runner for {event.task_id}")
+                        valid = await runner.init()
+                        if valid:
+                            self._runners[task_id] = runner
+                            _logger.debug(f"Create task runner for {event.task_id}")
+                        else:
+                            _logger.debug(
+                                f"Cannot process event {event.kind} of task {event.task_id}."
+                                " Perhaps the task has finished by error."
+                            )
+                            continue
 
                     async def _process_event(ack_id: int, event: TaskEvent):
                         try:
@@ -105,14 +112,21 @@ class TaskSystem(object):
                                 with fail_after(5, shield=True):
                                     await self.event_queue.ack(ack_id=ack_id)
                                     del self._runners[task_id]
-                                    _logger.debug(f"Task {event.task_id} finished with error")
+                                    _logger.debug(
+                                        f"Task {event.task_id} finished with error"
+                                    )
                         except Exception as e:
                             _logger.exception(e)
                             _logger.error(
                                 f"Task {event.task_id} process event {event.kind} unknown error."
                             )
                             with fail_after(5, shield=True):
-                                await self.event_queue.no_ack(ack_id)
+                                # a non-TaskError exception means the task is finished with error
+                                await self.event_queue.ack(ack_id=ack_id)
+                                del self._runners[task_id]
+                                _logger.debug(
+                                    f"Task {event.task_id} finished with error"
+                                )
 
                     tg.start_soon(_process_event, ack_id, event)
         except get_cancelled_exc_class() as e:
