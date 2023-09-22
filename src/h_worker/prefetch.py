@@ -58,17 +58,15 @@ def prefetch_base_model(
         _logger.info(f"Base model {base_model} download finished")
 
 huggingface_script = """
-import os
-from transformers import CLIPTextModel, CLIPTokenizer
+from huggingface_hub import snapshot_download
 
-try:
-    os.environ["TRANSFORMERS_OFFLINE"] = "1"
-    CLIPTokenizer.from_pretrained('openai/clip-vit-large-patch14')
-    CLIPTextModel.from_pretrained('openai/clip-vit-large-patch14')
-except OSError:
-    os.environ["TRANSFORMERS_OFFLINE"] = "0"
-    CLIPTokenizer.from_pretrained('openai/clip-vit-large-patch14')
-    CLIPTextModel.from_pretrained('openai/clip-vit-large-patch14')
+snapshot_download(
+    "openai/clip-vit-large-patch14",
+    cache_dir="huggingface",
+    resume_download=True,
+    local_files_only=False,
+    allow_patterns=["*.json", "*.txt", "pytorch_model.bin"]
+)
 """
 
 def prefetch_huggingface(huggingface_cache_dir: str, script_dir: str):
