@@ -125,7 +125,6 @@ def sd_lora_inference(
     )
 
     with open(log_file, mode="w", encoding="utf-8") as log_file:
-        utils.print_gpu_info(log_file)
         subprocess.run(
             args,
             stdout=log_file,
