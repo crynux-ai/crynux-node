@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List
 
 import sqlalchemy as sa
 
@@ -16,7 +16,6 @@ class DbTaskStateCache(TaskStateCache):
             q = (
                 sa.select(db_models.TaskState)
                 .where(db_models.TaskState.task_id == task_id)
-                .where(db_models.TaskState.deleted_at.is_(None))
             )
             state = (await sess.scalars(q)).one_or_none()
             if state is not None:
@@ -48,12 +47,11 @@ class DbTaskStateCache(TaskStateCache):
                     result=task_state.result,
                 )
                 sess.add(state)
-            elif state.deleted_at is None:
+            else:
                 state.round = task_state.round
                 state.status = task_state.status
+                state.files = ",".join(task_state.files)
                 state.result = task_state.result
-            else:
-                raise KeyError(f"Task state of {task_id} has been deleted.")
             await sess.commit()
 
     async def has(self, task_id: int) -> bool:
@@ -62,24 +60,13 @@ class DbTaskStateCache(TaskStateCache):
                 db_models.TaskState.task_id == task_id
             )
             state = (await sess.scalars(q)).one_or_none()
-            return state is not None and state.deleted_at is None
-
-    async def delete(self, task_id: int):
-        async with db.session_scope() as sess:
-            q = sa.select(db_models.TaskState).where(
-                db_models.TaskState.task_id == task_id
-            )
-            state = (await sess.scalars(q)).one_or_none()
-            if state is not None and state.deleted_at is None:
-                state.deleted_at = datetime.now()
-            await sess.commit()
+            return state is not None
 
     async def count(
         self,
         start: Optional[datetime] = None,
         end: Optional[datetime] = None,
-        deleted: Optional[bool] = None,
-        status: Optional[TaskStatus] = None
+        status: Optional[List[TaskStatus]] = None
     ):
         async with db.session_scope() as sess:
             q = sa.select(sa.func.count(db_models.TaskState.id))
@@ -87,13 +74,8 @@ class DbTaskStateCache(TaskStateCache):
                 q = q.where(db_models.TaskState.updated_at >= start)
             if end is not None:
                 q = q.where(db_models.TaskState.updated_at < end)
-            if deleted is not None:
-                if deleted:
-                    q = q.where(db_models.TaskState.deleted_at.is_not(None))
-                else:
-                    q = q.where(db_models.TaskState.deleted_at.is_(None))
             if status is not None:
-                q = q.where(db_models.TaskState.status == status)
+                q = q.where(db_models.TaskState.status.in_(status))
 
             n = (await sess.execute(q)).scalar_one()
             return n

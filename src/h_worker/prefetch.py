@@ -62,7 +62,7 @@ from huggingface_hub import snapshot_download
 
 snapshot_download(
     "openai/clip-vit-large-patch14",
-    cache_dir="huggingface",
+    cache_dir="{cache_dir}",
     resume_download=True,
     local_files_only=False,
     allow_patterns=["*.json", "*.txt", "pytorch_model.bin"]
@@ -76,8 +76,10 @@ def prefetch_huggingface(huggingface_cache_dir: str, script_dir: str):
         exe = os.path.join(worker_venv, "bin", "python")
 
     script_file = os.path.abspath(os.path.join(script_dir, "prefetch.py"))
+    cache_dir = os.path.join(huggingface_cache_dir, "hub")
+    cache_dir = os.path.abspath(cache_dir)
     with open(script_file, mode="w", encoding="utf-8") as f:
-        f.write(huggingface_script)
+        f.write(huggingface_script.format(cache_dir=cache_dir))
 
     try:
         args = [exe, script_file]

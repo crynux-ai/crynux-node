@@ -86,13 +86,15 @@ async def get_task_stats(
     task_state_cache: TaskStateCacheDep,
     state_manager: NodeStateManagerDep
 ):
-    if task_state_cache is None or (await state_manager.get_node_state()).status == NodeStatus.Stopped:
+    node_status = (await state_manager.get_node_state()).status
+    if task_state_cache is None or node_status not in [NodeStatus.Running, NodeStatus.PendingPause, NodeStatus.PendingStop]:
         return TaskStats(
             status="stopped",
             num_today=0,
             num_total=0
         )
-    running_task_count = await task_state_cache.count(deleted=False)
+    running_status = [TaskStatus.Pending, TaskStatus.Executing, TaskStatus.ResultUploaded, TaskStatus.Disclosed]
+    running_task_count = await task_state_cache.count(status=running_status)
     if running_task_count > 0:
         status = "running"
     else:
@@ -102,9 +104,9 @@ async def get_task_stats(
     today_start = now - timedelta(days=1)
 
     num_today = await task_state_cache.count(
-        start=today_start, deleted=True, status=TaskStatus.Success
+        start=today_start, status=[TaskStatus.Success]
     )
 
-    num_total = await task_state_cache.count(deleted=True, status=TaskStatus.Success)
+    num_total = await task_state_cache.count(status=[TaskStatus.Success])
 
     return TaskStats(status=status, num_today=num_today, num_total=num_total)
