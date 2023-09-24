@@ -45,7 +45,7 @@ def sd_lora_inference(
 
     args = [
         exe,
-        os.path.join(local_config["script_dir"], "sd-scripts/gen_img_diffusers.py"),
+        os.path.abspath(os.path.join(local_config["script_dir"], "sd-scripts/gen_img_diffusers.py"))
     ]
 
     base_model_path = os.path.abspath(

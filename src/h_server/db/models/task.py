@@ -22,10 +22,6 @@ class TaskState(Base, BaseMixin):
         sa.LargeBinary, nullable=False, index=False, default=b""
     )
 
-    deleted_at: Mapped[Optional[datetime]] = mapped_column(
-        sa.DateTime, default=None, nullable=True, index=False
-    )
-
 
 class TaskEvent(Base, BaseMixin):
     __tablename__ = "task_events"

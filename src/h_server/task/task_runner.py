@@ -201,6 +201,7 @@ class InferenceTaskRunner(TaskRunner):
 
         round = self._state.round
         self._state.status = models.TaskStatus.Error
+        await self.cache.dump(self._state)
 
         retry_count = 3
 
@@ -449,7 +450,6 @@ class InferenceTaskRunner(TaskRunner):
 
         with fail_after(5, shield=True):
             await to_thread.run_sync(delete_result_files, self._state.files)
-            await self.cache.delete(task_id=self.task_id)
 
 
 class MockTaskRunner(TaskRunner):
@@ -574,5 +574,3 @@ class MockTaskRunner(TaskRunner):
     async def cleanup(self):
         assert self._state is not None
         self._state = None
-        with fail_after(5, shield=True):
-            await self.cache.delete(task_id=self.task_id)
