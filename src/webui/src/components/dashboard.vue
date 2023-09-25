@@ -1,7 +1,12 @@
 <script setup>
-import { computed, h, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
-import { PauseCircleOutlined, LogoutOutlined, PlayCircleOutlined } from '@ant-design/icons-vue'
-import { Grid } from 'ant-design-vue'
+import { computed, createVNode, h, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
+import {
+  PauseCircleOutlined,
+  LogoutOutlined,
+  PlayCircleOutlined,
+  ExclamationCircleOutlined
+} from '@ant-design/icons-vue'
+import { Grid, Modal } from 'ant-design-vue'
 import EditAccount from './edit-account.vue'
 
 import systemAPI from '../api/v1/system'
@@ -124,6 +129,39 @@ const updateSystemInfo = async () => {
 }
 
 const sendNodeAction = async (action) => {
+  if (isTxSending.value) {
+    return
+  }
+
+  if (action === 'pause') {
+    await sendNodeActionAfterConfirmation(
+      action,
+      'Are you sure to pause the node? You could resume the running later.'
+    )
+  } else if (action === 'stop') {
+    await sendNodeActionAfterConfirmation(
+      action,
+      'Are you sure to stop the node? The staked tokens will be returned. You could start the node later.'
+    )
+  } else {
+    await doSendNodeAction(action)
+  }
+}
+
+const sendNodeActionAfterConfirmation = async (action, message) => {
+  Modal.confirm({
+    title: 'Confirm node operation',
+    icon: createVNode(ExclamationCircleOutlined),
+    content: message,
+    onOk() {
+      return doSendNodeAction(action)
+    },
+
+    onCancel() {}
+  })
+}
+
+const doSendNodeAction = async (action) => {
   isTxSending.value = true
   try {
     await nodeAPI.sendNodeAction(action)
@@ -132,6 +170,7 @@ const sendNodeAction = async (action) => {
     isTxSending.value = false
   }
 }
+
 const useBreakpoint = Grid.useBreakpoint
 const screens = useBreakpoint()
 
@@ -173,16 +212,16 @@ const topRowClasses = computed(() => {
         class="top-alert"
         v-if="nodeStatus.tx_status === nodeAPI.TX_STATUS_PENDING"
       ></a-alert>
-        <a-alert
-            message="Node will stop after finishing the current task"
-            class="top-alert"
-            v-if="nodeStatus.status === nodeAPI.NODE_STATUS_PENDING_STOP"
-        ></a-alert>
-        <a-alert
-            message="Node will pause after finishing the current task"
-            class="top-alert"
-            v-if="nodeStatus.status === nodeAPI.NODE_STATUS_PENDING_PAUSE"
-        ></a-alert>
+      <a-alert
+        message="Node will stop after finishing the current task"
+        class="top-alert"
+        v-if="nodeStatus.status === nodeAPI.NODE_STATUS_PENDING_STOP"
+      ></a-alert>
+      <a-alert
+        message="Node will pause after finishing the current task"
+        class="top-alert"
+        v-if="nodeStatus.status === nodeAPI.NODE_STATUS_PENDING_PAUSE"
+      ></a-alert>
       <a-alert
         type="error"
         message="Not enough ETH in the wallet. Please transfer at least 0.01 ETH to the wallet for the gas fee."
@@ -256,15 +295,21 @@ const topRowClasses = computed(() => {
               :percent="100"
               :stroke-color="'cornflowerblue'"
               v-if="
-                [nodeAPI.NODE_STATUS_PENDING_PAUSE, nodeAPI.NODE_STATUS_PENDING_STOP, nodeAPI.NODE_STATUS_INITIALIZING].indexOf(
-                  nodeStatus.status
-                ) !== -1
+                [
+                  nodeAPI.NODE_STATUS_PENDING_PAUSE,
+                  nodeAPI.NODE_STATUS_PENDING_STOP,
+                  nodeAPI.NODE_STATUS_INITIALIZING
+                ].indexOf(nodeStatus.status) !== -1
               "
             >
               <template #format="percent">
                 <span style="font-size: 14px; color: cornflowerblue">
-                    <span v-if="nodeStatus.status === nodeAPI.NODE_STATUS_PENDING_PAUSE">Pausing</span>
-                  <span v-if="nodeStatus.status === nodeAPI.NODE_STATUS_PENDING_STOP">Stopping</span>
+                  <span v-if="nodeStatus.status === nodeAPI.NODE_STATUS_PENDING_PAUSE"
+                    >Pausing</span
+                  >
+                  <span v-if="nodeStatus.status === nodeAPI.NODE_STATUS_PENDING_STOP"
+                    >Stopping</span
+                  >
                   <span v-if="nodeStatus.status === nodeAPI.NODE_STATUS_INITIALIZING"
                     >Preparing</span
                   >

@@ -18,6 +18,9 @@ const showModal = () => {
 
 const hideModal = () => {
   modalVisible.value = false
+  privateKeyInput.value = ''
+  keystoreInput.value = ''
+  keystorePassphraseInput.value = ''
 }
 
 const readyToSubmit = computed(() => {
