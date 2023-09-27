@@ -2,24 +2,27 @@ import logging
 import os.path
 import shutil
 from abc import ABC, abstractmethod
-from contextlib import asynccontextmanager, contextmanager
+from contextlib import asynccontextmanager
 from typing import List, Optional
 
-import celery.exceptions as celery_exceptions
 from anyio import Lock, fail_after, get_cancelled_exc_class, to_thread
 from celery.result import AsyncResult
+from tenacity import (AsyncRetrying, before_sleep_log, retry,
+                      retry_if_not_exception_type, stop_after_attempt,
+                      wait_exponential, wait_fixed)
+from web3.types import EventData
 
 from h_server import models
-from h_server.config import TaskConfig as LocalConfig, get_config
-from h_server.event_queue import EventQueue
+from h_server.config import TaskConfig as LocalConfig
+from h_server.config import get_config
 from h_server.contracts import Contracts, TxRevertedError, get_contracts
+from h_server.event_queue import EventQueue
 from h_server.relay import Relay, RelayError, get_relay
 from h_server.watcher import EventWatcher, get_watcher
+from h_worker.task.error import TaskError
 
-from .exceptions import TaskError, TaskErrorSource, TaskFailure
 from .state_cache import TaskStateCache
 from .utils import make_result_commitments
-from web3.types import EventData
 
 _logger = logging.getLogger(__name__)
 
@@ -49,49 +52,6 @@ class TaskRunner(ABC):
         ...
 
 
-@contextmanager
-def wrap_task_error():
-    try:
-        yield
-    except get_cancelled_exc_class() as e:
-        raise e
-    except AssertionError as e:
-        _logger.exception(e)
-        _logger.error("Task assert error")
-        raise TaskError(str(e), TaskErrorSource.Unknown, retry=False)
-    except RelayError as e:
-        retry = e.status_code == 400 and (
-            "Task not found" in e.message or "Task not ready" in e.message
-        )
-        if not retry:
-            _logger.exception(e)
-            _logger.error("Task relay error")
-        else:
-            _logger.error("Retry for task relay error")
-        raise TaskError(str(e), TaskErrorSource.Relay, retry=retry)
-    except TxRevertedError as e:
-        _logger.exception(e)
-        _logger.error("Task contracts error")
-        raise TaskError(str(e), TaskErrorSource.Contracts, retry=False)
-    except celery_exceptions.CeleryError as e:
-        retry = isinstance(e, celery_exceptions.TimeoutError) or isinstance(
-            e, celery_exceptions.Retry
-        )
-        if not retry:
-            _logger.exception(e)
-            _logger.error("Task celery error")
-        else:
-            _logger.error("Retry for celery error")
-        raise TaskError(str(e), TaskErrorSource.Celery, retry=retry)
-    except TaskFailure as e:
-        _logger.error("Task celery execution failed")
-        raise TaskError(str(e), TaskErrorSource.Celery, retry=True)
-    except Exception as e:
-        _logger.exception(e)
-        _logger.error("Task unknown error")
-        raise TaskError(str(e), TaskErrorSource.Unknown, retry=True)
-
-
 class InferenceTaskRunner(TaskRunner):
     def __init__(
         self,
@@ -104,7 +64,7 @@ class InferenceTaskRunner(TaskRunner):
         relay: Optional[Relay] = None,
         watcher: Optional[EventWatcher] = None,
         local_config: Optional[LocalConfig] = None,
-        retry_count: Optional[int] = 5,
+        retry_count: int = 5,
     ) -> None:
         super().__init__(
             task_id=task_id,
@@ -139,7 +99,6 @@ class InferenceTaskRunner(TaskRunner):
         else:
             self.local_config = None
 
-        # Error retry count limit. None means no limit.
         self._retry_count = retry_count
 
         self._state: Optional[models.TaskState] = None
@@ -190,62 +149,30 @@ class InferenceTaskRunner(TaskRunner):
     @asynccontextmanager
     async def state_context(self):
         try:
-            yield
+            assert self._state is not None, "The task runner has not been initialized."
+            yield self._state
         finally:
             if self._state is not None:
                 with fail_after(5, shield=True):
                     await self.cache.dump(task_state=self._state)
 
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_fixed(10),
+        retry=retry_if_not_exception_type(TxRevertedError),
+        before_sleep=before_sleep_log(_logger, logging.ERROR, exc_info=True),
+        reraise=True,
+    )
     async def _report_error(self):
-        assert self._state is not None, "The task runner has not been initialized."
+        async with self.state_context() as state:
+            round = state.round
+            state.status = models.TaskStatus.Error
 
-        round = self._state.round
-        self._state.status = models.TaskStatus.Error
-        await self.cache.dump(self._state)
-
-        retry_count = 3
-
-        while True:
-            try:
-                waiter = await self.contracts.task_contract.report_task_error(
-                    self.task_id, round
-                )
-                await waiter.wait()
-                await self.cleanup()
-                return
-            except TxRevertedError as e:
-                _logger.exception(e)
-                _logger.error("Task report error being reverted")
-                # cannot report error, need retry
-                raise TaskError(str(e), TaskErrorSource.Contracts, retry=False)
-            except Exception as e:
-                _logger.exception(e)
-                _logger.error("Task report error unexpected error")
-                if retry_count > 0:
-                    retry_count -= 1
-                    continue
-                else:
-                    raise TaskError(str(e), TaskErrorSource.Unknown, retry=False)
-
-    @asynccontextmanager
-    async def report_error_context(self):
-        try:
-            yield
-        except get_cancelled_exc_class() as e:
-            raise
-        except TaskError as e:
-            # limit error retry count
-            if self._retry_count is not None and e.retry:
-                if self._retry_count == 0:
-                    e.retry = False
-                else:
-                    self._retry_count -= 1
-            if not e.retry:
-                await self._report_error()
-            raise e
-        except Exception as e:
-            await self._report_error()
-            raise e
+        waiter = await self.contracts.task_contract.report_task_error(
+            self.task_id, round
+        )
+        await waiter.wait()
+        await self.cleanup()
 
     @property
     def lock(self) -> Lock:
@@ -254,41 +181,54 @@ class InferenceTaskRunner(TaskRunner):
         return self._lock
 
     async def process_event(self, event: models.TaskEvent):
-        async with self.report_error_context():
-            with wrap_task_error():
-                async with self.lock:
-                    _logger.debug(f"Process event {event}")
-                    if event.kind == "TaskCreated":
-                        assert isinstance(event, models.TaskCreated)
-                        await self.task_created(event)
-                        return False
-                    elif event.kind == "TaskResultReady":
-                        assert isinstance(event, models.TaskResultReady)
-                        await self.result_ready(event)
-                        return False
-                    elif event.kind == "TaskResultCommitmentsReady":
-                        assert isinstance(event, models.TaskResultCommitmentsReady)
-                        await self.commitment_ready(event)
-                        return False
-                    elif event.kind == "TaskSuccess":
-                        assert isinstance(event, models.TaskSuccess)
-                        await self.task_success(event)
-                        return True
-                    elif event.kind == "TaskAborted":
-                        assert isinstance(event, models.TaskAborted)
-                        await self.task_aborted(event)
-                        return True
-                    else:
-                        raise ValueError(f"Unknown event kind {event.kind}")
+        try:
+            async for attemp in AsyncRetrying(
+                stop=stop_after_attempt(self._retry_count),
+                wait=wait_exponential(multiplier=3, max=60),
+                retry=retry_if_not_exception_type((TaskError, AssertionError)),
+                before_sleep=before_sleep_log(_logger, logging.ERROR, exc_info=True),
+                reraise=True,
+            ):
+                with attemp:
+                    async with self.lock:
+                        _logger.debug(f"Process event {event}")
+                        if event.kind == "TaskCreated":
+                            assert isinstance(event, models.TaskCreated)
+                            await self.task_created(event)
+                            return False
+                        elif event.kind == "TaskResultReady":
+                            assert isinstance(event, models.TaskResultReady)
+                            await self.result_ready(event)
+                            return False
+                        elif event.kind == "TaskResultCommitmentsReady":
+                            assert isinstance(event, models.TaskResultCommitmentsReady)
+                            await self.commitment_ready(event)
+                            return False
+                        elif event.kind == "TaskSuccess":
+                            assert isinstance(event, models.TaskSuccess)
+                            await self.task_success(event)
+                            return True
+                        elif event.kind == "TaskAborted":
+                            assert isinstance(event, models.TaskAborted)
+                            await self.task_aborted(event)
+                            return True
+                        else:
+                            raise ValueError(f"Unknown event kind {event.kind}")
+        except TaskError as e:
+            _logger.exception(e)
+            _logger.error("Task error, report error to the chain.")
+            with fail_after(delay=60, shield=True):
+                await self._report_error()
+            return True
+
 
     async def task_created(self, event: models.TaskCreated):
-        async with self.state_context():
-            assert self._state is not None, "The task runner has not been initialized."
+        async with self.state_context() as state:
             assert (
-                self._state.status == models.TaskStatus.Pending
+                state.status == models.TaskStatus.Pending
             ), "Task status is not pending when receive event TaskCreated."
 
-            self._state.round = event.round
+            state.round = event.round
 
             task = await self.relay.get_task(event.task_id)
 
@@ -313,16 +253,10 @@ class InferenceTaskRunner(TaskRunner):
                         self.task_name,
                         kwargs=kwargs,
                     )
-                    try:
-                        res.get()
-                    except celery_exceptions.CeleryError:
-                        raise
-                    except Exception as e:
-                        _logger.exception(e)
-                        raise TaskFailure(str(e))
+                    res.get()
 
                 await to_thread.run_sync(run_distributed_task, cancellable=True)
-                self._state.status = models.TaskStatus.Executing
+                state.status = models.TaskStatus.Executing
 
             else:
 
@@ -363,71 +297,71 @@ class InferenceTaskRunner(TaskRunner):
                     )
 
                 next_event = await to_thread.run_sync(run_local_task, cancellable=True)
-                self._state.status = models.TaskStatus.Executing
+                state.status = models.TaskStatus.Executing
                 await self.result_ready(next_event)
 
     async def result_ready(self, event: models.TaskResultReady):
-        async with self.state_context():
-            assert self._state is not None, "The task runner has not been initialized."
+        async with self.state_context() as state:
             assert (
-                self._state.status == models.TaskStatus.Executing
+                state.status == models.TaskStatus.Executing
             ), "Task status is not executing when receive event TaskResultReady."
 
-            if len(self._state.result) == 0:
+            if len(state.result) == 0:
                 result, commitment, nonce = make_result_commitments(event.hashes)
-                waiter = await self.contracts.task_contract.submit_task_result_commitment(
-                    task_id=self.task_id,
-                    round=self._state.round,
-                    commitment=commitment,
-                    nonce=nonce,
+                waiter = (
+                    await self.contracts.task_contract.submit_task_result_commitment(
+                        task_id=self.task_id,
+                        round=state.round,
+                        commitment=commitment,
+                        nonce=nonce,
+                    )
                 )
                 await waiter.wait()
-                self._state.result = result
-            _logger.info(f"Task {self.task_id} result 0x{self._state.result.hex()}")
-            self._state.status = models.TaskStatus.ResultUploaded
-            self._state.files = event.files
+                state.result = result
+            _logger.info(f"Task {self.task_id} result 0x{state.result.hex()}")
+            state.status = models.TaskStatus.ResultUploaded
+            state.files = event.files
 
     async def commitment_ready(self, event: models.TaskResultCommitmentsReady):
-        async with self.state_context():
-            assert self._state is not None, "The task runner has not been initialized."
+        async with self.state_context() as state:
             assert (
-                self._state.status == models.TaskStatus.ResultUploaded
+                state.status == models.TaskStatus.ResultUploaded
             ), "Task status is not result_uploaded when receive event TaskResultCommitmentsReady."
             assert (
-                len(self._state.result) > 0
+                len(state.result) > 0
             ), "Task result not found when receive event TaskResultCommitmentsReady."
-            if len(self._state.result_node) == 0:
+            if not state.disclosed:
                 waiter = await self.contracts.task_contract.disclose_task_result(
-                    task_id=self.task_id, round=self._state.round, result=self._state.result
+                    task_id=self.task_id,
+                    round=state.round,
+                    result=state.result,
                 )
                 await waiter.wait()
-                task = await self.contracts.task_contract.get_task(task_id=self.task_id)
-                self._state.result_node = task.result_node
-            self._state.status = models.TaskStatus.Disclosed
+                state.disclosed = True
+            state.status = models.TaskStatus.Disclosed
 
         self.watcher.unwatch_event(self._commitment_watch_id)
 
     async def task_success(self, event: models.TaskSuccess):
-        async with self.state_context():
-            assert self._state is not None, "The task runner has not been initialized."
+        async with self.state_context() as state:
             assert (
-                self._state.status == models.TaskStatus.Disclosed
+                state.status == models.TaskStatus.Disclosed
             ), "Task status is not disclosed when receive event TaskSuccess."
 
             if event.result_node == self.contracts.account:
-                await self.relay.upload_task_result(self.task_id, self._state.files)
-                waiter = await self.contracts.task_contract.report_task_success(self.task_id, self._state.round)
+                await self.relay.upload_task_result(self.task_id, state.files)
+                waiter = await self.contracts.task_contract.report_task_success(
+                    self.task_id, state.round
+                )
                 await waiter.wait()
 
-            self._state.status = models.TaskStatus.Success
+            state.status = models.TaskStatus.Success
 
         await self.cleanup()
 
     async def task_aborted(self, event: models.TaskAborted):
-        async with self.state_context():
-            assert self._state is not None, "The task runner has not been initialized."
-
-            self._state.status = models.TaskStatus.Aborted
+        async with self.state_context() as state:
+            state.status = models.TaskStatus.Aborted
 
         await self.cleanup()
 
@@ -493,7 +427,8 @@ class MockTaskRunner(TaskRunner):
     @asynccontextmanager
     async def state_context(self):
         try:
-            yield
+            assert self._state is not None
+            yield self._state
         finally:
             if self._state is not None:
                 with fail_after(5, shield=True):
@@ -506,61 +441,57 @@ class MockTaskRunner(TaskRunner):
         return self._lock
 
     async def process_event(self, event: models.TaskEvent):
-        with wrap_task_error():
-            async with self.lock:
-                if event.kind == "TaskCreated":
-                    assert isinstance(event, models.TaskCreated)
-                    await self.task_created(event)
-                    return False
-                elif event.kind == "TaskResultReady":
-                    assert isinstance(event, models.TaskResultReady)
-                    await self.result_ready(event)
-                    return False
-                elif event.kind == "TaskResultCommitmentsReady":
-                    assert isinstance(event, models.TaskResultCommitmentsReady)
-                    await self.commitment_ready(event)
-                    return False
-                elif event.kind == "TaskAborted":
-                    assert isinstance(event, models.TaskAborted)
-                    await self.task_aborted(event)
-                    return True
-                elif event.kind == "TaskSuccess":
-                    assert isinstance(event, models.TaskSuccess)
-                    await self.task_success(event)
-                    return True
-                else:
-                    raise ValueError(f"Unknown event kind {event.kind}")
+        async with self.lock:
+            if event.kind == "TaskCreated":
+                assert isinstance(event, models.TaskCreated)
+                await self.task_created(event)
+                return False
+            elif event.kind == "TaskResultReady":
+                assert isinstance(event, models.TaskResultReady)
+                await self.result_ready(event)
+                return False
+            elif event.kind == "TaskResultCommitmentsReady":
+                assert isinstance(event, models.TaskResultCommitmentsReady)
+                await self.commitment_ready(event)
+                return False
+            elif event.kind == "TaskAborted":
+                assert isinstance(event, models.TaskAborted)
+                await self.task_aborted(event)
+                return True
+            elif event.kind == "TaskSuccess":
+                assert isinstance(event, models.TaskSuccess)
+                await self.task_success(event)
+                return True
+            else:
+                raise ValueError(f"Unknown event kind {event.kind}")
 
     async def task_created(self, event: models.TaskCreated):
-        async with self.state_context():
-            assert self._state is not None
-            assert self._state.status == models.TaskStatus.Pending
+        async with self.state_context() as state:
+            assert state.status == models.TaskStatus.Pending
 
-            self._state.round = event.round
-            self._state.status = models.TaskStatus.Executing
+            state.round = event.round
+            state.status = models.TaskStatus.Executing
 
     async def result_ready(self, event: models.TaskResultReady):
-        async with self.state_context():
-            assert self._state is not None
-            assert self._state.status == models.TaskStatus.Executing
+        async with self.state_context() as state:
+            assert state.status == models.TaskStatus.Executing
 
-            self._state.files = event.files
-            self._state.result = b"".join([bytes.fromhex(h[2:]) for h in event.hashes])
-            self._state.status = models.TaskStatus.ResultUploaded
+            state.files = event.files
+            state.result = b"".join([bytes.fromhex(h[2:]) for h in event.hashes])
+            state.status = models.TaskStatus.ResultUploaded
 
     async def commitment_ready(self, event: models.TaskResultCommitmentsReady):
-        async with self.state_context():
-            assert self._state is not None
-            assert self._state.status == models.TaskStatus.ResultUploaded
+        async with self.state_context() as state:
+            assert state.status == models.TaskStatus.ResultUploaded
 
-            self._state.status = models.TaskStatus.Disclosed
+            state.status = models.TaskStatus.Disclosed
+            state.disclosed = True
 
     async def task_success(self, event: models.TaskSuccess):
-        async with self.state_context():
-            assert self._state is not None
-            assert self._state.status == models.TaskStatus.Disclosed
+        async with self.state_context() as state:
+            assert state.status == models.TaskStatus.Disclosed
 
-            self._state.status = models.TaskStatus.Success
+            state.status = models.TaskStatus.Success
 
         await self.cleanup()
 

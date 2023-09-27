@@ -9,6 +9,7 @@ from h_worker import models
 from h_worker.config import get_config
 
 from . import utils
+from .error import TaskError
 
 _logger = logging.getLogger(__name__)
 
@@ -54,7 +55,7 @@ def sd_lora_inference(
         )
     )
     if not os.path.exists(base_model_path):
-        raise ValueError("base model not found")
+        raise TaskError("base model", f"base model '{base_model}' not found")
 
     lora_model_path = utils.get_lora_model(
         lora_model=lora_model, data_dir=local_config["data_dir"]

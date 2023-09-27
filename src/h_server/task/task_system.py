@@ -7,7 +7,6 @@ from anyio.abc import TaskGroup
 from h_server.event_queue import EventQueue
 from h_server.models import TaskEvent
 
-from .exceptions import TaskError
 from .state_cache import TaskStateCache
 from .task_runner import InferenceTaskRunner, TaskRunner
 
@@ -94,42 +93,19 @@ class TaskSystem(object):
                                 _logger.debug(
                                     f"Task {event.task_id} process event {event.kind} success."
                                 )
-                        except get_cancelled_exc_class() as e:
+                        except get_cancelled_exc_class():
                             with fail_after(5, shield=True):
                                 await self.event_queue.no_ack(ack_id)
-                            raise e
-                        except TaskError as e:
-                            _logger.error(
-                                f"Task {event.task_id} process event {event.kind} failed."
-                            )
-                            if e.retry:
-                                with fail_after(self._retry_delay + 5, shield=True):
-                                    _logger.debug(f"Retry {event} for {event.task_id}")
-                                    await sleep(self._retry_delay)
-                                    await self.event_queue.no_ack(ack_id=ack_id)
-                            else:
-                                # a no-retry error means the task is finished with error
-                                with fail_after(5, shield=True):
-                                    await self.event_queue.ack(ack_id=ack_id)
-                                    del self._runners[task_id]
-                                    _logger.debug(
-                                        f"Task {event.task_id} finished with error"
-                                    )
-                        except Exception as e:
-                            _logger.exception(e)
-                            _logger.error(
-                                f"Task {event.task_id} process event {event.kind} unknown error."
-                            )
+                            raise
+                        except Exception:
+                            _logger.debug(f"Task {event.task_id} process event {event.kind} failed.")
                             with fail_after(5, shield=True):
-                                # a non-TaskError exception means the task is finished with error
-                                await self.event_queue.ack(ack_id=ack_id)
+                                await self.event_queue.no_ack(ack_id=ack_id)
                                 del self._runners[task_id]
-                                _logger.debug(
-                                    f"Task {event.task_id} finished with error"
-                                )
+                            raise
 
                     tg.start_soon(_process_event, ack_id, event)
-        except get_cancelled_exc_class() as e:
+        except get_cancelled_exc_class():
             raise
         except Exception as e:
             _logger.exception(e)

@@ -1,12 +1,24 @@
 import logging
 from typing import Any, Awaitable, Callable, Dict, Optional, cast
 
-from anyio import CancelScope, Event, create_task_group, fail_after, sleep
+from anyio import (
+    CancelScope,
+    Event,
+    create_task_group,
+    fail_after,
+    sleep,
+)
 from anyio.abc import TaskGroup
+from tenacity import (
+    AsyncRetrying,
+    before_sleep_log,
+    stop_after_attempt,
+    wait_fixed,
+)
 from web3 import AsyncWeb3
 from web3.contract.async_contract import AsyncContract, AsyncContractEvent
-from web3.types import EventData, TxReceipt
 from web3.logs import DISCARD
+from web3.types import EventData, TxReceipt
 
 from h_server.contracts import Contracts
 
@@ -26,6 +38,7 @@ def wrap_callback(callback: EventCallback) -> EventCallback:
             _logger.error(f"Watcher callback for event {event} failed.")
 
     return inner
+
 
 class EventFilter(object):
     def __init__(
@@ -71,8 +84,12 @@ def _filter_event(event: EventData, filter_args: Optional[Dict[str, Any]]) -> bo
 
 
 class EventWatcher(object):
-    def __init__(self, w3: AsyncWeb3) -> None:
+    def __init__(
+        self, w3: AsyncWeb3, retry_count: int = 3, retry_delay: float = 10
+    ) -> None:
         self.w3 = w3
+        self.retry_count = retry_count
+        self.retry_delay = retry_delay
 
         self._event_filters: Dict[int, EventFilter] = {}
         self._next_filter_id: int = 0
@@ -133,52 +150,20 @@ class EventWatcher(object):
         if filter_id in self._event_filters:
             self._event_filters.pop(filter_id)
 
-    async def start(
-        self,
-        from_block: Optional[int] = None,
-        to_block: Optional[int] = None,
-        interval: float = 1,
+    async def _run(
+        self, interval: float, stop_event: Event, start: int, end: Optional[int]
     ):
-        """
-        watch events from block
-
-        from_block: a block number or None, None means start from the latest block
-        to_block: a block number or None, None means watch infinitely
-        interval: sleep time, sleep when there is no new block
-        """
-        assert (
-            self._cancel_scope is None
-        ), "The watcher has already started. You should stop the watcher before restart it."
-        assert (
-            self._stop_event is None
-        ), "The watcher has already started. You should stop the watcher before restart it."
-
-        self._stop_event = Event()
-
-        if from_block is None:
-            if self._cache is not None:
-                start = await self._cache.get()
-                if start == 0:
-                    start = await self.w3.eth.get_block_number()
-            else:
-                start = await self.w3.eth.get_block_number()
-        else:
-            if self._cache is not None:
-                await self._cache.set(from_block)
-            start = from_block
-        start += 1
-
         def _should_stop(stop_event: Event, start: int):
             if stop_event.is_set():
                 return True
-            if to_block is None:
+            if end is None:
                 return False
-            return start > to_block
+            return start > end
 
         try:
             self._cancel_scope = CancelScope()
             with self._cancel_scope:
-                while not _should_stop(self._stop_event, start):
+                while not _should_stop(stop_event, start):
                     if start <= (await self.w3.eth.get_block_number()):
                         block = await self.w3.eth.get_block(start)
                         _logger.debug(f"Get block {start} from chain.")
@@ -202,6 +187,67 @@ class EventWatcher(object):
         finally:
             self._cancel_scope = None
             self._stop_event = None
+
+    async def start(
+        self,
+        from_block: Optional[int] = None,
+        to_block: Optional[int] = None,
+        interval: float = 1,
+    ):
+        """
+        watch events from block
+
+        from_block: a block number or None, None means start from the latest block
+        to_block: a block number or None, None means watch infinitely
+        interval: sleep time, sleep when there is no new block
+        """
+        assert (
+            self._cancel_scope is None
+        ), "The watcher has already started. You should stop the watcher before restart it."
+        assert (
+            self._stop_event is None
+        ), "The watcher has already started. You should stop the watcher before restart it."
+
+        self._stop_event = Event()
+
+        async def get_start():
+            if from_block is None:
+                if self._cache is not None:
+                    start = await self._cache.get()
+                    if start == 0:
+                        start = await self.w3.eth.get_block_number()
+                else:
+                    start = await self.w3.eth.get_block_number()
+            else:
+                if self._cache is not None:
+                    await self._cache.set(from_block)
+                start = from_block
+            start += 1
+            return start
+
+        if self.retry_count == 0:
+            start = await get_start()
+            await self._run(
+                interval=interval,
+                stop_event=self._stop_event,
+                start=start,
+                end=to_block,
+            )
+        else:
+            async for attemp in AsyncRetrying(
+                stop=stop_after_attempt(self.retry_count),
+                wait=wait_fixed(self.retry_delay),
+                before_sleep=before_sleep_log(_logger, logging.ERROR, exc_info=True),
+                reraise=True,
+            ):
+                with attemp:
+                    start = await get_start()
+                    await self._run(
+                        interval=interval,
+                        stop_event=self._stop_event,
+                        start=start,
+                        end=to_block,
+                    )
 
     def stop(self):
         if self._stop_event is not None:

@@ -12,11 +12,17 @@ from anyio import (
     to_thread,
 )
 from anyio.abc import TaskGroup
+from tenacity import (
+    before_sleep_log,
+    retry,
+    stop_after_attempt,
+    wait_fixed,
+)
 from web3 import Web3
 from web3.types import EventData
 
 from h_server import models
-from h_server.config import Config, wait_privkey, TxOption
+from h_server.config import Config, TxOption, wait_privkey
 from h_server.contracts import Contracts, TxRevertedError, set_contracts
 from h_server.event_queue import DbEventQueue, EventQueue, set_event_queue
 from h_server.relay import Relay, WebRelay, set_relay
@@ -345,8 +351,7 @@ class NodeManager(object):
         relay: Optional[Relay] = None,
         watcher: Optional[EventWatcher] = None,
         task_system: Optional[TaskSystem] = None,
-        restart_delay: float = 5,
-        retry_count: int = 3,
+        status_sync_interval: float = 5,
     ) -> None:
         self.config = config
         if node_state_manager is None:
@@ -364,9 +369,7 @@ class NodeManager(object):
         self._relay = relay
         self._watcher = watcher
         self._task_system = task_system
-        # restart delay equals 0 means do not restart and raise error, for test only
-        self._restart_delay = restart_delay
-        self._retry_count = retry_count
+        self._status_sync_interval = status_sync_interval
 
         self._tg: Optional[TaskGroup] = None
         self._finish_event: Optional[Event] = None
@@ -478,6 +481,7 @@ class NodeManager(object):
 
         # has disclosed
         if round < len(task.results) and task.results[round] != b"":
+            state.disclosed = True
             # task is success
             if task.result_node != "0x" + bytes([0] * 20).hex():
                 result = task.results[round]
@@ -487,12 +491,27 @@ class NodeManager(object):
                     result_node=Web3.to_checksum_address(task.result_node),
                 )
                 state.result = result
-                state.result_node = task.result_node
                 events.append(event)
-        
+
         for event in events:
             await self._task_system.event_queue.put(event=event)
         await self._task_system.state_cache.dump(state)
+
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_fixed(10),
+        before_sleep=before_sleep_log(_logger, logging.ERROR, exc_info=True),
+        reraise=True,
+    )
+    async def _sync_status(self):
+        while True:
+            assert self._contracts is not None
+            remote_status = await self._contracts.node_contract.get_node_status(
+                self._contracts.account
+            )
+            local_status = models.convert_node_status(remote_status)
+            await self.node_state_manager.set_node_state(local_status)
+            await sleep(self._status_sync_interval)
 
     async def _run(self):
         assert self._tg is None, "Node manager is running."
@@ -505,68 +524,50 @@ class NodeManager(object):
                     init_tg.start_soon(self._init_components)
                     init_tg.start_soon(self._init)
 
-                assert self._contracts is not None
-                remote_status = await self._contracts.node_contract.get_node_status(
-                    self._contracts.account
-                )
-                local_status = models.convert_node_status(remote_status)
-                await self.node_state_manager.set_node_state(local_status)
-                
                 await self._recover()
 
                 assert self._watcher is not None
                 assert self._task_system is not None
 
+                tg.start_soon(self._sync_status)
                 tg.start_soon(self._watcher.start)
                 tg.start_soon(self._task_system.start)
         finally:
             self._tg = None
-            self._task_system = None
-            self._watcher = None
-            self._relay = None
-            self._contracts = None
 
     async def run(self):
         assert self._tg is None, "Node manager is running."
 
-        retry_count = 0
-        while not self.finish_event.is_set():
-            try:
-                await self._run()
-            except KeyboardInterrupt:
-                raise
-            except get_cancelled_exc_class():
-                raise
-            except Exception as e:
-                _logger.exception(e)
-                _logger.error(f"Node manager error: {str(e)}")
-                with fail_after(5, shield=True):
-                    await self.node_state_manager.set_node_state(
-                        models.NodeStatus.Error, str(e)
-                    )
-                if self._restart_delay > 0 and retry_count < self._retry_count:
-                    retry_count += 1
-                    _logger.error(
-                        f"Node manager restart in {self._restart_delay} seconds, {retry_count}/{self._retry_count} times"
-                    )
-                    await sleep(self._restart_delay)
-                else:
-                    raise e
+        try:
+            await self._run()
+        except KeyboardInterrupt:
+            raise
+        except get_cancelled_exc_class():
+            raise
+        except Exception as e:
+            _logger.exception(e)
+            _logger.error(f"Node manager error: {str(e)}")
+            with fail_after(5, shield=True):
+                await self.node_state_manager.set_node_state(
+                    models.NodeStatus.Error, str(e)
+                )
+            await self.finish()
 
     async def finish(self):
-        self.finish_event.set()
-
         if self._relay is not None:
             with fail_after(2, shield=True):
                 await self._relay.close()
+            self._relay = None
         if self._watcher is not None:
             self._watcher.stop()
+            self._watcher = None
         if self._task_system is not None:
             self._task_system.stop()
+            self._task_system = None
+        if self._contracts is not None:
+            self._contracts = None
         if self._tg is not None and not self._tg.cancel_scope.cancel_called:
             self._tg.cancel_scope.cancel()
-
-        self._finish_event = None
 
 
 _node_manager: Optional[NodeManager] = None

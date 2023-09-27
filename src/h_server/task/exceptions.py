@@ -2,6 +2,7 @@ from enum import Enum
 
 
 class TaskErrorSource(str, Enum):
+    Assert = "assert"
     Relay = "relay"
     Contracts = "contracts"
     Celery = "celery"

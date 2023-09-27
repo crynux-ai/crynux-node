@@ -236,7 +236,6 @@ async def node_managers(
             relay=relay,
             watcher=watcher,
             task_system=system,
-            restart_delay=0,  # throw the error instead of retry
         )
         managers.append(manager)
 
