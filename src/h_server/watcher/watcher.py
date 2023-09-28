@@ -1,20 +1,10 @@
 import logging
 from typing import Any, Awaitable, Callable, Dict, Optional, cast
 
-from anyio import (
-    CancelScope,
-    Event,
-    create_task_group,
-    fail_after,
-    sleep,
-)
+from anyio import CancelScope, Event, create_task_group, fail_after, sleep
 from anyio.abc import TaskGroup
-from tenacity import (
-    AsyncRetrying,
-    before_sleep_log,
-    stop_after_attempt,
-    wait_fixed,
-)
+from tenacity import (AsyncRetrying, before_sleep_log, stop_after_attempt,
+                      wait_fixed)
 from web3 import AsyncWeb3
 from web3.contract.async_contract import AsyncContract, AsyncContractEvent
 from web3.logs import DISCARD
@@ -102,10 +92,10 @@ class EventWatcher(object):
         self._stop_event: Optional[Event] = None
 
     @classmethod
-    def from_contracts(cls, contracts: Contracts) -> "EventWatcher":
+    def from_contracts(cls, contracts: Contracts, retry_count: int = 3, retry_delay: float = 10) -> "EventWatcher":
         assert contracts.initialized, "Contracts has not been initialized!"
 
-        res = cls(contracts.w3)
+        res = cls(contracts.w3, retry_count=retry_count, retry_delay=retry_delay)
         res.register_contract("token", contracts.token_contract.contract)
         res.register_contract("node", contracts.node_contract.contract)
         res.register_contract("task", contracts.task_contract.contract)
@@ -150,44 +140,6 @@ class EventWatcher(object):
         if filter_id in self._event_filters:
             self._event_filters.pop(filter_id)
 
-    async def _run(
-        self, interval: float, stop_event: Event, start: int, end: Optional[int]
-    ):
-        def _should_stop(stop_event: Event, start: int):
-            if stop_event.is_set():
-                return True
-            if end is None:
-                return False
-            return start > end
-
-        try:
-            self._cancel_scope = CancelScope()
-            with self._cancel_scope:
-                while not _should_stop(stop_event, start):
-                    if start <= (await self.w3.eth.get_block_number()):
-                        block = await self.w3.eth.get_block(start)
-                        _logger.debug(f"Get block {start} from chain.")
-                        if "transactions" in block and len(self._event_filters) > 0:
-                            async with create_task_group() as tg:
-                                for tx_hash in block["transactions"]:
-                                    assert isinstance(tx_hash, bytes)
-                                    tx = await self.w3.eth.get_transaction_receipt(
-                                        tx_hash
-                                    )
-                                    for event_filter in self._event_filters.values():
-                                        event_filter.process_tx(tx, tg=tg)
-
-                        start += 1
-
-                        with fail_after(delay=5, shield=True):
-                            if self._cache is not None:
-                                await self._cache.set(start)
-                    else:
-                        await sleep(interval)
-        finally:
-            self._cancel_scope = None
-            self._stop_event = None
-
     async def start(
         self,
         from_block: Optional[int] = None,
@@ -210,44 +162,62 @@ class EventWatcher(object):
 
         self._stop_event = Event()
 
-        async def get_start():
-            if from_block is None:
-                if self._cache is not None:
-                    start = await self._cache.get()
-                    if start == 0:
-                        start = await self.w3.eth.get_block_number()
-                else:
+        if from_block is None:
+            if self._cache is not None:
+                start = await self._cache.get()
+                if start == 0:
                     start = await self.w3.eth.get_block_number()
             else:
-                if self._cache is not None:
-                    await self._cache.set(from_block)
-                start = from_block
-            start += 1
-            return start
-
-        if self.retry_count == 0:
-            start = await get_start()
-            await self._run(
-                interval=interval,
-                stop_event=self._stop_event,
-                start=start,
-                end=to_block,
-            )
+                start = await self.w3.eth.get_block_number()
         else:
-            async for attemp in AsyncRetrying(
-                stop=stop_after_attempt(self.retry_count),
-                wait=wait_fixed(self.retry_delay),
-                before_sleep=before_sleep_log(_logger, logging.ERROR, exc_info=True),
-                reraise=True,
-            ):
-                with attemp:
-                    start = await get_start()
-                    await self._run(
-                        interval=interval,
-                        stop_event=self._stop_event,
-                        start=start,
-                        end=to_block,
-                    )
+            if self._cache is not None:
+                await self._cache.set(from_block)
+            start = from_block
+        start += 1
+
+        def _should_stop(stop_event: Event, start: int):
+            if stop_event.is_set():
+                return True
+            if to_block is None:
+                return False
+            return start > to_block
+
+        try:
+            self._cancel_scope = CancelScope()
+            with self._cancel_scope:
+
+                async for attemp in AsyncRetrying(
+                    stop=stop_after_attempt(self.retry_count),
+                    wait=wait_fixed(self.retry_delay),
+                    before_sleep=before_sleep_log(_logger, logging.ERROR, exc_info=True),
+                    reraise=True,
+                ):
+                    with attemp:
+
+                        while not _should_stop(self._stop_event, start):
+                            if start <= (await self.w3.eth.get_block_number()):
+                                block = await self.w3.eth.get_block(start)
+                                _logger.debug(f"Get block {start} from chain.")
+                                if "transactions" in block and len(self._event_filters) > 0:
+                                    async with create_task_group() as tg:
+                                        for tx_hash in block["transactions"]:
+                                            assert isinstance(tx_hash, bytes)
+                                            tx = await self.w3.eth.get_transaction_receipt(
+                                                tx_hash
+                                            )
+                                            for event_filter in self._event_filters.values():
+                                                event_filter.process_tx(tx, tg=tg)
+
+                                start += 1
+
+                                with fail_after(delay=5, shield=True):
+                                    if self._cache is not None:
+                                        await self._cache.set(start)
+                            else:
+                                await sleep(interval)
+        finally:
+            self._cancel_scope = None
+            self._stop_event = None
 
     def stop(self):
         if self._stop_event is not None:
