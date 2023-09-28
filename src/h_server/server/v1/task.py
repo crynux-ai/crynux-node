@@ -12,7 +12,7 @@ from typing_extensions import Annotated
 
 from h_server.models import TaskResultReady, TaskStatus, NodeStatus
 
-from ..depends import ConfigDep, TaskStateCacheDep, EventQueueDep, NodeStateManagerDep
+from ..depends import ConfigDep, TaskStateCacheDep, EventQueueDep, ManagerStateCacheDep
 from .utils import CommonResponse
 
 router = APIRouter(prefix="/tasks")
@@ -84,9 +84,9 @@ class TaskStats(BaseModel):
 async def get_task_stats(
     *,
     task_state_cache: TaskStateCacheDep,
-    state_manager: NodeStateManagerDep
+    state_cache: ManagerStateCacheDep
 ):
-    node_status = (await state_manager.get_node_state()).status
+    node_status = (await state_cache.get_node_state()).status
     if task_state_cache is None or node_status not in [NodeStatus.Running, NodeStatus.PendingPause, NodeStatus.PendingStop]:
         return TaskStats(
             status="stopped",

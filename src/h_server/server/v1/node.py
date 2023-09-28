@@ -5,9 +5,8 @@ from pydantic import BaseModel
 from typing_extensions import Annotated
 
 from h_server import models
-from h_server.node_manager import start, stop, resume, pause
 
-from ..depends import NodeStateManagerDep, ContractsDep
+from ..depends import NodeStateManagerDep, ManagerStateCacheDep
 from .utils import CommonResponse
 
 router = APIRouter(prefix="/node")
@@ -20,9 +19,9 @@ class State(BaseModel):
     tx_error: str
 
 @router.get("", response_model=State)
-async def get_node_state(*, state_manager: NodeStateManagerDep) -> State:
-    node_state = await state_manager.get_node_state()
-    tx_state = await state_manager.get_tx_state()
+async def get_node_state(*, state_cache: ManagerStateCacheDep) -> State:
+    node_state = await state_cache.get_node_state()
+    tx_state = await state_cache.get_tx_state()
     return State(
         status=node_state.status,
         message=node_state.message,
@@ -43,19 +42,18 @@ async def control_node(
     input: Annotated[ControlNodeInput, Body()],
     *,
     state_manager: NodeStateManagerDep,
-    contracts: ContractsDep,
     background: BackgroundTasks
 ):
-    if contracts is None:
+    if state_manager is None:
         raise HTTPException(400, detail="Private key has not been set.")
     if input.action == "start":
-        wait = await start(state_manager=state_manager, contracts=contracts)
+        wait = await state_manager.start()
     elif input.action == "pause":
-        wait = await pause(state_manager=state_manager, contracts=contracts)
+        wait = await state_manager.pause()
     elif input.action == "resume":
-        wait = await resume(state_manager=state_manager, contracts=contracts)
+        wait = await state_manager.resume()
     else:
-        wait = await stop(state_manager=state_manager, contracts=contracts)
+        wait = await state_manager.stop()
 
     background.add_task(wait)
 
