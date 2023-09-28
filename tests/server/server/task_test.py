@@ -6,7 +6,7 @@ from fastapi.testclient import TestClient
 from h_server import models
 from h_server.contracts import Contracts
 from h_server.models.task import PoseConfig, TaskConfig
-from h_server.node_manager import NodeManager, start
+from h_server.node_manager import NodeManager
 from h_server.relay import Relay
 from h_server.utils import get_task_data_hash, get_task_hash
 
@@ -15,18 +15,18 @@ async def test_get_task_stats_empty(client: TestClient):
     resp = client.get("/manager/v1/tasks")
     resp.raise_for_status()
     resp_data = resp.json()
-    assert resp_data["status"] == "waiting"
+    assert resp_data["status"] == "stopped"
     assert resp_data["num_today"] == 0
     assert resp_data["num_total"] == 0
 
 
 async def start_nodes(
-    node_contracts: List[Contracts],
     managers: List[NodeManager],
 ):
-    waits = [
-        await start(c, n.node_state_manager) for c, n in zip(node_contracts, managers)
-    ]
+    waits = []
+    for m in managers:
+        assert m._node_state_manager is not None
+        waits.append(await m._node_state_manager.start())
     async with create_task_group() as tg:
         for w in waits:
             tg.start_soon(w)
@@ -71,7 +71,7 @@ async def create_task(
 async def test_upload_task_result(
     running_client: TestClient, node_contracts, managers, relay, tx_option
 ):
-    await start_nodes(node_contracts=node_contracts, managers=managers)
+    await start_nodes(managers=managers)
     task_id = await create_task(node_contracts=node_contracts, relay=relay, tx_option=tx_option)
     await sleep(1)
 
@@ -99,7 +99,7 @@ async def test_get_task_stats(
     assert resp_data["num_today"] == 0
     assert resp_data["num_total"] == 0
 
-    await start_nodes(node_contracts=node_contracts, managers=managers)
+    await start_nodes(managers=managers)
     resp = running_client.get("/manager/v1/tasks")
     resp.raise_for_status()
     resp_data = resp.json()
