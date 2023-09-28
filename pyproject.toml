@@ -24,9 +24,10 @@ dependencies = [
     "pydantic-settings~=2.0.3",
     "pydantic-settings-yaml~=0.2.0",
     "importlib-resources~=6.0.0",
-    "python-multipart==0.0.6"
+    "python-multipart==0.0.6",
+    "tenacity~=8.2.3",
 ]
-version = "0.1.7"
+version = "0.1.8"
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -36,7 +37,4 @@ include = ["h_server*", "h_worker*"]
 "h_server.contracts.abi" = ["*.json"]
 
 [project.optional-dependencies]
-test = [
-    "pytest~=7.4.0",
-    "Pillow"
-]
+test = ["pytest~=7.4.0", "Pillow"]

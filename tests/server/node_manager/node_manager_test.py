@@ -18,12 +18,8 @@ from h_server.models.task import PoseConfig, TaskConfig
 from h_server.node_manager import (
     NodeManager,
     NodeStateManager,
-    pause,
-    resume,
-    start,
-    stop,
 )
-from h_server.node_manager.state_cache import MemoryNodeStateCache, MemoryTxStateCache
+from h_server.node_manager.state_cache import MemoryNodeStateCache, MemoryTxStateCache, ManagerStateCache
 from h_server.relay import MockRelay, Relay
 from h_server.task import InferenceTaskRunner, MemoryTaskStateCache, TaskSystem
 from h_server.task.state_cache import TaskStateCache
@@ -160,7 +156,7 @@ async def node_managers(
     for i, (privkey, contracts) in enumerate(zip(privkeys, node_contracts)):
         queue = MemoryEventQueue()
 
-        watcher = EventWatcher.from_contracts(contracts)
+        watcher = EventWatcher.from_contracts(contracts, retry_count=0)
         block_number_cache = MemoryBlockNumberCache()
         watcher.set_blocknumber_cache(block_number_cache)
 
@@ -220,15 +216,20 @@ async def node_managers(
 
         system.set_runner_cls(make_runner_cls(contracts, relay, watcher, local_config))
 
-        state_manager = NodeStateManager(
+        state_cache = ManagerStateCache(
             node_state_cache_cls=MemoryNodeStateCache,
             tx_state_cache_cls=MemoryTxStateCache,
         )
         # set init state to stopped to bypass prefetch stage
-        await state_manager.set_node_state(models.NodeStatus.Stopped)
+        await state_cache.set_node_state(models.NodeStatus.Stopped)
+
+        state_manager = NodeStateManager(
+            state_cache=state_cache, contracts=contracts, retry_count=0,
+        )
 
         manager = NodeManager(
             config=config,
+            manager_state_cache=state_cache,
             node_state_manager=state_manager,
             privkey=privkey,
             event_queue=queue,
@@ -236,7 +237,6 @@ async def node_managers(
             relay=relay,
             watcher=watcher,
             task_system=system,
-            restart_delay=0,  # throw the error instead of retry
         )
         managers.append(manager)
 
@@ -258,13 +258,13 @@ async def test_node_manager(
         for n in node_managers:
             tg.start_soon(n.run)
 
-        waits = [
-            await start(c, n.node_state_manager, option=tx_option)
-            for c, n in zip(node_contracts, node_managers)
-        ]
+        waits = []
+        for m in node_managers:
+            assert m._node_state_manager is not None
+            waits.append(await m._node_state_manager.start(option=tx_option))
         for n in node_managers:
             assert (
-                await n.node_state_manager.get_tx_state()
+                await n.state_cache.get_tx_state()
             ).status == models.TxStatus.Pending
         async with create_task_group() as sub_tg:
             for w in waits:
@@ -272,7 +272,7 @@ async def test_node_manager(
 
         for n in node_managers:
             assert (
-                await n.node_state_manager.get_node_state()
+                await n.state_cache.get_node_state()
             ).status == models.NodeStatus.Running
 
         task = models.RelayTaskInput(
@@ -311,13 +311,13 @@ async def test_node_manager(
             assert img.width == 512
             assert img.height == 512
 
-        waits = [
-            await pause(c, n.node_state_manager, option=tx_option)
-            for c, n in zip(node_contracts, node_managers)
-        ]
+        waits = []
+        for m in node_managers:
+            assert m._node_state_manager is not None
+            waits.append(await m._node_state_manager.pause(option=tx_option))
         for n in node_managers:
             assert (
-                await n.node_state_manager.get_tx_state()
+                await n.state_cache.get_tx_state()
             ).status == models.TxStatus.Pending
         async with create_task_group() as sub_tg:
             for w in waits:
@@ -325,16 +325,16 @@ async def test_node_manager(
 
         for n in node_managers:
             assert (
-                await n.node_state_manager.get_node_state()
+                await n.state_cache.get_node_state()
             ).status == models.NodeStatus.Paused
 
-        waits = [
-            await resume(c, n.node_state_manager, option=tx_option)
-            for c, n in zip(node_contracts, node_managers)
-        ]
+        waits = []
+        for m in node_managers:
+            assert m._node_state_manager is not None
+            waits.append(await m._node_state_manager.resume(option=tx_option))
         for n in node_managers:
             assert (
-                await n.node_state_manager.get_tx_state()
+                await n.state_cache.get_tx_state()
             ).status == models.TxStatus.Pending
         async with create_task_group() as sub_tg:
             for w in waits:
@@ -342,16 +342,16 @@ async def test_node_manager(
 
         for n in node_managers:
             assert (
-                await n.node_state_manager.get_node_state()
+                await n.state_cache.get_node_state()
             ).status == models.NodeStatus.Running
 
-        waits = [
-            await stop(c, n.node_state_manager, option=tx_option)
-            for c, n in zip(node_contracts, node_managers)
-        ]
+        waits = []
+        for m in node_managers:
+            assert m._node_state_manager is not None
+            waits.append(await m._node_state_manager.stop(option=tx_option))
         for n in node_managers:
             assert (
-                await n.node_state_manager.get_tx_state()
+                await n.state_cache.get_tx_state()
             ).status == models.TxStatus.Pending
         async with create_task_group() as sub_tg:
             for w in waits:
@@ -359,7 +359,7 @@ async def test_node_manager(
 
         for n in node_managers:
             assert (
-                await n.node_state_manager.get_node_state()
+                await n.state_cache.get_node_state()
             ).status == models.NodeStatus.Stopped
 
         for n in node_managers:
@@ -376,17 +376,17 @@ async def partial_run_task(
     stage: int,
 ):
     # start nodes
-    waits = [
-        await start(c, n.node_state_manager, option=tx_option)
-        for c, n in zip(node_contracts, node_managers)
-    ]
+    waits = []
+    for m in node_managers:
+        assert m._node_state_manager is not None
+        waits.append(await m._node_state_manager.start(option=tx_option))
     async with create_task_group() as sub_tg:
         for w in waits:
             sub_tg.start_soon(w)
 
     for n in node_managers:
         assert (
-            await n.node_state_manager.get_node_state()
+            await n.state_cache.get_node_state()
         ).status == models.NodeStatus.Running
 
     # create task
@@ -489,7 +489,7 @@ async def test_node_manager_with_recover(
 
         for n in node_managers:
             assert (
-                await n.node_state_manager.get_node_state()
+                await n.state_cache.get_node_state()
             ).status == models.NodeStatus.Running
 
         with BytesIO() as dst:
@@ -499,13 +499,13 @@ async def test_node_manager_with_recover(
             assert img.width == 512
             assert img.height == 512
 
-        waits = [
-            await stop(c, n.node_state_manager, option=tx_option)
-            for c, n in zip(node_contracts, node_managers)
-        ]
+        waits = []
+        for m in node_managers:
+            assert m._node_state_manager is not None
+            waits.append(await m._node_state_manager.stop(option=tx_option))
         for n in node_managers:
             assert (
-                await n.node_state_manager.get_tx_state()
+                await n.state_cache.get_tx_state()
             ).status == models.TxStatus.Pending
         async with create_task_group() as sub_tg:
             for w in waits:
@@ -513,7 +513,7 @@ async def test_node_manager_with_recover(
 
         for n in node_managers:
             assert (
-                await n.node_state_manager.get_node_state()
+                await n.state_cache.get_node_state()
             ).status == models.NodeStatus.Stopped
 
         for n in node_managers:

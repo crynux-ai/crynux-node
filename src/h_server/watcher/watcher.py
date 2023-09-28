@@ -3,10 +3,12 @@ from typing import Any, Awaitable, Callable, Dict, Optional, cast
 
 from anyio import CancelScope, Event, create_task_group, fail_after, sleep
 from anyio.abc import TaskGroup
+from tenacity import (AsyncRetrying, before_sleep_log, stop_after_attempt,
+                      wait_fixed)
 from web3 import AsyncWeb3
 from web3.contract.async_contract import AsyncContract, AsyncContractEvent
-from web3.types import EventData, TxReceipt
 from web3.logs import DISCARD
+from web3.types import EventData, TxReceipt
 
 from h_server.contracts import Contracts
 
@@ -26,6 +28,7 @@ def wrap_callback(callback: EventCallback) -> EventCallback:
             _logger.error(f"Watcher callback for event {event} failed.")
 
     return inner
+
 
 class EventFilter(object):
     def __init__(
@@ -71,8 +74,12 @@ def _filter_event(event: EventData, filter_args: Optional[Dict[str, Any]]) -> bo
 
 
 class EventWatcher(object):
-    def __init__(self, w3: AsyncWeb3) -> None:
+    def __init__(
+        self, w3: AsyncWeb3, retry_count: int = 3, retry_delay: float = 10
+    ) -> None:
         self.w3 = w3
+        self.retry_count = retry_count
+        self.retry_delay = retry_delay
 
         self._event_filters: Dict[int, EventFilter] = {}
         self._next_filter_id: int = 0
@@ -85,10 +92,10 @@ class EventWatcher(object):
         self._stop_event: Optional[Event] = None
 
     @classmethod
-    def from_contracts(cls, contracts: Contracts) -> "EventWatcher":
+    def from_contracts(cls, contracts: Contracts, retry_count: int = 3, retry_delay: float = 10) -> "EventWatcher":
         assert contracts.initialized, "Contracts has not been initialized!"
 
-        res = cls(contracts.w3)
+        res = cls(contracts.w3, retry_count=retry_count, retry_delay=retry_delay)
         res.register_contract("token", contracts.token_contract.contract)
         res.register_contract("node", contracts.node_contract.contract)
         res.register_contract("task", contracts.task_contract.contract)
@@ -178,27 +185,36 @@ class EventWatcher(object):
         try:
             self._cancel_scope = CancelScope()
             with self._cancel_scope:
-                while not _should_stop(self._stop_event, start):
-                    if start <= (await self.w3.eth.get_block_number()):
-                        block = await self.w3.eth.get_block(start)
-                        _logger.debug(f"Get block {start} from chain.")
-                        if "transactions" in block and len(self._event_filters) > 0:
-                            async with create_task_group() as tg:
-                                for tx_hash in block["transactions"]:
-                                    assert isinstance(tx_hash, bytes)
-                                    tx = await self.w3.eth.get_transaction_receipt(
-                                        tx_hash
-                                    )
-                                    for event_filter in self._event_filters.values():
-                                        event_filter.process_tx(tx, tg=tg)
 
-                        start += 1
+                async for attemp in AsyncRetrying(
+                    stop=stop_after_attempt(self.retry_count),
+                    wait=wait_fixed(self.retry_delay),
+                    before_sleep=before_sleep_log(_logger, logging.ERROR, exc_info=True),
+                    reraise=True,
+                ):
+                    with attemp:
 
-                        with fail_after(delay=5, shield=True):
-                            if self._cache is not None:
-                                await self._cache.set(start)
-                    else:
-                        await sleep(interval)
+                        while not _should_stop(self._stop_event, start):
+                            if start <= (await self.w3.eth.get_block_number()):
+                                block = await self.w3.eth.get_block(start)
+                                _logger.debug(f"Get block {start} from chain.")
+                                if "transactions" in block and len(self._event_filters) > 0:
+                                    async with create_task_group() as tg:
+                                        for tx_hash in block["transactions"]:
+                                            assert isinstance(tx_hash, bytes)
+                                            tx = await self.w3.eth.get_transaction_receipt(
+                                                tx_hash
+                                            )
+                                            for event_filter in self._event_filters.values():
+                                                event_filter.process_tx(tx, tg=tg)
+
+                                start += 1
+
+                                with fail_after(delay=5, shield=True):
+                                    if self._cache is not None:
+                                        await self._cache.set(start)
+                            else:
+                                await sleep(interval)
         finally:
             self._cancel_scope = None
             self._stop_event = None

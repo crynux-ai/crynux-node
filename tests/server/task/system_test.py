@@ -85,11 +85,12 @@ async def test_task_system():
             state = await cache.load(task_id)
             assert state.status == models.TaskStatus.Disclosed
 
-        await system.event_queue.put(events[3])
-        await queue.wait_ack()
-    
-        exist = await cache.has(task_id=task_id)
-        assert not exist
+        with fail_after(5):
+            await system.event_queue.put(events[3])
+            await queue.wait_ack()
+        
+            state = await cache.load(task_id)
+            assert state.status == models.TaskStatus.Success
 
         system.stop()
 

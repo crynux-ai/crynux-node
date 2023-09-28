@@ -9,14 +9,13 @@ from web3 import Web3
 from h_server import models
 from h_server.config import Config, TxOption, set_config
 from h_server.contracts import Contracts, set_contracts
-from h_server.event_queue import EventQueue, MemoryEventQueue, set_event_queue
+from h_server.event_queue import MemoryEventQueue, set_event_queue
 from h_server.node_manager import NodeManager, set_node_manager, NodeStateManager, set_node_state_manager
-from h_server.node_manager.state_cache import MemoryNodeStateCache, MemoryTxStateCache
+from h_server.node_manager.state_cache import MemoryNodeStateCache, MemoryTxStateCache, ManagerStateCache, set_manager_state_cache
 from h_server.relay import MockRelay, Relay, set_relay
 from h_server.server import Server
 from h_server.task import (MemoryTaskStateCache, MockTaskRunner, TaskSystem,
                            set_task_state_cache, set_task_system)
-from h_server.task.state_cache import TaskStateCache
 from h_server.watcher import EventWatcher, MemoryBlockNumberCache, set_watcher
 
 
@@ -73,6 +72,9 @@ def config():
             "ethereum": {
                 "privkey": "",
                 "provider": "",
+                "chain_id": None,
+                "gas": None,
+                "gas_price": None,
                 "contract": {"token": "", "node": "", "task": ""},
             },
             "task_dir": "task",
@@ -156,7 +158,7 @@ async def managers(
         if i == 0:
             set_event_queue(queue)
 
-        watcher = EventWatcher.from_contracts(contracts)
+        watcher = EventWatcher.from_contracts(contracts, retry_count=0)
         block_number_cache = MemoryBlockNumberCache()
         watcher.set_blocknumber_cache(block_number_cache)
         if i == 0:
@@ -189,24 +191,31 @@ async def managers(
 
         system.set_runner_cls(MockTaskRunner)
 
-        state_manager = NodeStateManager(
+        state_cache = ManagerStateCache(
             node_state_cache_cls=MemoryNodeStateCache,
             tx_state_cache_cls=MemoryTxStateCache
         )
         if i == 0:
-            set_node_state_manager(state_manager)
+            set_manager_state_cache(state_cache)
         # set init state to stopped to bypass prefetch stage
-        await state_manager.set_node_state(models.NodeStatus.Stopped)
+        await state_cache.set_node_state(models.NodeStatus.Stopped)
+
+        state_manager = NodeStateManager(
+            state_cache=state_cache, contracts=contracts, retry_count=0
+        )
+        if i == 0:
+            set_node_state_manager(state_manager)
 
         manager = NodeManager(
             config=config,
-            node_state_manager=state_manager,
+            manager_state_cache=state_cache,
             privkey=privkey,
             event_queue=queue,
             contracts=contracts,
             relay=relay,
             watcher=watcher,
             task_system=system,
+            node_state_manager=state_manager
         )
         if i == 0:
             set_node_manager(manager)
@@ -229,6 +238,11 @@ async def running_client(managers):
 
 @pytest.fixture
 def client():
+    state_cache = ManagerStateCache(
+        node_state_cache_cls=MemoryNodeStateCache,
+        tx_state_cache_cls=MemoryTxStateCache
+    )
+    set_manager_state_cache(state_cache)
     client = TestClient(Server().app)
     yield client
     client.close()

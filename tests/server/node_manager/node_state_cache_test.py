@@ -7,7 +7,7 @@ from h_server.node_manager.state_cache import (
     MemoryTxStateCache,
     DbTxStateCache,
 )
-from h_server.node_manager import NodeStateManager
+from h_server.node_manager import ManagerStateCache
 
 
 @pytest.fixture
@@ -64,11 +64,11 @@ async def test_tx_state_cache(init_db):
             assert state.error == _state.error
 
 
-async def test_node_state_manager(init_db):
-    manager = NodeStateManager()
+async def test_manager_state_cache(init_db):
+    state_cache = ManagerStateCache()
 
-    assert (await manager.get_node_state()).status == models.NodeStatus.Init
-    assert (await manager.get_tx_state()).status == models.TxStatus.Success
+    assert (await state_cache.get_node_state()).status == models.NodeStatus.Init
+    assert (await state_cache.get_tx_state()).status == models.TxStatus.Success
 
     for status in [
         models.NodeStatus.Running,
@@ -82,8 +82,8 @@ async def test_node_state_manager(init_db):
         if status == models.NodeStatus.Error:
             msg = "error"
 
-        await manager.set_node_state(status=status, message=msg)
-        _state = await manager.get_node_state()
+        await state_cache.set_node_state(status=status, message=msg)
+        _state = await state_cache.get_node_state()
         assert _state.status == status
         assert _state.message == msg
 
@@ -96,7 +96,7 @@ async def test_node_state_manager(init_db):
         if status == models.TxStatus.Error:
             msg = "error"
 
-        await manager.set_tx_state(status=status, error=msg)
-        _state = await manager.get_tx_state()
+        await state_cache.set_tx_state(status=status, error=msg)
+        _state = await state_cache.get_tx_state()
         assert _state.status == status
         assert _state.error == msg
