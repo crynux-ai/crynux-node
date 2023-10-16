@@ -7,12 +7,10 @@ from anyio import run_process, Path
 from pydantic import BaseModel
 from web3 import Web3
 
-from h_server.models.task import PoseConfig, TaskConfig
 
 __all__ = [
     "sort_dict",
     "get_task_hash",
-    "get_task_data_hash",
     "GpuInfo",
     "get_gpu_info",
     "CpuInfo",
@@ -37,30 +35,8 @@ def sort_dict(input: Dict[str, Any]) -> Dict[str, Any]:
     return res
 
 
-def get_task_hash(task: TaskConfig):
-    input = task.model_dump()
-    ordered_input = sort_dict(input)
-    input_bytes = json.dumps(
-        ordered_input, ensure_ascii=False, separators=(",", ":")
-    ).encode("utf-8")
-
-    res = Web3.keccak(input_bytes)
-    return res.hex()
-
-
-def get_task_data_hash(base_model: str, lora_model: str, prompt: str, pose: PoseConfig):
-    input = {
-        "base_model": base_model,
-        "lora_model": lora_model,
-        "prompt": prompt,
-        "pose": pose.model_dump(),
-    }
-    ordered_input = sort_dict(input)
-    input_bytes = json.dumps(
-        ordered_input, ensure_ascii=False, separators=(",", ":")
-    ).encode("utf-8")
-
-    res = Web3.keccak(input_bytes)
+def get_task_hash(task_args: str):
+    res = Web3.keccak(task_args.encode("utf-8"))
     return res.hex()
 
 

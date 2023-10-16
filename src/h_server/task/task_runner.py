@@ -5,7 +5,7 @@ from abc import ABC, abstractmethod
 from contextlib import asynccontextmanager
 from typing import List, Optional
 
-from anyio import Lock, fail_after, get_cancelled_exc_class, to_thread
+from anyio import Lock, fail_after, to_thread
 from celery.result import AsyncResult
 from tenacity import (AsyncRetrying, before_sleep_log, retry,
                       retry_if_not_exception_type, stop_after_attempt,
@@ -17,9 +17,9 @@ from h_server.config import TaskConfig as LocalConfig
 from h_server.config import get_config
 from h_server.contracts import Contracts, TxRevertedError, get_contracts
 from h_server.event_queue import EventQueue
-from h_server.relay import Relay, RelayError, get_relay
+from h_server.relay import Relay, get_relay
 from h_server.watcher import EventWatcher, get_watcher
-from h_worker.task.error import TaskError
+from h_worker.task.error import TaskInvalid
 
 from .state_cache import TaskStateCache
 from .utils import make_result_commitments
@@ -185,7 +185,7 @@ class InferenceTaskRunner(TaskRunner):
             async for attemp in AsyncRetrying(
                 stop=stop_after_attempt(self._retry_count),
                 wait=wait_exponential(multiplier=3, max=60),
-                retry=retry_if_not_exception_type((TaskError, AssertionError)),
+                retry=retry_if_not_exception_type((TaskInvalid, AssertionError)),
                 before_sleep=before_sleep_log(_logger, logging.ERROR, exc_info=True),
                 reraise=True,
             ):
@@ -214,7 +214,7 @@ class InferenceTaskRunner(TaskRunner):
                             return True
                         else:
                             raise ValueError(f"Unknown event kind {event.kind}")
-        except TaskError as e:
+        except TaskInvalid as e:
             _logger.exception(e)
             _logger.error("Task error, report error to the chain.")
             with fail_after(delay=60, shield=True):
@@ -240,15 +240,9 @@ class InferenceTaskRunner(TaskRunner):
                     celery = get_celery()
                     kwargs = {
                         "task_id": task.task_id,
-                        "prompts": task.prompt,
-                        "base_model": task.base_model,
-                        "lora_model": task.lora_model,
+                        "task_args": task.task_args,
                         "distributed": True,
                     }
-                    if task.task_config is not None:
-                        kwargs["task_config"] = task.task_config.model_dump()
-                    if task.pose is not None:
-                        kwargs["pose"] = task.pose.model_dump()
                     res: AsyncResult = celery.send_task(
                         self.task_name,
                         kwargs=kwargs,
@@ -269,22 +263,15 @@ class InferenceTaskRunner(TaskRunner):
                     task_func = getattr(h_task, self.task_name)
                     kwargs = {
                         "task_id": task.task_id,
-                        "prompts": task.prompt,
-                        "base_model": task.base_model,
-                        "lora_model": task.lora_model,
+                        "task_args": task.task_args,
                         "distributed": False,
-                        "local_config": self.local_config.model_dump(),
+                        "result_url": "",
                     }
-                    if task.task_config is not None:
-                        kwargs["task_config"] = task.task_config.model_dump()
-                    if task.pose is not None:
-                        kwargs["pose"] = task.pose.model_dump()
+                    kwargs = dict(task_id=task.task_id, task_args=task.task_args, distributed=False, result_url="", **self.local_config.model_dump())
 
                     task_func(**kwargs)
 
-                    image_dir = os.path.join(
-                        self.local_config.data_dir, "image", str(self.task_id)
-                    )
+                    image_dir = self.local_config.output_dir
                     image_files = sorted(os.listdir(image_dir))
                     image_paths = [
                         os.path.join(image_dir, file) for file in image_files
