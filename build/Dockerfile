@@ -40,36 +40,32 @@ FROM base as builder2
 
 WORKDIR /app
 
-COPY remote-lora-scripts lora-scripts
+COPY stable-diffusion-task stable-diffusion-task
 
-WORKDIR /app/lora-scripts
+WORKDIR /app/stable-diffusion-task
 
 RUN python3 -m venv venv
-ENV PATH="/app/lora-scripts/venv/bin:${PATH}"
+ENV PATH="/app/stable-diffusion-task/venv/bin:${PATH}"
 
-WORKDIR /app/lora-scripts/sd-scripts
-RUN pip install torch==2.0.0+cu118 torchvision==0.15.1+cu118 --extra-index-url https://download.pytorch.org/whl/cu118
 RUN pip install -r requirements.txt
-RUN pip install lion-pytorch lycoris-lora dadaptation fastapi uvicorn wandb network==0.1 xformers==0.0.19 tensorrt==8.6.1
+RUN pip install .
+RUN pip uinstall opencv-python opencv-contrib-python && pip install opencv-contrib-python
 
 FROM base as final
 
 COPY --from=builder1 /app/venv /app/venv
-COPY --from=builder2 /app/lora-scripts /app/lora-scripts
+COPY --from=builder2 /app/stable-diffusion-task /app/stable-diffusion-task
 
 ENV PATH="/app/venv/bin:${PATH}"
 
-ENV LD_LIBRARY_PATH="/app/lora-scripts/venv/lib/python3.10/site-packages/tensorrt_libs:${LD_LIBRARY_PATH}"
-ENV LD_LIBRARY_PATH="/app/lora-scripts/venv/lib/python3.10/site-packages/torch/lib:${LD_LIBRARY_PATH}"
+ENV LD_LIBRARY_PATH="/app/stable-diffusion-task/venv/lib/python3.10/site-packages/torch/lib:${LD_LIBRARY_PATH}"
 
-RUN ln -s /app/lora-scripts/venv/lib/python3.10/site-packages/tensorrt_libs/libnvinfer.so.8 /app/lora-scripts/venv/lib/python3.10/site-packages/tensorrt_libs/libnvinfer.so.7 && \ 
-    ln -s /app/lora-scripts/venv/lib/python3.10/site-packages/tensorrt_libs/libnvinfer_plugin.so.8 /app/lora-scripts/venv/lib/python3.10/site-packages/tensorrt_libs/libnvinfer_plugin.so.7 && \
-    ln -s /app/lora-scripts/venv/lib/python3.10/site-packages/torch/lib/libnvrtc-672ee683.so.11.2 /app/lora-scripts/venv/lib/python3.10/site-packages/torch/lib/libnvrtc.so
+RUN ln -s /app/stable-diffusion-task/venv/lib/python3.10/site-packages/torch/lib/libnvrtc-672ee683.so.11.2 /app/stable-diffusion-task/venv/lib/python3.10/site-packages/torch/lib/libnvrtc.so
 
 WORKDIR /app
 
 COPY build/data/ data/
-RUN mv data/config.yml.example config.yml
+COPY build/config.yml.example config.yml
 COPY --from=web-builder /app/dist/ dist/
 
 ENV H_SERVER_CONFIG="/app/config.yml"

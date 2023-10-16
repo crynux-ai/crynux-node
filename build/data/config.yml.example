@@ -21,10 +21,9 @@ web_dist: dist
 
 distributed: 0
 task_config:
-  data_dir: "/app/data/workspace"
-  pretrained_models_dir: "/app/data/pretrained-models"
-  controlnet_models_dir: "/app/data/controlnet"
-  training_logs_dir: "/app/data/training-logs"
-  inference_logs_dir: "/app/data/inference-logs"
-  script_dir: "/app/lora-scripts"
+  output_dir: "/app/data/images"
+  hf_cache_dir: "/app/data/huggingface"
+  external_cache_dir: "/app/data/external"
+  script_dir: "/app/stable-diffusion-task"
+  inference_logs_dir: "/app/inference-logs"
   result_url: ""
