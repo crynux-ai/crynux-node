@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import os
 import logging
+import os
 import re
 import shutil
 import subprocess
@@ -15,15 +15,18 @@ _logger = logging.getLogger(__name__)
 
 
 def match_error(stdout: str) -> bool:
-    pattern = re.compile(r"Task args validation error|Task execution error|Task model not found")
+    pattern = re.compile(
+        r"Task args validation error|Task execution error|Task model not found"
+    )
     return pattern.search(stdout) is not None
+
 
 def sd_lora_inference(
     task_id: int,
     task_args: str,
     output_dir: str | None = None,
-    hf_cache_dir: str | None = None, 
-    external_cache_dir: str | None = None, 
+    hf_cache_dir: str | None = None,
+    external_cache_dir: str | None = None,
     script_dir: str | None = None,
     result_url: str | None = None,
     distributed: bool = True,
@@ -43,7 +46,7 @@ def sd_lora_inference(
     if result_url is None:
         config = get_config()
         result_url = config.task.result_url
-    
+
     _logger.info(
         f"task id: {task_id},"
         f"output_dir: {output_dir},"
@@ -59,18 +62,22 @@ def sd_lora_inference(
     if os.path.exists(worker_venv):
         exe = os.path.join(worker_venv, "bin", "python")
 
+    image_dir = os.path.abspath(os.path.join(output_dir, str(task_id)))
+    if not os.path.exists(image_dir):
+        os.makedirs(image_dir, exist_ok=True)
+
     args = [
         exe,
         os.path.abspath(os.path.join(script_dir, "inference.py")),
-        os.path.abspath(output_dir),
-        f"'{task_args}'"
+        image_dir,
+        f"'{task_args}'",
     ]
 
     envs = os.environ.copy()
     envs.update(
         {
             "data_dir__models__huggingface": os.path.abspath(hf_cache_dir),
-            "data_dir__models__external": os.path.abspath(external_cache_dir)
+            "data_dir__models__external": os.path.abspath(external_cache_dir),
         }
     )
 
@@ -91,12 +98,10 @@ def sd_lora_inference(
             raise TaskError
 
     if distributed:
-        image_files = sorted(os.listdir(output_dir))
-        image_paths = [os.path.join(output_dir, file) for file in image_files]
+        image_files = sorted(os.listdir(image_dir))
+        image_paths = [os.path.join(image_dir, file) for file in image_files]
 
-        utils.upload_result(
-            result_url + f"/v1/tasks/{task_id}/result", image_paths
-        )
+        utils.upload_result(result_url + f"/v1/tasks/{task_id}/result", image_paths)
         _logger.info("Upload inference task result.")
 
 
@@ -104,8 +109,8 @@ def mock_lora_inference(
     task_id: int,
     task_args: str,
     output_dir: str | None = None,
-    hf_cache_dir: str | None = None, 
-    external_cache_dir: str | None = None, 
+    hf_cache_dir: str | None = None,
+    external_cache_dir: str | None = None,
     script_dir: str | None = None,
     result_url: str | None = None,
     distributed: bool = True,
@@ -125,7 +130,7 @@ def mock_lora_inference(
     if result_url is None:
         config = get_config()
         result_url = config.task.result_url
-    
+
     _logger.info(
         f"task id: {task_id},"
         f"output_dir: {output_dir},"
@@ -135,10 +140,12 @@ def mock_lora_inference(
         f"script_dir: {script_dir}"
     )
 
-    shutil.copyfile("test.png", os.path.join(output_dir, "test.png"))
+    image_dir = os.path.abspath(os.path.join(output_dir, str(task_id)))
+    if not os.path.exists(image_dir):
+        os.makedirs(image_dir, exist_ok=True)
+
+    shutil.copyfile("test.png", os.path.join(image_dir, "test.png"))
 
     if distributed:
-        utils.upload_result(
-            result_url + f"/v1/tasks/{task_id}/result", ["test.png"]
-        )
+        utils.upload_result(result_url + f"/v1/tasks/{task_id}/result", ["test.png"])
         _logger.info("Upload inference task result.")

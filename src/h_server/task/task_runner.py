@@ -7,9 +7,15 @@ from typing import List, Optional
 
 from anyio import Lock, fail_after, to_thread
 from celery.result import AsyncResult
-from tenacity import (AsyncRetrying, before_sleep_log, retry,
-                      retry_if_not_exception_type, stop_after_attempt,
-                      wait_exponential, wait_fixed)
+from tenacity import (
+    AsyncRetrying,
+    before_sleep_log,
+    retry,
+    retry_if_not_exception_type,
+    stop_after_attempt,
+    wait_exponential,
+    wait_fixed,
+)
 from web3.types import EventData
 
 from h_server import models
@@ -221,7 +227,6 @@ class InferenceTaskRunner(TaskRunner):
                 await self._report_error()
             return True
 
-
     async def task_created(self, event: models.TaskCreated):
         async with self.state_context() as state:
             assert (
@@ -267,11 +272,17 @@ class InferenceTaskRunner(TaskRunner):
                         "distributed": False,
                         "result_url": "",
                     }
-                    kwargs = dict(task_id=task.task_id, task_args=task.task_args, distributed=False, result_url="", **self.local_config.model_dump())
+                    kwargs = dict(
+                        task_id=task.task_id,
+                        task_args=task.task_args,
+                        distributed=False,
+                        result_url="",
+                        **self.local_config.model_dump(),
+                    )
 
                     task_func(**kwargs)
 
-                    image_dir = self.local_config.output_dir
+                    image_dir = os.path.join(self.local_config.output_dir, str(task.task_id))
                     image_files = sorted(os.listdir(image_dir))
                     image_paths = [
                         os.path.join(image_dir, file) for file in image_files
