@@ -23,6 +23,7 @@ class TaskConfig(BaseModel):
     hf_cache_dir: str
     external_cache_dir: str
     script_dir: str
+    inference_logs_dir: str
     result_url: str
 
 

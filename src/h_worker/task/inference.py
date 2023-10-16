@@ -28,6 +28,7 @@ def sd_lora_inference(
     hf_cache_dir: str | None = None,
     external_cache_dir: str | None = None,
     script_dir: str | None = None,
+    inference_logs_dir: str | None = None,
     result_url: str | None = None,
     distributed: bool = True,
 ):
@@ -43,6 +44,9 @@ def sd_lora_inference(
     if script_dir is None:
         config = get_config()
         script_dir = config.task.script_dir
+    if inference_logs_dir is None:
+        config = get_config()
+        inference_logs_dir = config.task.inference_logs_dir
     if result_url is None:
         config = get_config()
         result_url = config.task.result_url
@@ -53,7 +57,9 @@ def sd_lora_inference(
         f"task_args: {task_args},"
         f"hf_cache_dir: {hf_cache_dir},"
         f"external_cache_dir: {external_cache_dir},"
-        f"script_dir: {script_dir}"
+        f"script_dir: {script_dir},"
+        f"inference_logs_dir: {inference_logs_dir},"
+        f"result_url: {result_url}"
     )
 
     # Check if venv exists. If it exits, use the venv interpreter; else use the current interpreter
@@ -65,6 +71,10 @@ def sd_lora_inference(
     image_dir = os.path.abspath(os.path.join(output_dir, str(task_id)))
     if not os.path.exists(image_dir):
         os.makedirs(image_dir, exist_ok=True)
+
+    if not os.path.exists(inference_logs_dir):
+        os.makedirs(inference_logs_dir, exist_ok=True)
+    log_file = os.path.join(inference_logs_dir, f"{task_id}.log")
 
     args = [
         exe,
@@ -88,6 +98,9 @@ def sd_lora_inference(
         capture_output=True,
         encoding="utf-8",
     )
+    with open(log_file, mode="w", encoding="utf-8") as f:
+        print(res.stdout, file=f)
+        print(res.stderr, file=f)
     if res.returncode == 0:
         _logger.info("Inference task success.")
     else:
@@ -112,6 +125,7 @@ def mock_lora_inference(
     hf_cache_dir: str | None = None,
     external_cache_dir: str | None = None,
     script_dir: str | None = None,
+    inference_logs_dir: str | None = None,
     result_url: str | None = None,
     distributed: bool = True,
 ):
@@ -127,6 +141,9 @@ def mock_lora_inference(
     if script_dir is None:
         config = get_config()
         script_dir = config.task.script_dir
+    if inference_logs_dir is None:
+        config = get_config()
+        inference_logs_dir = config.task.inference_logs_dir
     if result_url is None:
         config = get_config()
         result_url = config.task.result_url
@@ -137,7 +154,9 @@ def mock_lora_inference(
         f"task_args: {task_args},"
         f"hf_cache_dir: {hf_cache_dir},"
         f"external_cache_dir: {external_cache_dir},"
-        f"script_dir: {script_dir}"
+        f"script_dir: {script_dir},"
+        f"inference_logs_dir: {inference_logs_dir},"
+        f"result_url: {result_url}"
     )
 
     image_dir = os.path.abspath(os.path.join(output_dir, str(task_id)))
