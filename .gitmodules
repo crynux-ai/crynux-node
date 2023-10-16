@@ -1,0 +1,3 @@
+[submodule "stable-diffusion-task"]
+	path = stable-diffusion-task
+	url = https://github.com/crynux-ai/stable-diffusion-task.git
