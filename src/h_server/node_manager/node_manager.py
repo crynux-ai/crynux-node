@@ -253,8 +253,8 @@ class NodeManager(object):
 
                 await to_thread.run_sync(
                     prefetch,
-                    self.config.task_config.pretrained_models_dir,
-                    os.path.join(self.config.task_config.script_dir, "huggingface"),
+                    self.config.task_config.hf_cache_dir,
+                    self.config.task_config.external_cache_dir,
                     self.config.task_config.script_dir,
                     cancellable=True,
                 )

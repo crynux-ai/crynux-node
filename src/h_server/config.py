@@ -52,13 +52,10 @@ class CeleryConfig(BaseModel):
 
 
 class TaskConfig(BaseModel):
-    data_dir: str
-    pretrained_models_dir: str
-    controlnet_models_dir: str
-    training_logs_dir: str
-    inference_logs_dir: str
+    output_dir: str
+    hf_cache_dir: str
+    external_cache_dir: str
     script_dir: str
-    result_url: str
 
 
 class Config(YamlBaseSettings):

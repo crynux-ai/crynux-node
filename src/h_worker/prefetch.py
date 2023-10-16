@@ -1,110 +1,36 @@
 import logging
 import os
 import subprocess
-import hashlib
-
-import httpx
 
 _logger = logging.getLogger(__name__)
 
-base_model_urls = {
-    "stable-diffusion-v1-5-pruned": "https://huggingface.co/runwayml/stable-diffusion-v1-5/resolve/main/v1-5-pruned.ckpt",
-    "stable-diffusion-2-1": "https://huggingface.co/stabilityai/stable-diffusion-2-1/resolve/main/v2-1_768-nonema-pruned.ckpt",
-}
 
-base_model_cksum = {
-    "stable-diffusion-2-1": "71f860473d5df49d5a09197d5b7a65d7",
-    "stable-diffusion-v1-5-pruned": "fde08ee6f4fac7ab26592bf519cbb405",
-}
-
-
-def _check_model_checksum(path: str, model: str) -> bool:
-    m = hashlib.new("md5")
-
-    with open(path, mode="rb") as f:
-        chunk = f.read(8192)
-        while chunk:
-            m.update(chunk)
-            chunk = f.read(8192)
-
-    cksum = m.hexdigest()
-    return cksum == base_model_cksum[model]
-
-
-def prefetch_base_model(
-    client: httpx.Client, pretrained_models_dir: str, base_model: str
-):
-    base_model_path = os.path.join(
-        pretrained_models_dir, base_model, f"{base_model}.ckpt"
-    )
-    should_download = False
-    if not os.path.exists(base_model_path):
-        should_download = True
-    elif not _check_model_checksum(base_model_path, base_model):
-        should_download = True
-
-    if should_download:
-        _logger.info(f"Downloading base model {base_model}")
-        model_dir = os.path.dirname(base_model_path)
-        if not os.path.exists(model_dir):
-            os.makedirs(model_dir, exist_ok=True)
-
-        url = base_model_urls[base_model]
-        with client.stream("GET", url, follow_redirects=True) as resp:
-            resp.raise_for_status()
-            with open(base_model_path, mode="wb") as f:
-                for chunk in resp.iter_bytes():
-                    f.write(chunk)
-        _logger.info(f"Base model {base_model} download finished")
-
-huggingface_script = """
-from huggingface_hub import snapshot_download
-
-snapshot_download(
-    "openai/clip-vit-large-patch14",
-    cache_dir="{cache_dir}",
-    resume_download=True,
-    local_files_only=False,
-    allow_patterns=["*.json", "*.txt", "pytorch_model.bin"]
-)
-"""
-
-def prefetch_huggingface(huggingface_cache_dir: str, script_dir: str):
+def call_prefetch_script(hf_cache_dir: str, external_cache_dir: str, script_dir: str):
     exe = "python"
     worker_venv = os.path.abspath(os.path.join(script_dir, "venv"))
     if os.path.exists(worker_venv):
         exe = os.path.join(worker_venv, "bin", "python")
 
     script_file = os.path.abspath(os.path.join(script_dir, "prefetch.py"))
-    cache_dir = os.path.join(huggingface_cache_dir, "hub")
-    cache_dir = os.path.abspath(cache_dir)
-    with open(script_file, mode="w", encoding="utf-8") as f:
-        f.write(huggingface_script.format(cache_dir=cache_dir))
+
+    args = [exe, script_file]
+    envs = os.environ.copy()
+    envs["data_dir__models__huggingface"] = os.path.abspath(hf_cache_dir)
+    envs["data_dir__models__external"] = os.path.abspath(external_cache_dir)
+    _logger.info("Start prefetching models")
+    subprocess.check_call(args, env=envs)
+    _logger.info("Prefetching models complete")
+
+
+def prefetch(hf_cache_dir: str, external_cache_dir: str, script_dir: str):
+    if not os.path.exists(hf_cache_dir):
+        os.makedirs(hf_cache_dir, exist_ok=True)
+
+    if not os.path.exists(external_cache_dir):
+        os.makedirs(external_cache_dir, exist_ok=True)
 
     try:
-        args = [exe, script_file]
-
-        envs = os.environ.copy()
-        hf_home = os.path.abspath(huggingface_cache_dir)
-        envs["HF_HOME"] = hf_home
-        subprocess.check_call(args, env=envs, cwd=script_dir)
-        _logger.info(f"Model openai/clip-vit-large-patch14 download finished")
-    finally:
-        os.remove(script_file)
-
-def prefetch(pretrained_models_dir: str, huggingface_cache_dir: str, script_dir: str):
-    if not os.path.exists(pretrained_models_dir):
-        os.makedirs(pretrained_models_dir, exist_ok=True)
-
-    if not os.path.exists(huggingface_cache_dir):
-        os.makedirs(huggingface_cache_dir, exist_ok=True)
-
-    try:
-        with httpx.Client() as client:
-            for base_model in base_model_urls:
-                prefetch_base_model(client, pretrained_models_dir, base_model)
-
-        prefetch_huggingface(huggingface_cache_dir, script_dir)
+        call_prefetch_script(hf_cache_dir, external_cache_dir, script_dir)
     except Exception as e:
         _logger.exception(e)
         _logger.error("Prefetch error")

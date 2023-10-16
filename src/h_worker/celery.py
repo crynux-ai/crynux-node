@@ -1,5 +1,4 @@
 import logging
-import os.path
 
 from celery import Celery
 from celery.signals import celeryd_after_setup
@@ -28,8 +27,8 @@ def prefetch_after_setup(_, __, **kwargs):
 
     _logger.info("Prefetch base models.")
     prefetch(
-        config.task.pretrained_models_dir,
-        os.path.join(config.task.script_dir, "huggingface"),
+        config.task.hf_cache_dir,
+        config.task.external_cache_dir,
         config.task.script_dir,
     )
     _logger.info("Prefetching base models complete.")
