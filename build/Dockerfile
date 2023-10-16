@@ -55,6 +55,8 @@ FROM base as final
 
 COPY --from=builder1 /app/venv /app/venv
 COPY --from=builder2 /app/stable-diffusion-task /app/stable-diffusion-task
+COPY src/prefetch.py /app/stable-diffusion-task/prefetch.py
+COPY src/inference.py /app/stable-diffusion-task/inference.py
 
 ENV PATH="/app/venv/bin:${PATH}"
 
