@@ -1,3 +1,4 @@
+import json
 import secrets
 import os
 import shutil
@@ -23,7 +24,7 @@ from h_server.node_manager.state_cache import MemoryNodeStateCache, MemoryTxStat
 from h_server.relay import MockRelay, Relay
 from h_server.task import InferenceTaskRunner, MemoryTaskStateCache, TaskSystem
 from h_server.task.state_cache import TaskStateCache
-from h_server.utils import get_task_data_hash, get_task_hash
+from h_server.utils import get_task_hash
 from h_server.watcher import EventWatcher, MemoryBlockNumberCache
 
 
@@ -83,12 +84,11 @@ def config():
             "celery": {"broker": "", "backend": ""},
             "distributed": False,
             "task_config": {
-                "data_dir": "build/data/workspace",
-                "pretrained_models_dir": "build/data/pretrained-models",
-                "controlnet_models_dir": "build/data/controlnet",
-                "training_logs_dir": "build/data/training-logs",
+                "output_dir": "build/data/images",
+                "hf_cache_dir": "build/data/huggingface",
+                "external_cache_dir": "build/data/external",
                 "inference_logs_dir": "build/data/inference-logs",
-                "script_dir": "remote-lora-scripts",
+                "script_dir": "stable-diffusion-task",
                 "result_url": "",
             },
         }
@@ -184,10 +184,10 @@ async def node_managers(
 
         assert config.task_config is not None
         local_config = config.task_config.model_copy()
-        data_dir = f"build/data/workspace{i}"
+        data_dir = os.path.join(local_config.output_dir, f"node{i}")
         if not os.path.exists(data_dir):
-            shutil.copytree(local_config.data_dir, data_dir)
-        local_config.data_dir = data_dir
+            os.makedirs(data_dir, exist_ok=True)
+        local_config.output_dir = data_dir
         new_data_dirs.append(data_dir)
 
         def make_runner_cls(contracts, relay, watcher, local_config):
@@ -275,37 +275,42 @@ async def test_node_manager(
                 await n.state_cache.get_node_state()
             ).status == models.NodeStatus.Running
 
-        task = models.RelayTaskInput(
-            task_id=1,
-            base_model="stable-diffusion-v1-5-pruned",
-            prompt="a mame_cat lying under the window, in anime sketch style, red lips, blush, black eyes, dashed outline, brown pencil outline",
-            lora_model="f4fab20c-4694-430e-8937-22cdb713da9",
-            task_config=TaskConfig(
-                image_width=512,
-                image_height=512,
-                lora_weight=100,
-                num_images=1,
-                seed=255728798,
-                steps=40,
-            ),
-            pose=PoseConfig(data_url="", pose_weight=100, preprocess=False),
-        )
+        prompt = ("best quality, ultra high res, photorealistic++++, 1girl, off-shoulder sweater, smiling, "
+                "faded ash gray messy bun hair+, border light, depth of field, looking at "
+                "viewer, closeup")
 
-        task_hash = get_task_hash(task.task_config)
-        data_hash = get_task_data_hash(
-            base_model=task.base_model,
-            lora_model=task.lora_model,
-            prompt=task.prompt,
-            pose=task.pose,
-        )
-        await relay.create_task(task=task)
+        negative_prompt = ("paintings, sketches, worst quality+++++, low quality+++++, normal quality+++++, lowres, "
+                        "normal quality, monochrome++, grayscale++, skin spots, acnes, skin blemishes, "
+                        "age spot, glans")
+
+        args = {
+            "base_model": "runwayml/stable-diffusion-v1-5",
+            "prompt": prompt,
+            "negative_prompt": negative_prompt,
+            "task_config": {
+                "num_images": 9,
+                "safety_checker": False
+            }
+        }
+        task_args = json.dumps(args)
+
+        task_hash = get_task_hash(task_args)
+        data_hash = bytes([0]*32)
         waiter = await node_contracts[0].task_contract.create_task(
             task_hash=task_hash, data_hash=data_hash, option=tx_option
         )
-        await waiter.wait()
+        receipt = await waiter.wait()
+
+        events = await node_contracts[0].task_contract.get_events(
+            "TaskCreated",
+            from_block=receipt["blockNumber"],
+        )
+        event = events[0]
+        task_id = event["args"]["taskId"]
+        await relay.create_task(task_id=task_id, task_args=task_args)
 
         with BytesIO() as dst:
-            await relay.get_result(task_id=1, image_num=0, dst=dst)
+            await relay.get_result(task_id=task_id, image_num=0, dst=dst)
             dst.seek(0)
             img = Image.open(dst)
             assert img.width == 512
@@ -390,29 +395,28 @@ async def partial_run_task(
         ).status == models.NodeStatus.Running
 
     # create task
-    task = models.RelayTaskInput(
-        task_id=1,
-        base_model="stable-diffusion-v1-5-pruned",
-        prompt="a mame_cat lying under the window, in anime sketch style, red lips, blush, black eyes, dashed outline, brown pencil outline",
-        lora_model="f4fab20c-4694-430e-8937-22cdb713da9",
-        task_config=TaskConfig(
-            image_width=512,
-            image_height=512,
-            lora_weight=100,
-            num_images=1,
-            seed=255728798,
-            steps=40,
-        ),
-        pose=PoseConfig(data_url="", pose_weight=100, preprocess=False),
-    )
+    prompt = ("best quality, ultra high res, photorealistic++++, 1girl, off-shoulder sweater, smiling, "
+              "faded ash gray messy bun hair+, border light, depth of field, looking at "
+              "viewer, closeup")
 
-    task_hash = get_task_hash(task.task_config)
-    data_hash = get_task_data_hash(
-        base_model=task.base_model,
-        lora_model=task.lora_model,
-        prompt=task.prompt,
-        pose=task.pose,
-    )
+    negative_prompt = ("paintings, sketches, worst quality+++++, low quality+++++, normal quality+++++, lowres, "
+                       "normal quality, monochrome++, grayscale++, skin spots, acnes, skin blemishes, "
+                       "age spot, glans")
+
+    args = {
+        "base_model": "runwayml/stable-diffusion-v1-5",
+        "prompt": prompt,
+        "negative_prompt": negative_prompt,
+        "task_config": {
+            "num_images": 9,
+            "safety_checker": False
+        }
+    }
+    task_args = json.dumps(args)
+
+    task_hash = get_task_hash(task_args)
+    data_hash = bytes([0]*32)
+
     waiter = await node_contracts[0].task_contract.create_task(
         task_hash=task_hash, data_hash=data_hash, option=tx_option
     )
@@ -424,8 +428,7 @@ async def partial_run_task(
     )
     event = events[0]
     task_id = event["args"]["taskId"]
-    task.task_id = task_id
-    await relay.create_task(task=task)
+    await relay.create_task(task_id=task_id, task_args=task_args)
 
     round_map = {
         event["args"]["selectedNode"]: event["args"]["round"] for event in events

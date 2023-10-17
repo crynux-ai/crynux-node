@@ -1,3 +1,4 @@
+import json
 from typing import List
 
 from anyio import create_task_group, sleep
@@ -8,7 +9,7 @@ from h_server.contracts import Contracts
 from h_server.models.task import PoseConfig, TaskConfig
 from h_server.node_manager import NodeManager
 from h_server.relay import Relay
-from h_server.utils import get_task_data_hash, get_task_hash
+from h_server.utils import get_task_hash
 
 
 async def test_get_task_stats_empty(client: TestClient):
@@ -37,35 +38,35 @@ async def create_task(
     relay: Relay,
     tx_option,
 ):
-    task = models.RelayTaskInput(
-        task_id=1,
-        base_model="stable-diffusion-v1-5-pruned",
-        prompt="a mame_cat lying under the window, in anime sketch style, red lips, blush, black eyes, dashed outline, brown pencil outline",
-        lora_model="f4fab20c-4694-430e-8937-22cdb713da9",
-        task_config=TaskConfig(
-            image_width=512,
-            image_height=512,
-            lora_weight=100,
-            num_images=1,
-            seed=255728798,
-            steps=40,
-        ),
-        pose=PoseConfig(data_url="", pose_weight=100, preprocess=False),
-    )
+    prompt = ("best quality, ultra high res, photorealistic++++, 1girl, off-shoulder sweater, smiling, "
+              "faded ash gray messy bun hair+, border light, depth of field, looking at "
+              "viewer, closeup")
 
-    task_hash = get_task_hash(task.task_config)
-    data_hash = get_task_data_hash(
-        base_model=task.base_model,
-        lora_model=task.lora_model,
-        prompt=task.prompt,
-        pose=task.pose,
-    )
-    await relay.create_task(task=task)
+    negative_prompt = ("paintings, sketches, worst quality+++++, low quality+++++, normal quality+++++, lowres, "
+                       "normal quality, monochrome++, grayscale++, skin spots, acnes, skin blemishes, "
+                       "age spot, glans")
+
+    args = {
+        "base_model": "runwayml/stable-diffusion-v1-5",
+        "prompt": prompt,
+        "negative_prompt": negative_prompt,
+        "task_config": {
+            "num_images": 9,
+            "safety_checker": False
+        }
+    }
+    task_args = json.dumps(args)
+
+    task_hash = get_task_hash(task_args)
+    data_hash = bytes([0]*32)
+
+    task_id = 1
+    await relay.create_task(task_id=task_id, task_args=task_args)
     waiter = await node_contracts[0].task_contract.create_task(
         task_hash=task_hash, data_hash=data_hash, option=tx_option
     )
     await waiter.wait()
-    return task.task_id
+    return task_id
 
 
 async def test_upload_task_result(
