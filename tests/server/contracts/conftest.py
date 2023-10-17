@@ -10,6 +10,7 @@ def tx_option():
     return {}
     # return {"chainId": 42, "gas": 4294967, "gasPrice": 1}
 
+
 @pytest.fixture(scope="module")
 def privkeys():
     return [
@@ -17,6 +18,7 @@ def privkeys():
         "0xb171f296622b98cbdc08dcdcb0696f738c3a22d9d367c657117cd3c8d0b71d42",
         "0x8fb2fc9862b93b5b75cda8202f583711201e4cba5459eefe442b8c5dcc4bdab9",
     ]
+
 
 @pytest.fixture(scope="module")
 async def root_contracts(tx_option, privkeys):
@@ -50,10 +52,12 @@ async def contracts_with_tokens(root_contracts: Contracts, tx_option, privkeys):
 
     cs = []
     for privkey in privkeys:
-
         contracts = Contracts(provider=root_contracts.provider, privkey=privkey)
         await contracts.init(
-            token_contract_address, node_contract_address, task_contract_address
+            token_contract_address,
+            node_contract_address,
+            task_contract_address,
+            option=tx_option,
         )
         amount = Web3.to_wei(1000, "ether")
         if (await contracts.token_contract.balance_of(contracts.account)) < amount:
