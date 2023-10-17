@@ -80,7 +80,7 @@ def sd_lora_inference(
         exe,
         os.path.abspath(os.path.join(script_dir, "inference.py")),
         image_dir,
-        f"'{task_args}'",
+        f"{task_args}",
     ]
 
     envs = os.environ.copy()
