@@ -38,9 +38,9 @@ async def get_system_info(*, config: ConfigDep):
 
         async def _disk_info():
             if config.task_config is not None:
-                base_model_dir = config.task_config.pretrained_models_dir
-                lora_model_dir = os.path.join(config.task_config.data_dir, "model")
-                inference_log_dir = os.path.join(config.task_config.inference_logs_dir)
+                base_model_dir = config.task_config.hf_cache_dir
+                lora_model_dir = config.task_config.external_cache_dir
+                inference_log_dir = config.task_config.inference_logs_dir
                 disk_info = await utils.get_disk_info(
                     base_model_dir, lora_model_dir, config.log.dir, inference_log_dir
                 )
