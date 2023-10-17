@@ -47,9 +47,7 @@ WORKDIR /app/stable-diffusion-task
 RUN python3 -m venv venv
 ENV PATH="/app/stable-diffusion-task/venv/bin:${PATH}"
 
-RUN pip install -r requirements.txt
-RUN pip install .
-RUN pip uinstall opencv-python opencv-contrib-python && pip install opencv-contrib-python
+RUN pip install -r requirements.txt && pip install .
 
 FROM base as final
 
@@ -60,14 +58,10 @@ COPY src/inference.py /app/stable-diffusion-task/inference.py
 
 ENV PATH="/app/venv/bin:${PATH}"
 
-ENV LD_LIBRARY_PATH="/app/stable-diffusion-task/venv/lib/python3.10/site-packages/torch/lib:${LD_LIBRARY_PATH}"
-
-RUN ln -s /app/stable-diffusion-task/venv/lib/python3.10/site-packages/torch/lib/libnvrtc-672ee683.so.11.2 /app/stable-diffusion-task/venv/lib/python3.10/site-packages/torch/lib/libnvrtc.so
-
 WORKDIR /app
 
-COPY build/data/ data/
-COPY build/config.yml.example config.yml
+RUN mkdir data && mkdir data/external && mkdir data/huggingface && mkdir data/images && mkdir data/inference-logs
+COPY config/config.yml.example config.yml
 COPY --from=web-builder /app/dist/ dist/
 
 ENV H_SERVER_CONFIG="/app/config.yml"
