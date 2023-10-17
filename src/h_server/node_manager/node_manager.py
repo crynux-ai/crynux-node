@@ -169,7 +169,7 @@ class NodeManager(object):
                 node_state_cache_cls=node_state_cache_cls,
                 tx_state_cache_cls=tx_state_cache_cls,
             )
-            set_manager_state_cache(self.state_cache)
+            set_manager_state_cache(manager_state_cache)
         self.state_cache = manager_state_cache
 
         self._privkey = privkey
@@ -253,8 +253,8 @@ class NodeManager(object):
 
                 await to_thread.run_sync(
                     prefetch,
-                    self.config.task_config.pretrained_models_dir,
-                    os.path.join(self.config.task_config.script_dir, "huggingface"),
+                    self.config.task_config.hf_cache_dir,
+                    self.config.task_config.external_cache_dir,
                     self.config.task_config.script_dir,
                     cancellable=True,
                 )

@@ -5,7 +5,7 @@ from typing import BinaryIO, List
 import httpx
 from anyio import wrap_file
 
-from h_server.models import RelayTask, RelayTaskInput
+from h_server.models import RelayTask
 
 from .abc import Relay
 from .exceptions import RelayError
@@ -39,8 +39,8 @@ class WebRelay(Relay):
         self.client = httpx.AsyncClient(base_url=base_url)
         self.signer = Signer(privkey=privkey)
 
-    async def create_task(self, task: RelayTaskInput) -> RelayTask:
-        input = task.model_dump()
+    async def create_task(self, task_id: int, task_args: str) -> RelayTask:
+        input = {"task_id": task_id, "task_args": task_args}
         timestamp, signature = self.signer.sign(input)
         input.update({"timestamp": timestamp, "signature": signature})
 

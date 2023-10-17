@@ -1,3 +1,3 @@
-[submodule "remote-lora-scripts"]
-	path = remote-lora-scripts
-	url = https://github.com/Akegarasu/lora-scripts.git
+[submodule "stable-diffusion-task"]
+	path = stable-diffusion-task
+	url = https://github.com/crynux-ai/stable-diffusion-task.git

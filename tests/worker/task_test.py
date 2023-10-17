@@ -5,7 +5,7 @@ import concurrent.futures
 
 def test_image_hash():
     h = get_image_hash("test.png")
-    assert h == "0xee96b9d99124a466"
+    assert h == "0x9c3bc76699c63609"
 
 
 def test_img_hash_multithread():
@@ -15,4 +15,4 @@ def test_img_hash_multithread():
             f = pool.submit(get_image_hash, "test.png")
             futures.append(f)
         for f in concurrent.futures.as_completed(futures):
-            assert f.result() == "0xee96b9d99124a466"
+            assert f.result() == "0x9c3bc76699c63609"

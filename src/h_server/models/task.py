@@ -38,20 +38,7 @@ class RelayTask(BaseModel):
     creator: str
     task_hash: str
     data_hash: str
-    prompt: str
-    base_model: str
-    lora_model: str
-    task_config: Optional[TaskConfig] = None
-    pose: Optional[PoseConfig] = None
-
-
-class RelayTaskInput(BaseModel):
-    task_id: int
-    base_model: str
-    prompt: str
-    task_config: TaskConfig
-    pose: PoseConfig
-    lora_model: str = ""
+    task_args: str
 
 
 class TaskStatus(Enum):

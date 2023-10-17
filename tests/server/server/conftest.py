@@ -10,12 +10,27 @@ from h_server import models
 from h_server.config import Config, TxOption, set_config
 from h_server.contracts import Contracts, set_contracts
 from h_server.event_queue import MemoryEventQueue, set_event_queue
-from h_server.node_manager import NodeManager, set_node_manager, NodeStateManager, set_node_state_manager
-from h_server.node_manager.state_cache import MemoryNodeStateCache, MemoryTxStateCache, ManagerStateCache, set_manager_state_cache
+from h_server.node_manager import (
+    NodeManager,
+    set_node_manager,
+    NodeStateManager,
+    set_node_state_manager,
+)
+from h_server.node_manager.state_cache import (
+    MemoryNodeStateCache,
+    MemoryTxStateCache,
+    ManagerStateCache,
+    set_manager_state_cache,
+)
 from h_server.relay import MockRelay, Relay, set_relay
 from h_server.server import Server
-from h_server.task import (MemoryTaskStateCache, MockTaskRunner, TaskSystem,
-                           set_task_state_cache, set_task_system)
+from h_server.task import (
+    MemoryTaskStateCache,
+    MockTaskRunner,
+    TaskSystem,
+    set_task_state_cache,
+    set_task_system,
+)
 from h_server.watcher import EventWatcher, MemoryBlockNumberCache, set_watcher
 
 
@@ -29,8 +44,9 @@ def accounts():
     return [
         "0x577887519278199ce8F8D80bAcc70fc32b48daD4",
         "0x9229d36c82E4e1d03B086C27d704741D0c78321e",
-        "0xEa1A669fd6A705d28239011A074adB3Cfd6cd82B"
+        "0xEa1A669fd6A705d28239011A074adB3Cfd6cd82B",
     ]
+
 
 @pytest.fixture
 def privkeys():
@@ -83,10 +99,9 @@ def config():
             "celery": {"broker": "", "backend": ""},
             "distributed": False,
             "task_config": {
-                "data_dir": "build/data/workspace",
-                "pretrained_models_dir": "build/data/pretrained-models",
-                "controlnet_models_dir": "build/data/controlnet",
-                "training_logs_dir": "build/data/training-logs",
+                "output_dir": "build/data/images",
+                "hf_cache_dir": "build/data/huggingface",
+                "external_cache_dir": "build/data/external",
                 "inference_logs_dir": "build/data/inference-logs",
                 "script_dir": "remote-lora-scripts",
                 "result_url": "",
@@ -109,7 +124,10 @@ async def node_contracts(
     for privkey in privkeys:
         contracts = Contracts(provider=root_contracts.provider, privkey=privkey)
         await contracts.init(
-            token_contract_address, node_contract_address, task_contract_address
+            token_contract_address,
+            node_contract_address,
+            task_contract_address,
+            option=tx_option,
         )
         amount = Web3.to_wei(1000, "ether")
         if (await contracts.token_contract.balance_of(contracts.account)) < amount:
@@ -193,7 +211,7 @@ async def managers(
 
         state_cache = ManagerStateCache(
             node_state_cache_cls=MemoryNodeStateCache,
-            tx_state_cache_cls=MemoryTxStateCache
+            tx_state_cache_cls=MemoryTxStateCache,
         )
         if i == 0:
             set_manager_state_cache(state_cache)
@@ -215,12 +233,12 @@ async def managers(
             relay=relay,
             watcher=watcher,
             task_system=system,
-            node_state_manager=state_manager
+            node_state_manager=state_manager,
         )
         if i == 0:
             set_node_manager(manager)
         managers.append(manager)
-    
+
     return managers
 
 
@@ -239,8 +257,7 @@ async def running_client(managers):
 @pytest.fixture
 def client():
     state_cache = ManagerStateCache(
-        node_state_cache_cls=MemoryNodeStateCache,
-        tx_state_cache_cls=MemoryTxStateCache
+        node_state_cache_cls=MemoryNodeStateCache, tx_state_cache_cls=MemoryTxStateCache
     )
     set_manager_state_cache(state_cache)
     client = TestClient(Server().app)

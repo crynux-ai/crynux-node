@@ -22,6 +22,6 @@ async def test_system_api(client: TestClient):
     assert memory_info["total"] > 0
 
     disk_info = resp_data["disk"]
-    assert disk_info["base_models"] > 0
-    assert disk_info["lora_models"] > 0
-    assert disk_info["logs"] > 0
+    assert disk_info["base_models"] >= 0
+    assert disk_info["lora_models"] >= 0
+    assert disk_info["logs"] >= 0

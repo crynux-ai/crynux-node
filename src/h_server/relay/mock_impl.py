@@ -6,8 +6,8 @@ from contextlib import contextmanager
 
 from anyio import to_thread, Condition, get_cancelled_exc_class
 
-from h_server.models import RelayTask, RelayTaskInput
-from h_server.utils import get_task_data_hash, get_task_hash
+from h_server.models import RelayTask
+from h_server.utils import get_task_hash
 
 from .abc import Relay
 from .exceptions import RelayError
@@ -41,22 +41,16 @@ class MockRelay(Relay):
         except Exception as e:
             raise RelayError(status_code=500, method=method, message=str(e))
 
-    async def create_task(self, task: RelayTaskInput) -> RelayTask:
+    async def create_task(self, task_id: int, task_args: str) -> RelayTask:
         with self.wrap_error("createTask"):
             t = RelayTask(
-                task_id=task.task_id,
+                task_id=task_id,
                 creator="",
-                task_hash=get_task_hash(task.task_config),
-                data_hash=get_task_data_hash(
-                    task.base_model, task.lora_model, task.prompt, task.pose
-                ),
-                prompt=task.prompt,
-                base_model=task.base_model,
-                lora_model=task.lora_model,
-                task_config=task.task_config,
-                pose=task.pose,
+                task_hash=get_task_hash(task_args),
+                data_hash="",
+                task_args=task_args
             )
-            self.tasks[task.task_id] = t
+            self.tasks[task_id] = t
             return t
 
     async def get_task(self, task_id: int) -> RelayTask:

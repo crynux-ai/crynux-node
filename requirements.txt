@@ -9,6 +9,6 @@ hypercorn==0.14.4
 httpx==0.24.1
 pydantic==2.2.1
 pydantic-settings==2.0.3
-pydantic-settings-yaml==0.2.0
 importlib-resources==6.0.1
 python-multipart==0.0.6
+tenacity==8.2.3

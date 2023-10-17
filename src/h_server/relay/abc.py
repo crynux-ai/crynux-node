@@ -1,12 +1,12 @@
 from abc import ABC, abstractmethod
 from typing import List, BinaryIO
 
-from h_server.models import RelayTask, RelayTaskInput
+from h_server.models import RelayTask
 
 
 class Relay(ABC):
     @abstractmethod
-    async def create_task(self, task: RelayTaskInput) -> RelayTask:
+    async def create_task(self, task_id: int, task_args: str) -> RelayTask:
         ...
 
     @abstractmethod
