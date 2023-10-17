@@ -169,7 +169,7 @@ class NodeManager(object):
                 node_state_cache_cls=node_state_cache_cls,
                 tx_state_cache_cls=tx_state_cache_cls,
             )
-            set_manager_state_cache(self.state_cache)
+            set_manager_state_cache(manager_state_cache)
         self.state_cache = manager_state_cache
 
         self._privkey = privkey
