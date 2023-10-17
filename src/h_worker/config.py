@@ -93,13 +93,9 @@ class Config(BaseSettings):
 
     task: TaskConfig
 
-    model_config = SettingsConfigDict(
-        yaml_file=os.getenv("H_SERVER_CONFIG", "config/worker_config.yaml")  # type: ignore
-    )
-
     model_config = YamlSettingsConfigDict(
         env_nested_delimiter="__",
-        yaml_file=os.getenv("H_WORKER_CONFIG", "config.yml"),
+        yaml_file=os.getenv("H_WORKER_CONFIG", "config/worker_config.yaml"),
         env_file=".env",
     )
 
