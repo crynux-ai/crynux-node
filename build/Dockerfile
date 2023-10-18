@@ -61,9 +61,10 @@ ENV PATH="/app/venv/bin:${PATH}"
 WORKDIR /app
 
 RUN mkdir data && mkdir data/external && mkdir data/huggingface && mkdir data/images && mkdir data/inference-logs
-COPY config/config.yml.example config.yml
+COPY config/config.yml.example config.yml.example
+COPY start.sh start.sh
 COPY --from=web-builder /app/dist/ dist/
 
-ENV H_SERVER_CONFIG="/app/config.yml"
+ENV H_SERVER_CONFIG="/app/config/config.yml"
 
-ENTRYPOINT ["python3", "-m", "h_server.main"]
+ENTRYPOINT ["bash", "start.sh"]
