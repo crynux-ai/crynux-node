@@ -30,7 +30,7 @@ class Contracts(object):
         provider_path: Optional[str] = None,
         privkey: str = "",
         default_account_index: Optional[int] = None,
-        timeout: int = 3,
+        timeout: int = 30,
     ):
         if provider is None:
             if provider_path is None:
