@@ -3,6 +3,7 @@ from typing import TYPE_CHECKING, Callable, Optional, TypeVar, cast
 
 import importlib_resources as impresources
 from anyio import Lock, get_cancelled_exc_class
+from eth_abi import decode
 from eth_typing import ChecksumAddress
 from hexbytes import HexBytes
 from typing_extensions import ParamSpec
@@ -64,7 +65,10 @@ class TxWaiter(object):
                 raise
             except Exception as e:
                 reason = str(e)
-                raise TxRevertedError(method=self.method, reason=reason)
+                if reason.startswith("08c379a0"):
+                    reason_hex = reason[8:]
+                    reason: str = decode(["string"], bytes.fromhex(reason_hex))[0]
+                raise TxRevertedError(method=self.method, reason=reason) from e
         return receipt
         
 

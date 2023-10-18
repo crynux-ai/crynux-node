@@ -348,7 +348,7 @@ class InferenceTaskRunner(TaskRunner):
 
             if event.result_node == self.contracts.account:
                 await self.relay.upload_task_result(self.task_id, state.files)
-                waiter = await self.contracts.task_contract.report_task_success(
+                waiter = await self.contracts.task_contract.report_results_uploaded(
                     self.task_id, state.round
                 )
                 await waiter.wait()

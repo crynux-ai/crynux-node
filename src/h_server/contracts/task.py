@@ -73,11 +73,11 @@ class TaskContract(ContractWrapperBase):
             result=result,
         )
 
-    async def report_task_success(
+    async def report_results_uploaded(
         self, task_id: int, round: int, *, option: "Optional[TxOption]" = None
     ) -> TxWaiter:
         return await self._transaction_call(
-            "reportTaskSuccess",
+            "reportResultsUploaded",
             option=option,
             taskId=task_id,
             round=round,
