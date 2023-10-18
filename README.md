@@ -2,6 +2,8 @@
 
 Start a Crynux Node to share the spared local GPU to others in exchange for tokens. Crynux Node will join the Crynux Network, receive the AI inference/training/fine-tuning tasks from the network, and execute them locally.
 
+![Crynux Node WebUI](./docs/webui.png)
+
 ## Run the node
 
 1. Pull the Docker image from GitHub
