@@ -135,7 +135,7 @@ async def test_task(contracts_for_task: Tuple[Contracts, Contracts, Contracts], 
     task = await result_node.task_contract.get_task(task_id=task_id)
     assert task.result_node == result_account
 
-    waiter = await result_node.task_contract.report_task_success(
+    waiter = await result_node.task_contract.report_results_uploaded(
         task_id=task_id, round=round_map[result_account], option=tx_option
     )
     await waiter.wait()
@@ -225,7 +225,7 @@ async def test_task_with_event_watcher(
         task = await result_node.task_contract.get_task(task_id=task_id)
         assert task.result_node == result_account
 
-        waiter = await result_node.task_contract.report_task_success(
+        waiter = await result_node.task_contract.report_results_uploaded(
             task_id=task_id, round=round_map[result_account], option=tx_option
         )
         await waiter.wait()
