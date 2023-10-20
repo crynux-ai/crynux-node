@@ -107,6 +107,9 @@ class EventWatcher(object):
     def set_blocknumber_cache(self, cache: BlockNumberCache):
         self._cache = cache
 
+    def get_blocknumber_cache(self):
+        return self._cache
+
     def remove_blocknumber_cache(self):
         self._cache = None
 

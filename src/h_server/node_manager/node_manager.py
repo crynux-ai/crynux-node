@@ -264,13 +264,17 @@ class NodeManager(object):
     async def _recover(self):
         assert self._contracts is not None
         assert self._task_system is not None
+        assert self._watcher is not None
+
+        # only recover when watcher hasn't started
+        blocknumber_cache = self._watcher.get_blocknumber_cache()
+        if blocknumber_cache is not None and await blocknumber_cache.get() > 0:
+            return
 
         task_id = await self._contracts.task_contract.get_node_task(
             self._contracts.account
         )
         if task_id == 0:
-            return
-        if await self._task_system.state_cache.has(task_id):
             return
 
         task = await self._contracts.task_contract.get_task(task_id=task_id)
@@ -317,7 +321,9 @@ class NodeManager(object):
 
         for event in events:
             await self._task_system.event_queue.put(event=event)
+            _logger.debug(f"Recover event from chain {event}")
         await self._task_system.state_cache.dump(state)
+        _logger.debug(f"Recover task state {state}")
 
     async def _run(self):
         assert self._tg is None, "Node manager is running."
@@ -347,8 +353,6 @@ class NodeManager(object):
 
         try:
             await self._run()
-        except KeyboardInterrupt:
-            raise
         except get_cancelled_exc_class():
             raise
         except Exception as e:
