@@ -226,7 +226,7 @@ class NodeManager(object):
                     queue=self._event_queue,
                     block_number_cache_cls=self.block_number_cache_cls,
                     retry_count=self._retry_count,
-                    retry_delay=self._retry_delay
+                    retry_delay=self._retry_delay,
                 )
             if self._task_system is None:
                 self._task_system = _make_task_system(
@@ -242,10 +242,12 @@ class NodeManager(object):
         def should_init():
             if state.status == models.NodeStatus.Init:
                 return True
-            if state.status == models.NodeStatus.Error and state.message.startswith("Node manager init error"):
+            if state.status == models.NodeStatus.Error and state.message.startswith(
+                "Node manager init error"
+            ):
                 return True
             return False
-                
+
         if should_init():
             _logger.info("Initialize node manager")
             await self.state_cache.set_node_state(models.NodeStatus.Init)
@@ -305,6 +307,11 @@ class NodeManager(object):
 
         # has submitted result commitment
         if round < len(task.commitments) and task.commitments[round] != bytes([0] * 32):
+            # has reported error, skip the task
+            err_commitment = bytes([0] * 31 + [1])
+            if task.commitments[round] == err_commitment:
+                return
+
             assert self.config.last_result is not None, (
                 f"Task {task_id} has submitted result commitment, but last result has not found in config."
                 " Please set the result in config file to rerun the task."
@@ -350,7 +357,9 @@ class NodeManager(object):
                     msg = f"Node manager init error: {e}"
                     _logger.error(msg)
                     with fail_after(5, shield=True):
-                        await self.state_cache.set_node_state(models.NodeStatus.Error, msg)
+                        await self.state_cache.set_node_state(
+                            models.NodeStatus.Error, msg
+                        )
                     await self.finish()
                     return
 
