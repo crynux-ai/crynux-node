@@ -347,7 +347,7 @@ class NodeManager(object):
                     raise
                 except Exception as e:
                     _logger.exception(e)
-                    msg = f"Node manager init error: {str(e)}"
+                    msg = f"Node manager init error: {e}"
                     _logger.error(msg)
                     with fail_after(5, shield=True):
                         await self.state_cache.set_node_state(models.NodeStatus.Error, msg)
@@ -375,7 +375,7 @@ class NodeManager(object):
             raise
         except Exception as e:
             _logger.exception(e)
-            msg = f"Node manager running error: {str(e)}"
+            msg = f"Node manager running error: {e}"
             _logger.error(msg)
             with fail_after(5, shield=True):
                 await self.state_cache.set_node_state(models.NodeStatus.Error, msg)
