@@ -11,8 +11,10 @@ from tenacity import (
     AsyncRetrying,
     before_sleep_log,
     retry,
+    retry_if_exception,
     retry_if_not_exception_type,
     stop_after_attempt,
+    stop_after_delay,
     wait_exponential,
     wait_fixed,
 )
@@ -23,7 +25,7 @@ from h_server.config import TaskConfig as LocalConfig
 from h_server.config import get_config
 from h_server.contracts import Contracts, TxRevertedError, get_contracts
 from h_server.event_queue import EventQueue
-from h_server.relay import Relay, get_relay
+from h_server.relay import Relay, get_relay, RelayError
 from h_server.watcher import EventWatcher, get_watcher
 from h_worker.task.error import TaskInvalid
 
@@ -49,9 +51,39 @@ class TaskRunner(ABC):
         self.task_name = task_name
         self.distributed = distributed
 
-    @abstractmethod
+        self._state: Optional[models.TaskState] = None
+
+    @property
+    def state(self) -> models.TaskState:
+        assert self._state is not None, "The task runner's state has not been set."
+        return self._state
+
+    @state.setter
+    def state(self, state: models.TaskState):
+        assert self._state is None, "The task runner's state has already been set."
+        self._state = state
+
+    @state.deleter
+    def state(self):
+        assert self._state is not None, "The task runner's state has not been set."
+        self._state = None
+
     async def init(self) -> bool:
-        ...
+        try:
+            if await self.cache.has(self.task_id):
+                state = await self.cache.load(self.task_id)
+                self.state = state
+            else:
+                state = models.TaskState(
+                    task_id=self.task_id,
+                    round=0,
+                    status=models.TaskStatus.Pending,
+                )
+                await self.cache.dump(state)
+                self.state = state
+            return True
+        except KeyError:
+            return False
 
     @abstractmethod
     async def process_event(self, event: models.TaskEvent) -> bool:
@@ -107,8 +139,6 @@ class InferenceTaskRunner(TaskRunner):
 
         self._retry_count = retry_count
 
-        self._state: Optional[models.TaskState] = None
-
         self._lock: Optional[Lock] = None
 
         async def _push_event(event_data: EventData):
@@ -134,33 +164,13 @@ class InferenceTaskRunner(TaskRunner):
             filter_args={"taskId": self.task_id},
         )
 
-    async def init(self) -> bool:
-        assert self._state is None, "The task runner has already been initialized."
-
-        try:
-            if await self.cache.has(self.task_id):
-                state = await self.cache.load(self.task_id)
-                self._state = state
-            else:
-                self._state = models.TaskState(
-                    task_id=self.task_id,
-                    round=0,
-                    status=models.TaskStatus.Pending,
-                )
-                await self.cache.dump(self._state)
-            return True
-        except KeyError:
-            return False
-
     @asynccontextmanager
     async def state_context(self):
         try:
-            assert self._state is not None, "The task runner has not been initialized."
-            yield self._state
+            yield self.state
         finally:
-            if self._state is not None:
-                with fail_after(5, shield=True):
-                    await self.cache.dump(task_state=self._state)
+            with fail_after(5, shield=True):
+                await self.cache.dump(task_state=self.state)
 
     @retry(
         stop=stop_after_attempt(3),
@@ -190,7 +200,7 @@ class InferenceTaskRunner(TaskRunner):
         try:
             async for attemp in AsyncRetrying(
                 stop=stop_after_attempt(self._retry_count),
-                wait=wait_exponential(multiplier=3, max=60),
+                wait=wait_exponential(multiplier=10),
                 retry=retry_if_not_exception_type((TaskInvalid, AssertionError)),
                 before_sleep=before_sleep_log(_logger, logging.ERROR, exc_info=True),
                 reraise=True,
@@ -235,7 +245,22 @@ class InferenceTaskRunner(TaskRunner):
 
             state.round = event.round
 
-            task = await self.relay.get_task(event.task_id)
+            def should_retry(e: BaseException) -> bool:
+                if isinstance(e, RelayError) and "Task not ready" in e.message:
+                    return True
+                return False
+            
+            @retry(
+                stop=stop_after_delay(1800),
+                wait=wait_fixed(60),
+                retry=retry_if_exception(should_retry),
+                before_sleep=before_sleep_log(_logger, logging.ERROR, exc_info=True),
+                reraise=True,
+            )
+            async def get_task():
+                return await self.relay.get_task(event.task_id)
+                
+            task = await get_task()
 
             if self.distributed:
 
@@ -364,8 +389,7 @@ class InferenceTaskRunner(TaskRunner):
         await self.cleanup()
 
     async def cleanup(self):
-        assert self._state is not None, "The task runner has not been initialized."
-        assert self._state.status in [
+        assert self.state.status in [
             models.TaskStatus.Success,
             models.TaskStatus.Aborted,
             models.TaskStatus.Error,
@@ -381,7 +405,9 @@ class InferenceTaskRunner(TaskRunner):
                 shutil.rmtree(dirname)
 
         with fail_after(5, shield=True):
-            await to_thread.run_sync(delete_result_files, self._state.files)
+            await to_thread.run_sync(delete_result_files, self.state.files)
+        
+        del self.state
 
 
 class MockTaskRunner(TaskRunner):
@@ -401,36 +427,15 @@ class MockTaskRunner(TaskRunner):
             distributed=distributed,
         )
 
-        self._state: Optional[models.TaskState] = None
         self._lock: Optional[Lock] = None
-
-    async def init(self) -> bool:
-        assert self._state is None, "The task runner has already been initialized."
-
-        try:
-            if await self.cache.has(self.task_id):
-                state = await self.cache.load(self.task_id)
-                self._state = state
-            else:
-                self._state = models.TaskState(
-                    task_id=self.task_id,
-                    round=0,
-                    status=models.TaskStatus.Pending,
-                )
-                await self.cache.dump(self._state)
-            return True
-        except KeyError:
-            return False
 
     @asynccontextmanager
     async def state_context(self):
         try:
-            assert self._state is not None
-            yield self._state
+            yield self.state
         finally:
-            if self._state is not None:
-                with fail_after(5, shield=True):
-                    await self.cache.dump(task_state=self._state)
+            with fail_after(5, shield=True):
+                await self.cache.dump(task_state=self.state)
 
     @property
     def lock(self) -> Lock:
@@ -494,12 +499,10 @@ class MockTaskRunner(TaskRunner):
         await self.cleanup()
 
     async def task_aborted(self, event: models.TaskAborted):
-        async with self.state_context():
-            assert self._state is not None
-            self._state.status = models.TaskStatus.Aborted
+        async with self.state_context() as state:
+            state.status = models.TaskStatus.Aborted
 
         await self.cleanup()
 
     async def cleanup(self):
-        assert self._state is not None
-        self._state = None
+        del self.state

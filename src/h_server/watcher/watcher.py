@@ -45,32 +45,17 @@ class EventFilter(object):
         self.from_block = from_block
         self.to_block = to_block
 
-    def process_tx(self, tx: TxReceipt, tg: TaskGroup):
-        block_number = tx["blockNumber"]
-        if self.from_block is not None and self.from_block >= block_number:
-            return
-        if self.to_block is not None and self.to_block < block_number:
-            return
-        if tx["to"] != self.event.address:
-            return
-        for event in self.event.process_receipt(tx, errors=DISCARD):
-            if _filter_event(event, self.filter_args):
+    async def process_events(self, start: int, end: int, tg: TaskGroup):
+        if self.from_block is not None:
+            start = max(self.from_block, start)
+        if self.to_block is not None:
+            end = min(self.to_block, end)
+        
+        if start <= end:
+            events = await self.event.get_logs(argument_filters=self.filter_args, fromBlock=start, toBlock=end)
+            for event in events:
                 _logger.debug(f"Watch event: {event}")
                 tg.start_soon(wrap_callback(self.callback), event)
-
-
-def _filter_event(event: EventData, filter_args: Optional[Dict[str, Any]]) -> bool:
-    if filter_args is None:
-        return True
-    for key, value in filter_args.items():
-        real = event["args"][key]
-        if isinstance(value, list):
-            if real not in value:
-                return False
-        elif real != value:
-            return False
-
-    return True
 
 
 class EventWatcher(object):
@@ -78,6 +63,7 @@ class EventWatcher(object):
         self, w3: AsyncWeb3, retry_count: int = 3, retry_delay: float = 10
     ) -> None:
         self.w3 = w3
+        self.page_size = 500
         self.retry_count = retry_count
         self.retry_delay = retry_delay
 
@@ -106,6 +92,9 @@ class EventWatcher(object):
 
     def set_blocknumber_cache(self, cache: BlockNumberCache):
         self._cache = cache
+
+    def get_blocknumber_cache(self):
+        return self._cache
 
     def remove_blocknumber_cache(self):
         self._cache = None
@@ -167,13 +156,14 @@ class EventWatcher(object):
                 start = await self._cache.get()
                 if start == 0:
                     start = await self.w3.eth.get_block_number()
+                else:
+                    start += 1
             else:
                 start = await self.w3.eth.get_block_number()
         else:
             if self._cache is not None:
-                await self._cache.set(from_block)
+                await self._cache.set(from_block - 1)
             start = from_block
-        start += 1
 
         def _should_stop(stop_event: Event, start: int):
             if stop_event.is_set():
@@ -195,24 +185,19 @@ class EventWatcher(object):
                     with attemp:
 
                         while not _should_stop(self._stop_event, start):
-                            if start <= (await self.w3.eth.get_block_number()):
-                                block = await self.w3.eth.get_block(start)
-                                _logger.debug(f"Get block {start} from chain.")
-                                if "transactions" in block and len(self._event_filters) > 0:
+                            latest_blocknum = await self.w3.eth.get_block_number()
+                            if start <= latest_blocknum:
+                                end = min(latest_blocknum, start + self.page_size)
+                                if len(self._event_filters) > 0:
                                     async with create_task_group() as tg:
-                                        for tx_hash in block["transactions"]:
-                                            assert isinstance(tx_hash, bytes)
-                                            tx = await self.w3.eth.get_transaction_receipt(
-                                                tx_hash
-                                            )
-                                            for event_filter in self._event_filters.values():
-                                                event_filter.process_tx(tx, tg=tg)
-
-                                start += 1
+                                        for event_filter in self._event_filters.values():
+                                            tg.start_soon(event_filter.process_events, start, end, tg)
+                                _logger.debug(f"Process events from block {start} to {end}")
 
                                 with fail_after(delay=5, shield=True):
                                     if self._cache is not None:
-                                        await self._cache.set(start)
+                                        await self._cache.set(end)
+                                start = end + 1
                             else:
                                 await sleep(interval)
         finally:

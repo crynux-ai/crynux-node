@@ -1,5 +1,6 @@
 import os
 import shutil
+import time
 from datetime import datetime, timedelta
 from string import hexdigits
 from typing import List, Literal
@@ -94,19 +95,21 @@ async def get_task_stats(
             num_total=0
         )
     running_status = [TaskStatus.Pending, TaskStatus.Executing, TaskStatus.ResultUploaded, TaskStatus.Disclosed]
-    running_task_count = await task_state_cache.count(status=running_status)
-    if running_task_count > 0:
+    running_states = await task_state_cache.find(status=running_status)
+    if len(running_states) > 0:
         status = "running"
     else:
         status = "idle"
 
-    now = datetime.now()
-    today_start = now - timedelta(days=1)
+    now = datetime.now().astimezone()
+    date = now.date()
+    today_ts = time.mktime(date.timetuple())
+    today = datetime.fromtimestamp(today_ts)
 
-    num_today = await task_state_cache.count(
-        start=today_start, status=[TaskStatus.Success]
+    today_states = await task_state_cache.find(
+        start=today, status=[TaskStatus.Success]
     )
 
-    num_total = await task_state_cache.count(status=[TaskStatus.Success])
+    total_states = await task_state_cache.find(status=[TaskStatus.Success])
 
-    return TaskStats(status=status, num_today=num_today, num_total=num_total)
+    return TaskStats(status=status, num_today=len(today_states), num_total=len(total_states))

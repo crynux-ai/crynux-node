@@ -62,14 +62,14 @@ class DbTaskStateCache(TaskStateCache):
             state = (await sess.scalars(q)).one_or_none()
             return state is not None
 
-    async def count(
+    async def find(
         self,
         start: Optional[datetime] = None,
         end: Optional[datetime] = None,
         status: Optional[List[TaskStatus]] = None
     ):
         async with db.session_scope() as sess:
-            q = sa.select(sa.func.count(db_models.TaskState.id))
+            q = sa.select(db_models.TaskState)
             if start is not None:
                 q = q.where(db_models.TaskState.updated_at >= start)
             if end is not None:
@@ -77,5 +77,5 @@ class DbTaskStateCache(TaskStateCache):
             if status is not None:
                 q = q.where(db_models.TaskState.status.in_(status))
 
-            n = (await sess.execute(q)).scalar_one()
-            return n
+            states = (await sess.execute(q)).scalars().all()
+            return list(states)

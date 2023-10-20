@@ -226,7 +226,7 @@ class NodeManager(object):
                     queue=self._event_queue,
                     block_number_cache_cls=self.block_number_cache_cls,
                     retry_count=self._retry_count,
-                    retry_delay=self._retry_delay
+                    retry_delay=self._retry_delay,
                 )
             if self._task_system is None:
                 self._task_system = _make_task_system(
@@ -237,8 +237,18 @@ class NodeManager(object):
         _logger.info("Node manager components initializing complete.")
 
     async def _init(self):
-        status = (await self.state_cache.get_node_state()).status
-        if status in (models.NodeStatus.Init, models.NodeStatus.Error):
+        state = await self.state_cache.get_node_state()
+
+        def should_init():
+            if state.status == models.NodeStatus.Init:
+                return True
+            if state.status == models.NodeStatus.Error and state.message.startswith(
+                "Node manager init error"
+            ):
+                return True
+            return False
+
+        if should_init():
             _logger.info("Initialize node manager")
             await self.state_cache.set_node_state(models.NodeStatus.Init)
             # clear tx error when restart
@@ -264,13 +274,17 @@ class NodeManager(object):
     async def _recover(self):
         assert self._contracts is not None
         assert self._task_system is not None
+        assert self._watcher is not None
+
+        # only recover when watcher hasn't started
+        blocknumber_cache = self._watcher.get_blocknumber_cache()
+        if blocknumber_cache is not None and await blocknumber_cache.get() > 0:
+            return
 
         task_id = await self._contracts.task_contract.get_node_task(
             self._contracts.account
         )
         if task_id == 0:
-            return
-        if await self._task_system.state_cache.has(task_id):
             return
 
         task = await self._contracts.task_contract.get_task(task_id=task_id)
@@ -293,6 +307,11 @@ class NodeManager(object):
 
         # has submitted result commitment
         if round < len(task.commitments) and task.commitments[round] != bytes([0] * 32):
+            # has reported error, skip the task
+            err_commitment = bytes([0] * 31 + [1])
+            if task.commitments[round] == err_commitment:
+                return
+
             assert self.config.last_result is not None, (
                 f"Task {task_id} has submitted result commitment, but last result has not found in config."
                 " Please set the result in config file to rerun the task."
@@ -317,7 +336,9 @@ class NodeManager(object):
 
         for event in events:
             await self._task_system.event_queue.put(event=event)
+            _logger.debug(f"Recover event from chain {event}")
         await self._task_system.state_cache.dump(state)
+        _logger.debug(f"Recover task state {state}")
 
     async def _run(self):
         assert self._tg is None, "Node manager is running."
@@ -325,10 +346,22 @@ class NodeManager(object):
         try:
             async with create_task_group() as tg:
                 self._tg = tg
-
-                async with create_task_group() as init_tg:
-                    init_tg.start_soon(self._init_components)
-                    init_tg.start_soon(self._init)
+                try:
+                    async with create_task_group() as init_tg:
+                        init_tg.start_soon(self._init_components)
+                        init_tg.start_soon(self._init)
+                except get_cancelled_exc_class():
+                    raise
+                except Exception as e:
+                    _logger.exception(e)
+                    msg = f"Node manager init error: {e}"
+                    _logger.error(msg)
+                    with fail_after(5, shield=True):
+                        await self.state_cache.set_node_state(
+                            models.NodeStatus.Error, msg
+                        )
+                    await self.finish()
+                    return
 
                 await self._recover()
 
@@ -347,15 +380,14 @@ class NodeManager(object):
 
         try:
             await self._run()
-        except KeyboardInterrupt:
-            raise
         except get_cancelled_exc_class():
             raise
         except Exception as e:
             _logger.exception(e)
-            _logger.error(f"Node manager error: {str(e)}")
+            msg = f"Node manager running error: {e}"
+            _logger.error(msg)
             with fail_after(5, shield=True):
-                await self.state_cache.set_node_state(models.NodeStatus.Error, str(e))
+                await self.state_cache.set_node_state(models.NodeStatus.Error, msg)
             await self.finish()
 
     async def finish(self):

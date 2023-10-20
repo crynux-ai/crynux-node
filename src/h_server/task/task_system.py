@@ -5,7 +5,7 @@ from anyio import Event, create_task_group, fail_after, get_cancelled_exc_class,
 from anyio.abc import TaskGroup
 
 from h_server.event_queue import EventQueue
-from h_server.models import TaskEvent
+from h_server.models import TaskEvent, TaskStatus
 
 from .state_cache import TaskStateCache
 from .task_runner import InferenceTaskRunner, TaskRunner
@@ -49,6 +49,22 @@ class TaskSystem(object):
     def event_queue(self) -> EventQueue:
         return self._queue
 
+    async def _recover(self):
+        running_status = [TaskStatus.Pending, TaskStatus.Executing, TaskStatus.ResultUploaded, TaskStatus.Disclosed]
+        running_states = await self.state_cache.find(status=running_status)
+        for state in running_states:
+            runner = self._runner_cls(
+                task_id=state.task_id,
+                state_cache=self._state_cache,
+                queue=self._queue,
+                task_name=self._task_name,
+                distributed=self._distributed,
+            )
+            runner.state = state
+            self._runners[state.task_id] = runner
+            _logger.debug(f"Recreate task runner for {state.task_id}")
+
+
     async def start(self):
         assert self._stop_event is None, "The TaskSystem has already been started."
         assert self._tg is None, "The TaskSystem has already been started."
@@ -58,6 +74,7 @@ class TaskSystem(object):
         try:
             async with create_task_group() as tg:
                 self._tg = tg
+                await self._recover()
                 while not self._stop_event.is_set():
                     ack_id, event = await self.event_queue.get()
                     task_id = event.task_id
