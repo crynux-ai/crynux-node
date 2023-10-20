@@ -27,19 +27,19 @@ async def test_memory_state_cache():
 
     assert await cache.has(state.task_id)
 
-    assert await cache.count() == 1
-    assert await cache.count(start=start, end=datetime.now()) == 1
-    assert await cache.count(start=datetime.now()) == 0
-    assert await cache.count(start=start, end=datetime.now(), status=[TaskStatus.Pending]) == 1
-    assert await cache.count(start=start, end=datetime.now(), status=[TaskStatus.Success]) == 0
+    assert len(await cache.find()) == 1
+    assert len(await cache.find(start=start, end=datetime.now())) == 1
+    assert len(await cache.find(start=datetime.now())) == 0
+    assert len(await cache.find(start=start, end=datetime.now(), status=[TaskStatus.Pending])) == 1
+    assert len(await cache.find(start=start, end=datetime.now(), status=[TaskStatus.Success])) == 0
 
     state.status = TaskStatus.Success
     await cache.dump(state)
-    assert await cache.count() == 1
-    assert await cache.count(start=start, end=datetime.now()) == 1
-    assert await cache.count(start=datetime.now()) == 0
-    assert await cache.count(start=start, end=datetime.now(), status=[TaskStatus.Pending]) == 0
-    assert await cache.count(start=start, end=datetime.now(), status=[TaskStatus.Success]) == 1
+    assert len(await cache.find()) == 1
+    assert len(await cache.find(start=start, end=datetime.now())) == 1
+    assert len(await cache.find(start=datetime.now())) == 0
+    assert len(await cache.find(start=start, end=datetime.now(), status=[TaskStatus.Pending])) == 0
+    assert len(await cache.find(start=start, end=datetime.now(), status=[TaskStatus.Success])) == 1
 
 
 @pytest.fixture
@@ -68,16 +68,16 @@ async def test_db_state_cache(init_db):
     assert state == _state
 
     assert await cache.has(state.task_id)
-    assert await cache.count() == 1
-    assert await cache.count(start=start, end=datetime.now()) == 1
-    assert await cache.count(start=datetime.now()) == 0
-    assert await cache.count(start=start, end=datetime.now(), status=[TaskStatus.Pending]) == 1
-    assert await cache.count(start=start, end=datetime.now(), status=[TaskStatus.Success]) == 0
+    assert len(await cache.find()) == 1
+    assert len(await cache.find(start=start, end=datetime.now())) == 1
+    assert len(await cache.find(start=datetime.now())) == 0
+    assert len(await cache.find(start=start, end=datetime.now(), status=[TaskStatus.Pending])) == 1
+    assert len(await cache.find(start=start, end=datetime.now(), status=[TaskStatus.Success])) == 0
 
     state.status = TaskStatus.Success
     await cache.dump(state)
-    assert await cache.count() == 1
-    assert await cache.count(start=start, end=datetime.now()) == 1
-    assert await cache.count(start=datetime.now()) == 0
-    assert await cache.count(start=start, end=datetime.now(), status=[TaskStatus.Pending]) == 0
-    assert await cache.count(start=start, end=datetime.now(), status=[TaskStatus.Success]) == 1
+    assert len(await cache.find()) == 1
+    assert len(await cache.find(start=start, end=datetime.now())) == 1
+    assert len(await cache.find(start=datetime.now())) == 0
+    assert len(await cache.find(start=start, end=datetime.now(), status=[TaskStatus.Pending])) == 0
+    assert len(await cache.find(start=start, end=datetime.now(), status=[TaskStatus.Success])) == 1

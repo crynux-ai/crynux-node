@@ -19,10 +19,10 @@ class TaskStateCache(ABC):
         ...
 
     @abstractmethod
-    async def count(
+    async def find(
         self,
         start: Optional[datetime] = None,
         end: Optional[datetime] = None,
         status: Optional[List[models.TaskStatus]] = None
-    ) -> int:
+    ) -> List[models.TaskState]:
         ...

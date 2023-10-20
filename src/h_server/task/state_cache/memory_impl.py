@@ -24,7 +24,7 @@ class MemoryTaskStateCache(TaskStateCache):
     async def has(self, task_id: int) -> bool:
         return task_id in self._states
 
-    async def count(
+    async def find(
         self,
         start: Optional[datetime] = None,
         end: Optional[datetime] = None,
@@ -49,4 +49,4 @@ class MemoryTaskStateCache(TaskStateCache):
                 for task_id, state in states.items()
                 if state.status in status
             }
-        return len(states)
+        return list(states.values())
