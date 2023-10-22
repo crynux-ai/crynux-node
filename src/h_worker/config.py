@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import os
-from typing import Any, Dict, Literal, Optional, Tuple, Type
+from typing import Any, Dict, List, Literal, Optional, Tuple, Type
 
 import yaml
 from pydantic import BaseModel
@@ -86,12 +86,37 @@ class TaskConfig(BaseModel):
     result_url: str
 
 
+class ModelConfig(BaseModel):
+    id: str
+    variant: Optional[Literal["fp16", "ema"]] = None
+
+
+class PreloadedModelsConfig(BaseModel):
+    base: Optional[List[ModelConfig]] = None
+    controlnet: Optional[List[ModelConfig]] = None
+    vae: Optional[List[ModelConfig]] = None
+
+
+class ProxyConfig(BaseModel):
+    host: str = ""
+    port: int = 8080
+    username: str = ""
+    password: str = ""
+
+
+class PrefetchConfig(BaseModel):
+    preloaded_models: Optional[PreloadedModelsConfig] = None
+    proxy: Optional[ProxyConfig] = None
+
+
 class Config(BaseSettings):
     log: LogConfig
 
     celery: CeleryConfig
 
     task: TaskConfig
+
+    prefetch: Optional[PrefetchConfig] = None
 
     model_config = YamlSettingsConfigDict(
         env_nested_delimiter="__",
