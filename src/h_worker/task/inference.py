@@ -33,8 +33,8 @@ def sd_lora_inference(
     script_dir: str | None = None,
     inference_logs_dir: str | None = None,
     result_url: str | None = None,
-    proxy: ProxyConfig | None = None,
     distributed: bool = True,
+    **kwargs,
 ):
     if output_dir is None:
         config = get_config()
@@ -54,10 +54,14 @@ def sd_lora_inference(
     if result_url is None:
         config = get_config()
         result_url = config.task.result_url
-    if proxy is None:
+
+    proxy: ProxyConfig | None = None
+    if "proxy" in kwargs:
+        proxy = kwargs["proxy"]
+    else:
         config = get_config()
-        if config.sd_task is not None and config.sd_task.proxy is not None:
-            proxy = cast(ProxyConfig, config.sd_task.proxy.model_dump())
+        if config.task.proxy is not None:
+            proxy = cast(ProxyConfig, config.task.proxy.model_dump())
 
     _logger.info(
         f"task id: {task_id},"
@@ -68,7 +72,6 @@ def sd_lora_inference(
         f"script_dir: {script_dir},"
         f"inference_logs_dir: {inference_logs_dir},"
         f"result_url: {result_url},"
-        f"proxy: {proxy}",
     )
 
     # Check if venv exists. If it exits, use the venv interpreter; else use the current interpreter
@@ -138,8 +141,8 @@ def mock_lora_inference(
     script_dir: str | None = None,
     inference_logs_dir: str | None = None,
     result_url: str | None = None,
-    proxy: ProxyConfig | None = None,
     distributed: bool = True,
+    **kwargs,
 ):
     if output_dir is None:
         config = get_config()
@@ -159,10 +162,6 @@ def mock_lora_inference(
     if result_url is None:
         config = get_config()
         result_url = config.task.result_url
-    if proxy is None:
-        config = get_config()
-        if config.sd_task is not None and config.sd_task.proxy is not None:
-            proxy = cast(ProxyConfig, config.sd_task.proxy.model_dump())
 
     _logger.info(
         f"task id: {task_id},"
@@ -173,7 +172,6 @@ def mock_lora_inference(
         f"script_dir: {script_dir},"
         f"inference_logs_dir: {inference_logs_dir},"
         f"result_url: {result_url},"
-        f"proxy: {proxy}",
     )
 
     image_dir = os.path.abspath(os.path.join(output_dir, str(task_id)))
