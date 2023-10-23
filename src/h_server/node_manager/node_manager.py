@@ -229,19 +229,19 @@ class NodeManager(object):
             await self.state_cache.set_tx_state(models.TxStatus.Success)
 
             if not self.config.distributed:
-                from h_worker.prefetch import (ModelConfig, ProxyConfig,
-                                               prefetch)
+                from h_worker.prefetch import prefetch
+                from h_worker.models import ModelConfig, ProxyConfig
 
                 assert (
                     self.config.task_config is not None
                 ), "Task config is None in non-distributed version"
 
                 if (
-                    self.config.prefetch_config is not None
-                    and self.config.prefetch_config.preloaded_models is not None
+                    self.config.task_config is not None
+                    and self.config.task_config.preloaded_models is not None
                 ):
                     preload_models = (
-                        self.config.prefetch_config.preloaded_models.model_dump()
+                        self.config.task_config.preloaded_models.model_dump()
                     )
                     base_models: List[ModelConfig] | None = preload_models.get(
                         "base", None
@@ -258,10 +258,10 @@ class NodeManager(object):
                     vae_models = None
 
                 if (
-                    self.config.prefetch_config is not None
-                    and self.config.prefetch_config.proxy is not None
+                    self.config.task_config is not None
+                    and self.config.task_config.proxy is not None
                 ):
-                    proxy = self.config.prefetch_config.proxy.model_dump()
+                    proxy = self.config.task_config.proxy.model_dump()
                     proxy = cast(ProxyConfig, proxy)
                 else:
                     proxy = None
@@ -275,7 +275,6 @@ class NodeManager(object):
                     controlnet_models,
                     vae_models,
                     proxy,
-                    cancellable=True,
                 )
 
             _logger.info("Node manager initializing complete.")
@@ -363,7 +362,7 @@ class NodeManager(object):
                     raise
                 except Exception as e:
                     _logger.exception(e)
-                    msg = f"Node manager init error: {e}"
+                    msg = f"Node manager init error: {str(e)}"
                     _logger.error(msg)
                     with fail_after(5, shield=True):
                         await self.state_cache.set_node_state(
@@ -393,7 +392,7 @@ class NodeManager(object):
             raise
         except Exception as e:
             _logger.exception(e)
-            msg = f"Node manager running error: {e}"
+            msg = f"Node manager running error: {str(e)}"
             _logger.error(msg)
             with fail_after(5, shield=True):
                 await self.state_cache.set_node_state(models.NodeStatus.Error, msg)
