@@ -7,8 +7,7 @@ from tenacity import (AsyncRetrying, before_sleep_log, stop_after_attempt,
                       wait_fixed)
 from web3 import AsyncWeb3
 from web3.contract.async_contract import AsyncContract, AsyncContractEvent
-from web3.logs import DISCARD
-from web3.types import EventData, TxReceipt
+from web3.types import EventData
 
 from h_server.contracts import Contracts
 
@@ -149,60 +148,58 @@ class EventWatcher(object):
             self._stop_event is None
         ), "The watcher has already started. You should stop the watcher before restart it."
 
-        self._stop_event = Event()
+        async for attemp in AsyncRetrying(
+            stop=stop_after_attempt(self.retry_count),
+            wait=wait_fixed(self.retry_delay),
+            before_sleep=before_sleep_log(_logger, logging.ERROR, exc_info=True),
+            reraise=True,
+        ):
+            with attemp:
 
-        if from_block is None:
-            if self._cache is not None:
-                start = await self._cache.get()
-                if start == 0:
-                    start = await self.w3.eth.get_block_number()
-                else:
-                    start += 1
-            else:
-                start = await self.w3.eth.get_block_number()
-        else:
-            if self._cache is not None:
-                await self._cache.set(from_block - 1)
-            start = from_block
+                try:
+                    self._cancel_scope = CancelScope()
+                    self._stop_event = Event()
 
-        def _should_stop(stop_event: Event, start: int):
-            if stop_event.is_set():
-                return True
-            if to_block is None:
-                return False
-            return start > to_block
+                    with self._cancel_scope:
+                        if from_block is None:
+                            if self._cache is not None:
+                                from_block = await self._cache.get()
+                                if from_block == 0:
+                                    from_block = await self.w3.eth.get_block_number()
+                                else:
+                                    from_block += 1
+                            else:
+                                from_block = await self.w3.eth.get_block_number()
+                        else:
+                            if self._cache is not None:
+                                await self._cache.set(from_block - 1)
 
-        try:
-            self._cancel_scope = CancelScope()
-            with self._cancel_scope:
+                        def _should_stop(stop_event: Event, start: int):
+                            if stop_event.is_set():
+                                return True
+                            if to_block is None:
+                                return False
+                            return start > to_block
 
-                async for attemp in AsyncRetrying(
-                    stop=stop_after_attempt(self.retry_count),
-                    wait=wait_fixed(self.retry_delay),
-                    before_sleep=before_sleep_log(_logger, logging.ERROR, exc_info=True),
-                    reraise=True,
-                ):
-                    with attemp:
-
-                        while not _should_stop(self._stop_event, start):
+                        while not _should_stop(self._stop_event, from_block):
                             latest_blocknum = await self.w3.eth.get_block_number()
-                            if start <= latest_blocknum:
-                                end = min(latest_blocknum, start + self.page_size)
+                            if from_block <= latest_blocknum:
+                                end = min(latest_blocknum, from_block + self.page_size)
                                 if len(self._event_filters) > 0:
                                     async with create_task_group() as tg:
                                         for event_filter in self._event_filters.values():
-                                            tg.start_soon(event_filter.process_events, start, end, tg)
-                                _logger.debug(f"Process events from block {start} to {end}")
+                                            tg.start_soon(event_filter.process_events, from_block, end, tg)
+                                _logger.debug(f"Process events from block {from_block} to {end}")
 
                                 with fail_after(delay=5, shield=True):
                                     if self._cache is not None:
                                         await self._cache.set(end)
-                                start = end + 1
+                                from_block = end + 1
                             else:
                                 await sleep(interval)
-        finally:
-            self._cancel_scope = None
-            self._stop_event = None
+                finally:
+                    self._cancel_scope = None
+                    self._stop_event = None
 
     def stop(self):
         if self._stop_event is not None:
