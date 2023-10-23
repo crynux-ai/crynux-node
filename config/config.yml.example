@@ -34,9 +34,7 @@ prefetch_config:
       - id: "runwayml/stable-diffusion-v1-5"
       - id: "emilianJR/chilloutmix_NiPrunedFp32Fix"
       - id: "stabilityai/stable-diffusion-xl-base-1.0"
-        variant: "fp16"
       - id: "stabilityai/stable-diffusion-xl-refiner-1.0"
-        variant: "fp16"
     controlnet:
       - id: "lllyasviel/sd-controlnet-canny"
       - id: "lllyasviel/control_v11p_sd15_openpose"
