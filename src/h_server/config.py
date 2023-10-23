@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import os
-from typing import Any, Dict, Literal, Optional, Tuple, Type, TypedDict
+from typing import Any, Dict, List, Literal, Tuple, Type, TypedDict, Optional
 
 import yaml
 from anyio import Condition, to_thread
@@ -117,6 +117,28 @@ class TaskConfig(BaseModel):
     inference_logs_dir: str
 
 
+class ModelConfig(BaseModel):
+    id: str
+
+
+class PreloadedModelsConfig(BaseModel):
+    base: Optional[List[ModelConfig]] = None
+    controlnet: Optional[List[ModelConfig]] = None
+    vae: Optional[List[ModelConfig]] = None
+
+
+class ProxyConfig(BaseModel):
+    host: str = ""
+    port: int = 8080
+    username: str = ""
+    password: str = ""
+
+
+class PrefetchConfig(BaseModel):
+    preloaded_models: Optional[PreloadedModelsConfig] = None
+    proxy: Optional[ProxyConfig] = None
+
+
 class Config(BaseSettings):
     log: LogConfig
 
@@ -136,6 +158,8 @@ class Config(BaseSettings):
     web_dist: str = ""
 
     last_result: Optional[str] = None
+
+    prefetch_config: Optional[PrefetchConfig] = None
 
     model_config = YamlSettingsConfigDict(
         env_nested_delimiter="__",

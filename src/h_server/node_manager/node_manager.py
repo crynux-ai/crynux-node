@@ -1,23 +1,11 @@
-import logging
-import os
-from contextlib import asynccontextmanager
-from typing import Optional, Type
+from __future__ import annotations
 
-from anyio import (
-    Event,
-    create_task_group,
-    fail_after,
-    get_cancelled_exc_class,
-    sleep,
-    to_thread,
-)
+import logging
+from typing import List, Optional, Type, cast
+
+from anyio import (Event, create_task_group, fail_after,
+                   get_cancelled_exc_class, to_thread)
 from anyio.abc import TaskGroup
-from tenacity import (
-    before_sleep_log,
-    retry,
-    stop_after_attempt,
-    wait_fixed,
-)
 from web3 import Web3
 from web3.types import EventData
 
@@ -26,28 +14,14 @@ from h_server.config import Config, wait_privkey
 from h_server.contracts import Contracts, set_contracts
 from h_server.event_queue import DbEventQueue, EventQueue, set_event_queue
 from h_server.relay import Relay, WebRelay, set_relay
-from h_server.task import (
-    DbTaskStateCache,
-    InferenceTaskRunner,
-    TaskStateCache,
-    TaskSystem,
-    set_task_state_cache,
-    set_task_system,
-)
-from h_server.watcher import (
-    BlockNumberCache,
-    DbBlockNumberCache,
-    EventWatcher,
-    set_watcher,
-)
+from h_server.task import (DbTaskStateCache, InferenceTaskRunner,
+                           TaskStateCache, TaskSystem, set_task_state_cache,
+                           set_task_system)
+from h_server.watcher import (BlockNumberCache, DbBlockNumberCache,
+                              EventWatcher, set_watcher)
 
-from .state_cache import (
-    DbNodeStateCache,
-    DbTxStateCache,
-    ManagerStateCache,
-    StateCache,
-    set_manager_state_cache,
-)
+from .state_cache import (DbNodeStateCache, DbTxStateCache, ManagerStateCache,
+                          StateCache, set_manager_state_cache)
 from .state_manager import NodeStateManager, set_node_state_manager
 
 _logger = logging.getLogger(__name__)
@@ -255,17 +229,52 @@ class NodeManager(object):
             await self.state_cache.set_tx_state(models.TxStatus.Success)
 
             if not self.config.distributed:
-                from h_worker.prefetch import prefetch
+                from h_worker.prefetch import (ModelConfig, ProxyConfig,
+                                               prefetch)
 
                 assert (
                     self.config.task_config is not None
                 ), "Task config is None in non-distributed version"
+
+                if (
+                    self.config.prefetch_config is not None
+                    and self.config.prefetch_config.preloaded_models is not None
+                ):
+                    preload_models = (
+                        self.config.prefetch_config.preloaded_models.model_dump()
+                    )
+                    base_models: List[ModelConfig] | None = preload_models.get(
+                        "base", None
+                    )
+                    controlnet_models: List[ModelConfig] | None = preload_models.get(
+                        "controlnet", None
+                    )
+                    vae_models: List[ModelConfig] | None = preload_models.get(
+                        "vae", None
+                    )
+                else:
+                    base_models = None
+                    controlnet_models = None
+                    vae_models = None
+
+                if (
+                    self.config.prefetch_config is not None
+                    and self.config.prefetch_config.proxy is not None
+                ):
+                    proxy = self.config.prefetch_config.proxy.model_dump()
+                    proxy = cast(ProxyConfig, proxy)
+                else:
+                    proxy = None
 
                 await to_thread.run_sync(
                     prefetch,
                     self.config.task_config.hf_cache_dir,
                     self.config.task_config.external_cache_dir,
                     self.config.task_config.script_dir,
+                    base_models,
+                    controlnet_models,
+                    vae_models,
+                    proxy,
                     cancellable=True,
                 )
 
