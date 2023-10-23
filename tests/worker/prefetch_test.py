@@ -6,8 +6,7 @@ def test_prefetch():
         "build/data/huggingface",
         "build/data/external",
         "stable-diffusion-task",
-        base_models=[],
+        base_models=[{"id": "runwayml/stable-diffusion-v1-5"}],
         controlnet_models=[],
         vae_models=[],
-        proxy={"host": "192.168.224.1", "port": 10081}
     )

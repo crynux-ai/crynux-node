@@ -4,9 +4,8 @@ import json
 import logging
 import os
 import subprocess
-from typing import List, Literal
+from typing import List, TypedDict
 
-from typing_extensions import NotRequired, TypedDict
 
 _logger = logging.getLogger(__name__)
 
@@ -46,7 +45,6 @@ def call_prefetch_script(
 
 class ModelConfig(TypedDict):
     id: str
-    variant: NotRequired[Literal["fp16", "ema"]]
 
 
 class ProxyConfig(TypedDict, total=False):

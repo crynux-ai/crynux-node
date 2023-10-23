@@ -119,7 +119,6 @@ class TaskConfig(BaseModel):
 
 class ModelConfig(BaseModel):
     id: str
-    variant: Optional[Literal["fp16", "ema"]] = None
 
 
 class PreloadedModelsConfig(BaseModel):
