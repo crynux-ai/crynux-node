@@ -29,7 +29,7 @@ class MemoryTaskStateCache(TaskStateCache):
         start: Optional[datetime] = None,
         end: Optional[datetime] = None,
         status: Optional[List[TaskStatus]] = None,
-    ):
+    ) -> List[TaskState]:
         states = self._states
         if start is not None:
             states = {

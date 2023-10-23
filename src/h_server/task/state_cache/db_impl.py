@@ -13,9 +13,8 @@ from .abc import TaskStateCache
 class DbTaskStateCache(TaskStateCache):
     async def load(self, task_id: int) -> TaskState:
         async with db.session_scope() as sess:
-            q = (
-                sa.select(db_models.TaskState)
-                .where(db_models.TaskState.task_id == task_id)
+            q = sa.select(db_models.TaskState).where(
+                db_models.TaskState.task_id == task_id
             )
             state = (await sess.scalars(q)).one_or_none()
             if state is not None:
@@ -26,6 +25,7 @@ class DbTaskStateCache(TaskStateCache):
                     status=state.status,
                     files=files,
                     result=state.result,
+                    disclosed=state.disclosed,
                 )
             else:
                 raise KeyError(f"Task state of {task_id} not found.")
@@ -45,6 +45,7 @@ class DbTaskStateCache(TaskStateCache):
                     status=task_state.status,
                     files=",".join(task_state.files),
                     result=task_state.result,
+                    disclosed=task_state.disclosed,
                 )
                 sess.add(state)
             else:
@@ -52,6 +53,7 @@ class DbTaskStateCache(TaskStateCache):
                 state.status = task_state.status
                 state.files = ",".join(task_state.files)
                 state.result = task_state.result
+                state.disclosed = task_state.disclosed
             await sess.commit()
 
     async def has(self, task_id: int) -> bool:
@@ -66,8 +68,8 @@ class DbTaskStateCache(TaskStateCache):
         self,
         start: Optional[datetime] = None,
         end: Optional[datetime] = None,
-        status: Optional[List[TaskStatus]] = None
-    ):
+        status: Optional[List[TaskStatus]] = None,
+    ) -> List[TaskState]:
         async with db.session_scope() as sess:
             q = sa.select(db_models.TaskState)
             if start is not None:
@@ -78,4 +80,14 @@ class DbTaskStateCache(TaskStateCache):
                 q = q.where(db_models.TaskState.status.in_(status))
 
             states = (await sess.execute(q)).scalars().all()
-            return list(states)
+            return [
+                TaskState(
+                    task_id=state.task_id,
+                    round=state.round,
+                    status=state.status,
+                    files=state.files.split(","),
+                    result=state.result,
+                    disclosed=state.disclosed,
+                )
+                for state in states
+            ]
