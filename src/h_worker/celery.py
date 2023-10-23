@@ -29,8 +29,8 @@ def prefetch_after_setup(_, __, **kwargs):
     log.init(config)
 
     _logger.info("Prefetch base models.")
-    if config.prefetch is not None and config.prefetch.preloaded_models is not None:
-        preload_models = config.prefetch.preloaded_models.model_dump()
+    if config.task.preloaded_models is not None:
+        preload_models = config.task.preloaded_models.model_dump()
         base_models: List[ModelConfig] | None = preload_models.get("base", None)
         controlnet_models: List[ModelConfig] | None = preload_models.get("controlnet", None)
         vae_models: List[ModelConfig] | None = preload_models.get("vae", None)
@@ -39,8 +39,8 @@ def prefetch_after_setup(_, __, **kwargs):
         controlnet_models = None
         vae_models = None
 
-    if config.prefetch is not None and config.prefetch.proxy is not None:
-        proxy = config.prefetch.proxy.model_dump()
+    if config.task.proxy is not None:
+        proxy = config.task.proxy.model_dump()
         proxy = cast(ProxyConfig, proxy)
     else:
         proxy = None

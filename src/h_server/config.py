@@ -116,6 +116,9 @@ class TaskConfig(BaseModel):
     script_dir: str
     inference_logs_dir: str
 
+    preloaded_models: Optional[PreloadedModelsConfig] = None
+
+    proxy: Optional[ProxyConfig] = None
 
 class ModelConfig(BaseModel):
     id: str
@@ -132,11 +135,6 @@ class ProxyConfig(BaseModel):
     port: int = 8080
     username: str = ""
     password: str = ""
-
-
-class PrefetchConfig(BaseModel):
-    preloaded_models: Optional[PreloadedModelsConfig] = None
-    proxy: Optional[ProxyConfig] = None
 
 
 class Config(BaseSettings):
@@ -158,8 +156,6 @@ class Config(BaseSettings):
     web_dist: str = ""
 
     last_result: Optional[str] = None
-
-    prefetch_config: Optional[PrefetchConfig] = None
 
     model_config = YamlSettingsConfigDict(
         env_nested_delimiter="__",

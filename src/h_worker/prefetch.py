@@ -4,7 +4,9 @@ import json
 import logging
 import os
 import subprocess
-from typing import List, TypedDict
+from typing import List
+
+from h_worker.models import ModelConfig, ProxyConfig
 
 
 _logger = logging.getLogger(__name__)
@@ -41,17 +43,6 @@ def call_prefetch_script(
     _logger.info("Start prefetching models")
     subprocess.check_call(args, env=envs)
     _logger.info("Prefetching models complete")
-
-
-class ModelConfig(TypedDict):
-    id: str
-
-
-class ProxyConfig(TypedDict, total=False):
-    host: str
-    port: int
-    username: str
-    password: str
 
 
 def prefetch(
