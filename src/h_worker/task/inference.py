@@ -1,12 +1,15 @@
 from __future__ import annotations
 
+import json
 import logging
 import os
 import re
 import shutil
 import subprocess
+from typing import cast
 
 from h_worker.config import get_config
+from h_worker.models import ProxyConfig
 
 from . import utils
 from .error import TaskError, TaskInvalid
@@ -30,6 +33,7 @@ def sd_lora_inference(
     script_dir: str | None = None,
     inference_logs_dir: str | None = None,
     result_url: str | None = None,
+    proxy: ProxyConfig | None = None,
     distributed: bool = True,
 ):
     if output_dir is None:
@@ -50,6 +54,10 @@ def sd_lora_inference(
     if result_url is None:
         config = get_config()
         result_url = config.task.result_url
+    if proxy is None:
+        config = get_config()
+        if config.sd_task is not None and config.sd_task.proxy is not None:
+            proxy = cast(ProxyConfig, config.sd_task.proxy.model_dump())
 
     _logger.info(
         f"task id: {task_id},"
@@ -59,7 +67,8 @@ def sd_lora_inference(
         f"external_cache_dir: {external_cache_dir},"
         f"script_dir: {script_dir},"
         f"inference_logs_dir: {inference_logs_dir},"
-        f"result_url: {result_url}"
+        f"result_url: {result_url},"
+        f"proxy: {proxy}",
     )
 
     # Check if venv exists. If it exits, use the venv interpreter; else use the current interpreter
@@ -90,6 +99,8 @@ def sd_lora_inference(
             "data_dir__models__external": os.path.abspath(external_cache_dir),
         }
     )
+    if proxy is not None:
+        envs["proxy"] = json.dumps(proxy)
 
     _logger.info("Start inference task.")
     res = subprocess.run(
@@ -127,6 +138,7 @@ def mock_lora_inference(
     script_dir: str | None = None,
     inference_logs_dir: str | None = None,
     result_url: str | None = None,
+    proxy: ProxyConfig | None = None,
     distributed: bool = True,
 ):
     if output_dir is None:
@@ -147,6 +159,10 @@ def mock_lora_inference(
     if result_url is None:
         config = get_config()
         result_url = config.task.result_url
+    if proxy is None:
+        config = get_config()
+        if config.sd_task is not None and config.sd_task.proxy is not None:
+            proxy = cast(ProxyConfig, config.sd_task.proxy.model_dump())
 
     _logger.info(
         f"task id: {task_id},"
@@ -156,7 +172,8 @@ def mock_lora_inference(
         f"external_cache_dir: {external_cache_dir},"
         f"script_dir: {script_dir},"
         f"inference_logs_dir: {inference_logs_dir},"
-        f"result_url: {result_url}"
+        f"result_url: {result_url},"
+        f"proxy: {proxy}",
     )
 
     image_dir = os.path.abspath(os.path.join(output_dir, str(task_id)))

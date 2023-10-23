@@ -28,7 +28,6 @@ task_config:
   inference_logs_dir: "/app/inference-logs"
   result_url: ""
 
-prefetch_config:
   preloaded_models:
     base:
       - id: "runwayml/stable-diffusion-v1-5"
@@ -41,3 +40,5 @@ prefetch_config:
       - id: "diffusers/controlnet-canny-sdxl-1.0"
     vae: []
   proxy: null
+
+last_result: ""

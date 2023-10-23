@@ -198,15 +198,15 @@ class InferenceTaskRunner(TaskRunner):
 
     async def process_event(self, event: models.TaskEvent):
         try:
-            async for attemp in AsyncRetrying(
-                stop=stop_after_attempt(self._retry_count),
-                wait=wait_exponential(multiplier=10),
-                retry=retry_if_not_exception_type((TaskInvalid, AssertionError)),
-                before_sleep=before_sleep_log(_logger, logging.ERROR, exc_info=True),
-                reraise=True,
-            ):
-                with attemp:
-                    async with self.lock:
+            async with self.lock:
+                async for attemp in AsyncRetrying(
+                    stop=stop_after_attempt(self._retry_count),
+                    wait=wait_exponential(multiplier=10),
+                    retry=retry_if_not_exception_type((TaskInvalid, AssertionError)),
+                    before_sleep=before_sleep_log(_logger, logging.ERROR, exc_info=True),
+                    reraise=True,
+                ):
+                    with attemp:
                         _logger.debug(f"Process event {event}")
                         if event.kind == "TaskCreated":
                             assert isinstance(event, models.TaskCreated)
@@ -279,7 +279,7 @@ class InferenceTaskRunner(TaskRunner):
                     )
                     res.get()
 
-                await to_thread.run_sync(run_distributed_task, cancellable=True)
+                await to_thread.run_sync(run_distributed_task)
                 state.status = models.TaskStatus.Executing
 
             else:
@@ -289,20 +289,22 @@ class InferenceTaskRunner(TaskRunner):
                     from h_worker.task.utils import get_image_hash
 
                     assert self.local_config is not None
+                    proxy = None
+                    if self.local_config.proxy is not None:
+                        proxy = self.local_config.proxy.model_dump()
 
                     task_func = getattr(h_task, self.task_name)
-                    kwargs = {
-                        "task_id": task.task_id,
-                        "task_args": task.task_args,
-                        "distributed": False,
-                        "result_url": "",
-                    }
                     kwargs = dict(
                         task_id=task.task_id,
                         task_args=task.task_args,
                         distributed=False,
                         result_url="",
-                        **self.local_config.model_dump(),
+                        output_dir=self.local_config.output_dir,
+                        hf_cache_dir=self.local_config.hf_cache_dir,
+                        external_cache_dir=self.local_config.external_cache_dir,
+                        script_dir=self.local_config.script_dir,
+                        inference_logs_dir=self.local_config.inference_logs_dir,
+                        proxy=proxy,
                     )
 
                     task_func(**kwargs)
@@ -319,7 +321,7 @@ class InferenceTaskRunner(TaskRunner):
                         files=image_paths,
                     )
 
-                next_event = await to_thread.run_sync(run_local_task, cancellable=True)
+                next_event = await to_thread.run_sync(run_local_task)
                 state.status = models.TaskStatus.Executing
                 await self.result_ready(next_event)
 

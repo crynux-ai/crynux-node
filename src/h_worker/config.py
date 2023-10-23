@@ -85,6 +85,10 @@ class TaskConfig(BaseModel):
     inference_logs_dir: str
     result_url: str
 
+    preloaded_models: Optional[PreloadedModelsConfig] = None
+
+    proxy: Optional[ProxyConfig] = None
+
 
 class ModelConfig(BaseModel):
     id: str
@@ -103,19 +107,12 @@ class ProxyConfig(BaseModel):
     password: str = ""
 
 
-class PrefetchConfig(BaseModel):
-    preloaded_models: Optional[PreloadedModelsConfig] = None
-    proxy: Optional[ProxyConfig] = None
-
-
 class Config(BaseSettings):
     log: LogConfig
 
     celery: CeleryConfig
 
     task: TaskConfig
-
-    prefetch: Optional[PrefetchConfig] = None
 
     model_config = YamlSettingsConfigDict(
         env_nested_delimiter="__",
