@@ -113,11 +113,13 @@ class TaskSystem(object):
                         except get_cancelled_exc_class():
                             with fail_after(5, shield=True):
                                 await self.event_queue.no_ack(ack_id)
+                                _logger.debug(f"No ack task {event.task_id} event {event.kind}")
                             raise
                         except Exception:
                             _logger.debug(f"Task {event.task_id} process event {event.kind} failed.")
                             with fail_after(5, shield=True):
                                 await self.event_queue.no_ack(ack_id=ack_id)
+                                _logger.debug(f"No ack task {event.task_id} event {event.kind}")
                                 del self._runners[task_id]
                             raise
 
