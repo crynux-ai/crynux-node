@@ -126,7 +126,8 @@ class EventWatcher(object):
 
     def unwatch_event(self, filter_id: int):
         if filter_id in self._event_filters:
-            self._event_filters.pop(filter_id)
+            event_filter = self._event_filters.pop(filter_id)
+            _logger.debug(f"Unwatch event {event_filter.event.event_name}")
 
     async def start(
         self,
