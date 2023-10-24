@@ -371,8 +371,6 @@ class InferenceTaskRunner(TaskRunner):
                 state.disclosed = True
             state.status = models.TaskStatus.Disclosed
 
-        self.watcher.unwatch_event(self._commitment_watch_id)
-
     async def task_success(self, event: models.TaskSuccess):
         async with self.state_context() as state:
             assert (
@@ -403,6 +401,7 @@ class InferenceTaskRunner(TaskRunner):
             models.TaskStatus.Error,
         ], "Task status is not success or aborted when shutdown."
 
+        self.watcher.unwatch_event(self._commitment_watch_id)
         self.watcher.unwatch_event(self._success_watch_id)
         self.watcher.unwatch_event(self._aborted_watch_id)
 
