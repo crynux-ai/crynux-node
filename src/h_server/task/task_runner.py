@@ -203,7 +203,9 @@ class InferenceTaskRunner(TaskRunner):
                     stop=stop_after_attempt(self._retry_count),
                     wait=wait_exponential(multiplier=10),
                     retry=retry_if_not_exception_type((TaskInvalid, AssertionError)),
-                    before_sleep=before_sleep_log(_logger, logging.ERROR, exc_info=True),
+                    before_sleep=before_sleep_log(
+                        _logger, logging.ERROR, exc_info=True
+                    ),
                     reraise=True,
                 ):
                     with attemp:
@@ -246,10 +248,12 @@ class InferenceTaskRunner(TaskRunner):
             state.round = event.round
 
             def should_retry(e: BaseException) -> bool:
-                if isinstance(e, RelayError) and "Task not ready" in e.message:
+                if isinstance(e, RelayError) and (
+                    "Task not found" in e.message or "Task not ready" in e.message
+                ):
                     return True
                 return False
-            
+
             @retry(
                 stop=stop_after_delay(1800),
                 wait=wait_fixed(60),
@@ -259,7 +263,7 @@ class InferenceTaskRunner(TaskRunner):
             )
             async def get_task():
                 return await self.relay.get_task(event.task_id)
-                
+
             task = await get_task()
 
             if self.distributed:
@@ -279,7 +283,7 @@ class InferenceTaskRunner(TaskRunner):
                     )
                     res.get()
 
-                await to_thread.run_sync(run_distributed_task)
+                await to_thread.run_sync(run_distributed_task, cancellable=True)
                 state.status = models.TaskStatus.Executing
 
             else:
@@ -309,7 +313,9 @@ class InferenceTaskRunner(TaskRunner):
 
                     task_func(**kwargs)
 
-                    image_dir = os.path.join(self.local_config.output_dir, str(task.task_id))
+                    image_dir = os.path.join(
+                        self.local_config.output_dir, str(task.task_id)
+                    )
                     image_files = sorted(os.listdir(image_dir))
                     image_paths = [
                         os.path.join(image_dir, file) for file in image_files
@@ -321,7 +327,7 @@ class InferenceTaskRunner(TaskRunner):
                         files=image_paths,
                     )
 
-                next_event = await to_thread.run_sync(run_local_task)
+                next_event = await to_thread.run_sync(run_local_task, cancellable=True)
                 state.status = models.TaskStatus.Executing
                 await self.result_ready(next_event)
 
@@ -408,7 +414,7 @@ class InferenceTaskRunner(TaskRunner):
 
         with fail_after(5, shield=True):
             await to_thread.run_sync(delete_result_files, self.state.files)
-        
+
         del self.state
 
 

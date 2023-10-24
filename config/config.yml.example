@@ -11,8 +11,8 @@ ethereum:
 
   contract:
     token: "0xB627D84BFB8cC311A318fEf679ee498F822A0C7C"
-    node: "0x700CF2fB93Af606d51DD7a9F9aF0Cee96c9A2Ca0"
-    task: "0xF29EC2f0C4C5D7fb315D1AC0b5621A1D9E599EEd"
+    node: "0x61bfD9485ebA23b656049AF1A953129041C283ea"
+    task: "0x09D5685076D82FcF113493bB41F92380C6c834c7"
 
 task_dir: tasks
 db: sqlite+aiosqlite:///db/server.db

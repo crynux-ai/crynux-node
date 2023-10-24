@@ -275,6 +275,7 @@ class NodeManager(object):
                     controlnet_models,
                     vae_models,
                     proxy,
+                    cancellable=True,
                 )
 
             _logger.info("Node manager initializing complete.")

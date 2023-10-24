@@ -23,7 +23,7 @@ def match_exception(e: Exception, target: Type[Exception]) -> bool:
     for exc in travel_cause(e):
         if isinstance(exc, target):
             return True
-        return False
+    return False
 
 
 def main():
