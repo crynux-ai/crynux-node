@@ -22,7 +22,7 @@ async def _main():
     set_node_manager(node_manager)
 
     async def signal_handler(scope: CancelScope):
-        with open_signal_receiver(signal.SIGINT, signal.SIGTERM) as signals:
+        with open_signal_receiver(signal.SIGINT) as signals:
             async for _ in signals:
                 server.stop()
                 with move_on_after(5, shield=True):
