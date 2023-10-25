@@ -339,15 +339,21 @@ class InferenceTaskRunner(TaskRunner):
 
             if len(state.result) == 0:
                 result, commitment, nonce = make_result_commitments(event.hashes)
-                waiter = (
-                    await self.contracts.task_contract.submit_task_result_commitment(
-                        task_id=self.task_id,
-                        round=state.round,
-                        commitment=commitment,
-                        nonce=nonce,
+                try:
+                    waiter = (
+                        await self.contracts.task_contract.submit_task_result_commitment(
+                            task_id=self.task_id,
+                            round=state.round,
+                            commitment=commitment,
+                            nonce=nonce,
+                        )
                     )
-                )
-                await waiter.wait()
+                    await waiter.wait()
+                except TxRevertedError as e:
+                    # all other nodes report error
+                    if "Task is aborted" in e.reason:
+                        await self._report_error()
+                        return
                 state.result = result
             _logger.info(f"Task {self.task_id} result 0x{state.result.hex()}")
             state.status = models.TaskStatus.ResultUploaded
@@ -370,8 +376,6 @@ class InferenceTaskRunner(TaskRunner):
                 await waiter.wait()
                 state.disclosed = True
             state.status = models.TaskStatus.Disclosed
-
-        self.watcher.unwatch_event(self._commitment_watch_id)
 
     async def task_success(self, event: models.TaskSuccess):
         async with self.state_context() as state:
@@ -403,6 +407,7 @@ class InferenceTaskRunner(TaskRunner):
             models.TaskStatus.Error,
         ], "Task status is not success or aborted when shutdown."
 
+        self.watcher.unwatch_event(self._commitment_watch_id)
         self.watcher.unwatch_event(self._success_watch_id)
         self.watcher.unwatch_event(self._aborted_watch_id)
 
