@@ -167,10 +167,9 @@ class EventWatcher(object):
                                 from_block = await self._cache.get()
                                 if from_block == 0:
                                     from_block = await self.w3.eth.get_block_number()
-                                else:
-                                    from_block += 1
                             else:
                                 from_block = await self.w3.eth.get_block_number()
+                            from_block += 1
                         else:
                             if self._cache is not None:
                                 await self._cache.set(from_block - 1)
