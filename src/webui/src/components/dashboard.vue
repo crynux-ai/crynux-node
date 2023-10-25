@@ -249,7 +249,7 @@ const topRowClasses = computed(() => {
       :xl="{ span: 5, offset: 1, order: 1 }"
       :xxl="{ span: 4, offset: 3, order: 1 }"
     >
-      <a-card title="Node Status" :bordered="false" style="height: 100%">
+      <a-card title="Node Status" :bordered="false" style="height: 100%; opacity: 0.9">
         <a-row>
           <a-col :span="12">
             <a-progress
@@ -376,7 +376,7 @@ const topRowClasses = computed(() => {
       :xl="{ span: 11, order: 2 }"
       :xxl="{ span: 9, order: 2 }"
     >
-      <a-card title="Wallet" :bordered="false" style="height: 100%">
+      <a-card title="Wallet" :bordered="false" style="height: 100%; opacity: 0.9">
         <template #extra>
           <edit-account
             ref="accountEditor"
@@ -409,7 +409,7 @@ const topRowClasses = computed(() => {
       :xl="{ span: 6, order: 3 }"
       :xxl="{ span: 5, order: 3 }"
     >
-      <a-card title="Task Execution" :bordered="false" style="height: 100%">
+      <a-card title="Task Execution" :bordered="false" style="height: 100%; opacity: 0.9">
         <a-row>
           <a-col :span="8">
             <a-progress
@@ -467,7 +467,7 @@ const topRowClasses = computed(() => {
       :xl="{ span: 7, offset: 1 }"
       :xxl="{ span: 6, offset: 3 }"
     >
-      <a-card title="GPU" :bordered="false" style="height: 100%">
+      <a-card title="GPU" :bordered="false" style="height: 100%; opacity: 0.9">
         <a-row>
           <a-col :span="8">
             <a-progress type="dashboard" :size="80" :percent="systemInfo.gpu.usage" />
@@ -505,7 +505,7 @@ const topRowClasses = computed(() => {
       </a-card>
     </a-col>
     <a-col :xs="12" :sm="8" :md="8" :lg="5" :xxl="4">
-      <a-card title="CPU" :bordered="false" style="height: 100%">
+      <a-card title="CPU" :bordered="false" style="height: 100%; opacity: 0.9">
         <a-row>
           <a-col :span="12">
             <a-progress type="dashboard" :size="80" :percent="systemInfo.cpu.usage" />
@@ -537,7 +537,7 @@ const topRowClasses = computed(() => {
       </a-card>
     </a-col>
     <a-col :xs="12" :sm="12" :md="12" :lg="5" :xxl="4">
-      <a-card title="Memory" :bordered="false" style="height: 100%">
+      <a-card title="Memory" :bordered="false" style="height: 100%; opacity: 0.9">
         <a-row>
           <a-col :span="12">
             <a-progress
@@ -580,7 +580,7 @@ const topRowClasses = computed(() => {
       </a-card>
     </a-col>
     <a-col :xs="12" :sm="12" :md="12" :lg="5" :xxl="4">
-      <a-card title="Disk" :bordered="false" style="height: 100%">
+      <a-card title="Disk" :bordered="false" style="height: 100%; opacity: 0.9">
         <a-row>
           <a-col :span="12">
             <a-statistic
@@ -612,34 +612,28 @@ const topRowClasses = computed(() => {
       </a-card>
     </a-col>
   </a-row>
-  <a-row style="margin-top: 32px">
-    <a-col :span="14" :offset="5" style="text-align: center">
-      <a-space class="footer-links">
-        <a-typography-link href="https://crynux.ai" target="_blank">Home</a-typography-link>
-        &nbsp;|&nbsp;
-        <a-typography-link href="https://docs.crynux.ai" target="_blank">Docs</a-typography-link>
-        &nbsp;|&nbsp;
-        <a-typography-link href="https://github.com/crynux-ai" target="_blank"
-          >GitHub</a-typography-link
-        >
-        &nbsp;|&nbsp;
-        <a-typography-link href="https://blog.crynux.ai" target="_blank">Blog</a-typography-link>
-        &nbsp;|&nbsp;
-        <a-typography-link href="https://twitter.com/crynux" target="_blank"
-          >Twitter</a-typography-link
-        >
-        &nbsp;|&nbsp;
-        <a-typography-link href="https://discord.gg/crynux" target="_blank"
-          >Discord</a-typography-link
-        >
-      </a-space>
-    </a-col>
-  </a-row>
-  <a-row style="margin-top: 12px">
-    <a-col :span="24" style="text-align: center">
-      <img class="footer-logo" src="./logo-full-black.png" width="140" alt="Crynux logo" />
-    </a-col>
-  </a-row>
+  <div class="bottom-bar">
+    <a-space class="footer-links">
+      <a-typography-link href="https://crynux.ai" target="_blank">Home</a-typography-link>
+      &nbsp;|&nbsp;
+      <a-typography-link href="https://docs.crynux.ai" target="_blank">Docs</a-typography-link>
+      &nbsp;|&nbsp;
+      <a-typography-link href="https://github.com/crynux-ai" target="_blank"
+        >GitHub</a-typography-link
+      >
+      &nbsp;|&nbsp;
+      <a-typography-link href="https://blog.crynux.ai" target="_blank">Blog</a-typography-link>
+      &nbsp;|&nbsp;
+      <a-typography-link href="https://twitter.com/crynux" target="_blank"
+        >Twitter</a-typography-link
+      >
+      &nbsp;|&nbsp;
+      <a-typography-link href="https://discord.gg/crynux" target="_blank"
+        >Discord</a-typography-link
+      >
+    </a-space>
+    <img class="footer-logo" src="./logo-full-white.png" width="140" alt="Crynux logo" />
+  </div>
 </template>
 
 <style lang="stylus">
@@ -651,15 +645,28 @@ const topRowClasses = computed(() => {
 .top-alert
     text-align center
     margin-bottom 16px
+.bottom-bar
+    position fixed
+    width 100%
+    height 60px
+    bottom 0
+    left 0
+    padding 0 32px
 
 .footer-links
-    color #666
+    color #fff
+    opacity 0.8
+    line-height 60px
+
     a
-        color #666
+        color #fff
         &:hover
             text-decoration underline
+
 .footer-logo
-    opacity 0.5
+    opacity 0.8
+    float right
+
 .top-row
     &.xs
         height 16px
