@@ -141,6 +141,8 @@ class InferenceTaskRunner(TaskRunner):
 
         self._lock: Optional[Lock] = None
 
+        self._cleaned = False
+
         async def _push_event(event_data: EventData):
             event = models.load_event_from_contracts(event_data)
             await self.queue.put(event)
@@ -197,8 +199,8 @@ class InferenceTaskRunner(TaskRunner):
         return self._lock
 
     async def process_event(self, event: models.TaskEvent):
-        try:
-            async with self.lock:
+        async with self.lock:
+            try:
                 async for attemp in AsyncRetrying(
                     stop=stop_after_attempt(self._retry_count),
                     wait=wait_exponential(multiplier=10),
@@ -232,12 +234,12 @@ class InferenceTaskRunner(TaskRunner):
                             return True
                         else:
                             raise ValueError(f"Unknown event kind {event.kind}")
-        except TaskInvalid as e:
-            _logger.exception(e)
-            _logger.error("Task error, report error to the chain.")
-            with fail_after(delay=60, shield=True):
-                await self._report_error()
-            return True
+            except TaskInvalid as e:
+                _logger.exception(e)
+                _logger.error("Task error, report error to the chain.")
+                with fail_after(delay=60, shield=True):
+                    await self._report_error()
+                return True
 
     async def task_created(self, event: models.TaskCreated):
         async with self.state_context() as state:
@@ -401,27 +403,28 @@ class InferenceTaskRunner(TaskRunner):
         await self.cleanup()
 
     async def cleanup(self):
-        assert self.state.status in [
-            models.TaskStatus.Success,
-            models.TaskStatus.Aborted,
-            models.TaskStatus.Error,
-        ], "Task status is not success or aborted when shutdown."
+        if not self._cleaned:
+            assert self.state.status in [
+                models.TaskStatus.Success,
+                models.TaskStatus.Aborted,
+                models.TaskStatus.Error,
+            ], "Task status is not success or aborted when shutdown."
 
-        self.watcher.unwatch_event(self._commitment_watch_id)
-        self.watcher.unwatch_event(self._success_watch_id)
-        self.watcher.unwatch_event(self._aborted_watch_id)
+            self.watcher.unwatch_event(self._commitment_watch_id)
+            self.watcher.unwatch_event(self._success_watch_id)
+            self.watcher.unwatch_event(self._aborted_watch_id)
 
-        def delete_result_files(files: List[str]):
-            if len(files) > 0:
-                dirname = os.path.dirname(files[0])
-                if os.path.exists(dirname):
-                    shutil.rmtree(dirname)
+            def delete_result_files(files: List[str]):
+                if len(files) > 0:
+                    dirname = os.path.dirname(files[0])
+                    if os.path.exists(dirname):
+                        shutil.rmtree(dirname)
 
-        with fail_after(5, shield=True):
-            await to_thread.run_sync(delete_result_files, self.state.files)
+            with fail_after(5, shield=True):
+                await to_thread.run_sync(delete_result_files, self.state.files)
 
-        del self.state
-
+            del self.state
+            self._cleaned = True
 
 class MockTaskRunner(TaskRunner):
     def __init__(
