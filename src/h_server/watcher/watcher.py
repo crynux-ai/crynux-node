@@ -187,7 +187,9 @@ class EventWatcher(object):
                                 end = min(latest_blocknum, from_block + self.page_size)
                                 if len(self._event_filters) > 0:
                                     async with create_task_group() as tg:
-                                        for event_filter in self._event_filters.values():
+                                        # fix event filters, avoid raise RuntimeError: dictionary changed size during iteration
+                                        event_filters = list(self._event_filters.values())
+                                        for event_filter in event_filters:
                                             await event_filter.process_events(start=from_block, end=end, tg=tg)
                                 _logger.debug(f"Process events from block {from_block} to {end}")
 
