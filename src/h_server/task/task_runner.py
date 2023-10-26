@@ -412,10 +412,10 @@ class InferenceTaskRunner(TaskRunner):
         self.watcher.unwatch_event(self._aborted_watch_id)
 
         def delete_result_files(files: List[str]):
-            assert len(files) > 0
-            dirname = os.path.dirname(files[0])
-            if os.path.exists(dirname):
-                shutil.rmtree(dirname)
+            if len(files) > 0:
+                dirname = os.path.dirname(files[0])
+                if os.path.exists(dirname):
+                    shutil.rmtree(dirname)
 
         with fail_after(5, shield=True):
             await to_thread.run_sync(delete_result_files, self.state.files)
