@@ -93,6 +93,15 @@ class TaskContract(ContractWrapperBase):
             round=round,
         )
 
+    async def update_distance_threshold(
+        self, threshold: int, *, option: "Optional[TxOption]" = None
+    ) -> TxWaiter:
+        return await self._transaction_call(
+            "updateDistanceThreshold",
+            option=option,
+            threshold=threshold,
+        )
+
     async def get_task(self, task_id: int) -> ChainTask:
         res = await self._function_call("getTask", taskId=task_id)
         return ChainTask(

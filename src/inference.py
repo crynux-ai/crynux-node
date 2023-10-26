@@ -1,27 +1,37 @@
 import argparse
 import os
-from typing import Type
+from typing import Optional, Type
 
 import pydantic
+from huggingface_hub.utils._errors import RepositoryNotFoundError
+from requests.exceptions import HTTPError
 
 from sd_task.inference_task_args.task_args import InferenceTaskArgs
 from sd_task.inference_task_runner.errors import (ModelDownloadError,
                                                   TaskExecutionError)
 from sd_task.inference_task_runner.inference_task import run_task
-from huggingface_hub.utils._errors import RepositoryNotFoundError
 
 
-def travel_cause(e: BaseException):
-    while e.__cause__:
-        e = e.__cause__
-        yield e
+def travel_exc(e: BaseException):
+    queue = [e]
+    exc_set = set(queue)
+
+    while len(queue) > 0:
+        exc = queue.pop(0)
+        yield exc
+        if exc.__cause__ is not None and exc.__cause__ not in exc_set:
+            queue.append(exc.__cause__)
+            exc_set.add(exc.__cause__)
+        if exc.__context__ is not None and exc.__context__ not in exc_set:
+            queue.append(exc.__context__)
+            exc_set.add(exc.__context__)
 
 
-def match_exception(e: Exception, target: Type[Exception]) -> bool:
-    if isinstance(e, target):
-        return True
-    for exc in travel_cause(e):
-        if isinstance(exc, target):
+def match_exception(
+    e: Exception, target: Type[Exception], message: Optional[str] = None
+) -> bool:
+    for exc in travel_exc(e):
+        if isinstance(exc, target) and (message is None or message in str(exc)):
             return True
     return False
 
@@ -48,7 +58,7 @@ def main():
         print("Task execution error")
         raise
     except ModelDownloadError as e:
-        if match_exception(e, RepositoryNotFoundError):
+        if match_exception(e, RepositoryNotFoundError) or match_exception(e, HTTPError):
             print("Task model not found")
         else:
             print("Task download error")

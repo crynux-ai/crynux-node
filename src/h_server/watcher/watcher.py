@@ -188,7 +188,7 @@ class EventWatcher(object):
                                 if len(self._event_filters) > 0:
                                     async with create_task_group() as tg:
                                         for event_filter in self._event_filters.values():
-                                            tg.start_soon(event_filter.process_events, from_block, end, tg)
+                                            await event_filter.process_events(start=from_block, end=end, tg=tg)
                                 _logger.debug(f"Process events from block {from_block} to {end}")
 
                                 with fail_after(delay=5, shield=True):
