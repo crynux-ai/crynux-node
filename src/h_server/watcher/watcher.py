@@ -131,15 +131,15 @@ class EventWatcher(object):
 
     async def start(
         self,
-        from_block: Optional[int] = None,
-        to_block: Optional[int] = None,
+        from_block: int = 0,
+        to_block: int = 0,
         interval: float = 1,
     ):
         """
         watch events from block
 
-        from_block: a block number or None, None means start from the latest block
-        to_block: a block number or None, None means watch infinitely
+        from_block: a block number, zero means start from the latest block
+        to_block: a block number, zero means watch infinitely
         interval: sleep time, sleep when there is no new block
         """
         assert (
@@ -162,7 +162,7 @@ class EventWatcher(object):
                     self._stop_event = Event()
 
                     with self._cancel_scope:
-                        if from_block is None:
+                        if from_block == 0:
                             if self._cache is not None:
                                 from_block = await self._cache.get()
                                 if from_block == 0:
@@ -177,7 +177,7 @@ class EventWatcher(object):
                         def _should_stop(stop_event: Event, start: int):
                             if stop_event.is_set():
                                 return True
-                            if to_block is None:
+                            if to_block == 0:
                                 return False
                             return start > to_block
 
