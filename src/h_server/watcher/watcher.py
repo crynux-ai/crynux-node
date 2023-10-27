@@ -131,15 +131,15 @@ class EventWatcher(object):
 
     async def start(
         self,
-        from_block: Optional[int] = None,
-        to_block: Optional[int] = None,
+        from_block: int = 0,
+        to_block: int = 0,
         interval: float = 1,
     ):
         """
         watch events from block
 
-        from_block: a block number or None, None means start from the latest block
-        to_block: a block number or None, None means watch infinitely
+        from_block: a block number, zero means start from the latest block
+        to_block: a block number, zero means watch infinitely
         interval: sleep time, sleep when there is no new block
         """
         assert (
@@ -162,7 +162,7 @@ class EventWatcher(object):
                     self._stop_event = Event()
 
                     with self._cancel_scope:
-                        if from_block is None:
+                        if from_block == 0:
                             if self._cache is not None:
                                 from_block = await self._cache.get()
                                 if from_block == 0:
@@ -177,7 +177,7 @@ class EventWatcher(object):
                         def _should_stop(stop_event: Event, start: int):
                             if stop_event.is_set():
                                 return True
-                            if to_block is None:
+                            if to_block == 0:
                                 return False
                             return start > to_block
 
@@ -187,7 +187,9 @@ class EventWatcher(object):
                                 end = min(latest_blocknum, from_block + self.page_size)
                                 if len(self._event_filters) > 0:
                                     async with create_task_group() as tg:
-                                        for event_filter in self._event_filters.values():
+                                        # fix event filters, avoid raise RuntimeError: dictionary changed size during iteration
+                                        event_filters = list(self._event_filters.values())
+                                        for event_filter in event_filters:
                                             await event_filter.process_events(start=from_block, end=end, tg=tg)
                                 _logger.debug(f"Process events from block {from_block} to {end}")
 
