@@ -4,7 +4,7 @@ import logging
 from typing import List, Optional, Type, cast
 
 from anyio import (Event, create_task_group, fail_after,
-                   get_cancelled_exc_class, to_thread)
+                   get_cancelled_exc_class, move_on_after, to_thread)
 from anyio.abc import TaskGroup
 from web3 import Web3
 from web3.types import EventData
@@ -170,7 +170,13 @@ class NodeManager(object):
         _logger.info("Initializing node manager components.")
         if self._contracts is None or self._relay is None:
             if self._privkey is None:
-                self._privkey = await wait_privkey()
+                if self.config.headless:
+                    assert (
+                        len(self.config.ethereum.privkey) > 0
+                    ), "In headless mode, you must provide private key in config file before starting node."
+                    self._privkey = self.config.ethereum.privkey
+                else:
+                    self._privkey = await wait_privkey()
 
             if self._contracts is None:
                 self._contracts = await _make_contracts(
@@ -211,16 +217,14 @@ class NodeManager(object):
         _logger.info("Node manager components initializing complete.")
 
     async def _init(self):
-        state = await self.state_cache.get_node_state()
-
         _logger.info("Initialize node manager")
         await self.state_cache.set_node_state(models.NodeStatus.Init)
         # clear tx error when restart
         await self.state_cache.set_tx_state(models.TxStatus.Success)
 
         if not self.config.distributed:
-            from h_worker.prefetch import prefetch
             from h_worker.models import ModelConfig, ProxyConfig
+            from h_worker.prefetch import prefetch
 
             assert (
                 self.config.task_config is not None
@@ -230,18 +234,12 @@ class NodeManager(object):
                 self.config.task_config is not None
                 and self.config.task_config.preloaded_models is not None
             ):
-                preload_models = (
-                    self.config.task_config.preloaded_models.model_dump()
-                )
-                base_models: List[ModelConfig] | None = preload_models.get(
-                    "base", None
-                )
+                preload_models = self.config.task_config.preloaded_models.model_dump()
+                base_models: List[ModelConfig] | None = preload_models.get("base", None)
                 controlnet_models: List[ModelConfig] | None = preload_models.get(
                     "controlnet", None
                 )
-                vae_models: List[ModelConfig] | None = preload_models.get(
-                    "vae", None
-                )
+                vae_models: List[ModelConfig] | None = preload_models.get("vae", None)
             else:
                 base_models = None
                 controlnet_models = None
@@ -369,7 +367,10 @@ class NodeManager(object):
                 assert self._watcher is not None
                 assert self._task_system is not None
 
-                tg.start_soon(self._node_state_manager.start_sync)
+                if self.config.headless:
+                    tg.start_soon(self._node_state_manager.try_start)
+                else:
+                    tg.start_soon(self._node_state_manager.start_sync)
                 tg.start_soon(self._watcher.start)
                 tg.start_soon(self._task_system.start)
         finally:
@@ -402,6 +403,9 @@ class NodeManager(object):
             self._task_system.stop()
             self._task_system = None
         if self._node_state_manager is not None:
+            if self.config.headless:
+                with move_on_after(10, shield=True):
+                    await self._node_state_manager.try_stop()
             self._node_state_manager.stop_sync()
             self._node_state_manager = None
         if self._contracts is not None:
