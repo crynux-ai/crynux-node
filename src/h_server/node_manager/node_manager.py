@@ -213,72 +213,62 @@ class NodeManager(object):
     async def _init(self):
         state = await self.state_cache.get_node_state()
 
-        def should_init():
-            if state.status == models.NodeStatus.Init:
-                return True
-            if state.status == models.NodeStatus.Error and state.message.startswith(
-                "Node manager init error"
+        _logger.info("Initialize node manager")
+        await self.state_cache.set_node_state(models.NodeStatus.Init)
+        # clear tx error when restart
+        await self.state_cache.set_tx_state(models.TxStatus.Success)
+
+        if not self.config.distributed:
+            from h_worker.prefetch import prefetch
+            from h_worker.models import ModelConfig, ProxyConfig
+
+            assert (
+                self.config.task_config is not None
+            ), "Task config is None in non-distributed version"
+
+            if (
+                self.config.task_config is not None
+                and self.config.task_config.preloaded_models is not None
             ):
-                return True
-            return False
-
-        if should_init():
-            _logger.info("Initialize node manager")
-            await self.state_cache.set_node_state(models.NodeStatus.Init)
-            # clear tx error when restart
-            await self.state_cache.set_tx_state(models.TxStatus.Success)
-
-            if not self.config.distributed:
-                from h_worker.prefetch import prefetch
-                from h_worker.models import ModelConfig, ProxyConfig
-
-                assert (
-                    self.config.task_config is not None
-                ), "Task config is None in non-distributed version"
-
-                if (
-                    self.config.task_config is not None
-                    and self.config.task_config.preloaded_models is not None
-                ):
-                    preload_models = (
-                        self.config.task_config.preloaded_models.model_dump()
-                    )
-                    base_models: List[ModelConfig] | None = preload_models.get(
-                        "base", None
-                    )
-                    controlnet_models: List[ModelConfig] | None = preload_models.get(
-                        "controlnet", None
-                    )
-                    vae_models: List[ModelConfig] | None = preload_models.get(
-                        "vae", None
-                    )
-                else:
-                    base_models = None
-                    controlnet_models = None
-                    vae_models = None
-
-                if (
-                    self.config.task_config is not None
-                    and self.config.task_config.proxy is not None
-                ):
-                    proxy = self.config.task_config.proxy.model_dump()
-                    proxy = cast(ProxyConfig, proxy)
-                else:
-                    proxy = None
-
-                await to_thread.run_sync(
-                    prefetch,
-                    self.config.task_config.hf_cache_dir,
-                    self.config.task_config.external_cache_dir,
-                    self.config.task_config.script_dir,
-                    base_models,
-                    controlnet_models,
-                    vae_models,
-                    proxy,
-                    cancellable=True,
+                preload_models = (
+                    self.config.task_config.preloaded_models.model_dump()
                 )
+                base_models: List[ModelConfig] | None = preload_models.get(
+                    "base", None
+                )
+                controlnet_models: List[ModelConfig] | None = preload_models.get(
+                    "controlnet", None
+                )
+                vae_models: List[ModelConfig] | None = preload_models.get(
+                    "vae", None
+                )
+            else:
+                base_models = None
+                controlnet_models = None
+                vae_models = None
 
-            _logger.info("Node manager initializing complete.")
+            if (
+                self.config.task_config is not None
+                and self.config.task_config.proxy is not None
+            ):
+                proxy = self.config.task_config.proxy.model_dump()
+                proxy = cast(ProxyConfig, proxy)
+            else:
+                proxy = None
+
+            await to_thread.run_sync(
+                prefetch,
+                self.config.task_config.hf_cache_dir,
+                self.config.task_config.external_cache_dir,
+                self.config.task_config.script_dir,
+                base_models,
+                controlnet_models,
+                vae_models,
+                proxy,
+                cancellable=True,
+            )
+
+        _logger.info("Node manager initializing complete.")
 
     async def _recover(self):
         assert self._contracts is not None
