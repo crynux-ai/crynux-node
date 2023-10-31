@@ -339,7 +339,7 @@ class NodeManager(object):
         await self._task_system.state_cache.dump(state)
         _logger.debug(f"Recover task state {state}")
 
-    async def _run(self):
+    async def _run(self, prefetch: bool = True):
         assert self._tg is None, "Node manager is running."
 
         try:
@@ -348,7 +348,8 @@ class NodeManager(object):
                 try:
                     async with create_task_group() as init_tg:
                         init_tg.start_soon(self._init_components)
-                        init_tg.start_soon(self._init)
+                        if prefetch:
+                            init_tg.start_soon(self._init)
                 except get_cancelled_exc_class():
                     raise
                 except Exception as e:
@@ -374,11 +375,11 @@ class NodeManager(object):
         finally:
             self._tg = None
 
-    async def run(self):
+    async def run(self, prefetch: bool = True):
         assert self._tg is None, "Node manager is running."
 
         try:
-            await self._run()
+            await self._run(prefetch=prefetch)
         except get_cancelled_exc_class():
             raise
         except Exception as e:

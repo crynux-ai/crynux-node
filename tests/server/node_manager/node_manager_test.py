@@ -256,7 +256,7 @@ async def test_node_manager(
 ):
     async with create_task_group() as tg:
         for n in node_managers:
-            tg.start_soon(n.run)
+            tg.start_soon(n.run, False)
 
         waits = []
         for m in node_managers:
@@ -488,7 +488,7 @@ async def test_node_manager_with_recover(
     )
     async with create_task_group() as tg:
         for n in node_managers:
-            tg.start_soon(n.run)
+            tg.start_soon(n.run, False)
 
         for n in node_managers:
             assert (
