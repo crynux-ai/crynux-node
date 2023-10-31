@@ -24,8 +24,9 @@ async def _main():
     async def signal_handler(scope: CancelScope):
         with open_signal_receiver(signal.SIGINT) as signals:
             async for _ in signals:
-                server.stop()
-                with move_on_after(5, shield=True):
+                if not config.headless:
+                    server.stop()
+                with move_on_after(10, shield=True):
                     await node_manager.finish()
                 scope.cancel()
 
@@ -34,8 +35,9 @@ async def _main():
             tg.start_soon(signal_handler, tg.cancel_scope)
 
             tg.start_soon(node_manager.run)
-
-            tg.start_soon(server.start, config.server_host, config.server_port, config.log.level == "DEBUG")
+            
+            if not config.headless:
+                tg.start_soon(server.start, config.server_host, config.server_port, config.log.level == "DEBUG")
     finally:
         with move_on_after(2, shield=True):
             await db.close()

@@ -19,7 +19,8 @@ db: sqlite+aiosqlite:///db/server.db
 relay_url: "https://relay.h.crynux.ai"
 web_dist: dist
 
-distributed: 0
+headless: false
+distributed: false
 task_config:
   output_dir: "/app/data/images"
   hf_cache_dir: "/app/data/huggingface"

@@ -2,9 +2,10 @@ import logging
 from contextlib import asynccontextmanager
 from typing import Optional
 
-from anyio import fail_after, get_cancelled_exc_class, sleep, CancelScope, Event
+from anyio import CancelScope, Event, fail_after, get_cancelled_exc_class, sleep
+from tenacity import AsyncRetrying, before_sleep_log, stop_after_attempt, wait_fixed
 from web3 import Web3
-from tenacity import AsyncRetrying, stop_after_attempt, wait_fixed, before_sleep_log
+
 from h_server import models
 from h_server.contracts import Contracts, TxOption, TxRevertedError
 
@@ -14,7 +15,13 @@ _logger = logging.getLogger(__name__)
 
 
 class NodeStateManager(object):
-    def __init__(self, state_cache: ManagerStateCache, contracts: Contracts, retry_count: int = 3, retry_delay: float = 10):
+    def __init__(
+        self,
+        state_cache: ManagerStateCache,
+        contracts: Contracts,
+        retry_count: int = 3,
+        retry_delay: float = 10,
+    ):
         self.state_cache = state_cache
         self.contracts = contracts
         self.retry_count = retry_count
@@ -22,7 +29,7 @@ class NodeStateManager(object):
 
         self._cancel_scope: Optional[CancelScope] = None
         self._stop_event: Optional[Event] = None
-    
+
     async def start_sync(self, interval: float = 5):
         assert self._cancel_scope is None, "NodeStateManager has started synchronizing."
         assert self._stop_event is None, "NodeStateManager has started synchronizing"
@@ -36,13 +43,17 @@ class NodeStateManager(object):
                 async for attemp in AsyncRetrying(
                     stop=stop_after_attempt(self.retry_count),
                     wait=wait_fixed(self.retry_delay),
-                    before_sleep=before_sleep_log(_logger, logging.ERROR, exc_info=True),
+                    before_sleep=before_sleep_log(
+                        _logger, logging.ERROR, exc_info=True
+                    ),
                     reraise=True,
                 ):
                     with attemp:
                         while not self._stop_event.is_set():
-                            remote_status = await self.contracts.node_contract.get_node_status(
-                                self.contracts.account
+                            remote_status = (
+                                await self.contracts.node_contract.get_node_status(
+                                    self.contracts.account
+                                )
                             )
                             local_status = models.convert_node_status(remote_status)
                             await self.state_cache.set_node_state(local_status)
@@ -74,6 +85,70 @@ class NodeStateManager(object):
             _logger.exception(e)
             _logger.error("unknown tx error")
             raise
+
+    async def try_start(
+        self, interval: float = 5, *, option: "Optional[TxOption]" = None
+    ):
+        async with self._wrap_tx_error():
+            while True:
+                status = await self.contracts.node_contract.get_node_status(
+                    self.contracts.account
+                )
+                if status in [
+                    models.ChainNodeStatus.AVAILABLE,
+                    models.ChainNodeStatus.BUSY,
+                ]:
+                    _logger.info("Node has joined in the network.")
+                    break
+                elif status in [
+                    models.ChainNodeStatus.PENDING_PAUSE,
+                    models.ChainNodeStatus.PENDING_QUIT,
+                ]:
+                    await sleep(interval)
+                    continue
+
+                elif status == models.ChainNodeStatus.QUIT:
+                    node_amount = Web3.to_wei(400, "ether")
+                    balance = await self.contracts.token_contract.balance_of(
+                        self.contracts.account
+                    )
+                    if balance < node_amount:
+                        raise ValueError("Node token balance is not enough to join.")
+                    allowance = await self.contracts.token_contract.allowance(
+                        self.contracts.node_contract.address
+                    )
+                    if allowance < node_amount:
+                        waiter = await self.contracts.token_contract.approve(
+                            self.contracts.node_contract.address,
+                            node_amount,
+                            option=option,
+                        )
+                        await waiter.wait()
+                    waiter = await self.contracts.node_contract.join(option=option)
+                    await waiter.wait()
+                elif status == models.ChainNodeStatus.PAUSED:
+                    waiter = await self.contracts.node_contract.pause(option=option)
+                    await waiter.wait()
+
+                _logger.info("Node joins in the network successfully.")
+                break
+
+    async def try_stop(self, *, option: "Optional[TxOption]" = None):
+        async with self._wrap_tx_error():
+            status = await self.contracts.node_contract.get_node_status(
+                self.contracts.account
+            )
+            if status in [
+                models.ChainNodeStatus.AVAILABLE,
+                models.ChainNodeStatus.BUSY,
+            ]:
+                waiter = await self.contracts.node_contract.quit(option=option)
+                await waiter.wait()
+                _logger.info("Node leaves the network successfully.")
+            else:
+                _logger.info(
+                    f"Node status is {models.convert_node_status(status)}, cannot leave the network"
+                )
 
     async def start(
         self,
@@ -254,4 +329,3 @@ def set_node_state_manager(manager: NodeStateManager):
     global _default_state_manager
 
     _default_state_manager = manager
-
