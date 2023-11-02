@@ -3,10 +3,10 @@ import secrets
 import os
 import shutil
 from io import BytesIO
-from typing import List
+from typing import List, Optional
 
 import pytest
-from anyio import create_task_group
+from anyio import create_task_group, sleep, move_on_after
 from eth_account import Account
 from PIL import Image
 from web3 import Web3
@@ -15,12 +15,15 @@ from h_server import models
 from h_server.config import Config, TxOption, set_config
 from h_server.contracts import Contracts
 from h_server.event_queue import EventQueue, MemoryEventQueue
-from h_server.models.task import PoseConfig, TaskConfig
 from h_server.node_manager import (
     NodeManager,
     NodeStateManager,
 )
-from h_server.node_manager.state_cache import MemoryNodeStateCache, MemoryTxStateCache, ManagerStateCache
+from h_server.node_manager.state_cache import (
+    MemoryNodeStateCache,
+    MemoryTxStateCache,
+    ManagerStateCache,
+)
 from h_server.relay import MockRelay, Relay
 from h_server.task import InferenceTaskRunner, MemoryTaskStateCache, TaskSystem
 from h_server.task.state_cache import TaskStateCache
@@ -195,21 +198,21 @@ async def node_managers(
                 def __init__(
                     self,
                     task_id: int,
-                    state_cache: TaskStateCache,
-                    queue: EventQueue,
                     task_name: str,
                     distributed: bool,
+                    state_cache: TaskStateCache,
+                    queue: EventQueue,
                 ) -> None:
                     super().__init__(
-                        task_id,
-                        state_cache,
-                        queue,
-                        task_name,
-                        distributed,
-                        contracts,
-                        relay,
-                        watcher,
-                        local_config,
+                        task_id=task_id,
+                        task_name=task_name,
+                        distributed=distributed,
+                        state_cache=state_cache,
+                        queue=queue,
+                        contracts=contracts,
+                        relay=relay,
+                        watcher=watcher,
+                        local_config=local_config,
                     )
 
             return _InferenceTaskRunner
@@ -224,7 +227,9 @@ async def node_managers(
         await state_cache.set_node_state(models.NodeStatus.Stopped)
 
         state_manager = NodeStateManager(
-            state_cache=state_cache, contracts=contracts, retry_count=0,
+            state_cache=state_cache,
+            contracts=contracts,
+            retry_count=0,
         )
 
         manager = NodeManager(
@@ -246,6 +251,44 @@ async def node_managers(
         for data_dir in new_data_dirs:
             if os.path.exists(data_dir):
                 shutil.rmtree(data_dir)
+
+
+async def create_task(contracts: Contracts, relay: Relay, tx_option: TxOption):
+    prompt = (
+        "best quality, ultra high res, photorealistic++++, 1girl, off-shoulder sweater, smiling, "
+        "faded ash gray messy bun hair+, border light, depth of field, looking at "
+        "viewer, closeup"
+    )
+
+    negative_prompt = (
+        "paintings, sketches, worst quality+++++, low quality+++++, normal quality+++++, lowres, "
+        "normal quality, monochrome++, grayscale++, skin spots, acnes, skin blemishes, "
+        "age spot, glans"
+    )
+
+    args = {
+        "base_model": "runwayml/stable-diffusion-v1-5",
+        "prompt": prompt,
+        "negative_prompt": negative_prompt,
+        "task_config": {"num_images": 9, "safety_checker": False},
+    }
+    task_args = json.dumps(args)
+
+    task_hash = get_task_hash(task_args)
+    data_hash = bytes([0] * 32)
+    waiter = await contracts.task_contract.create_task(
+        task_hash=task_hash, data_hash=data_hash, option=tx_option
+    )
+    receipt = await waiter.wait()
+
+    events = await contracts.task_contract.get_events(
+        "TaskCreated",
+        from_block=receipt["blockNumber"],
+    )
+    event = events[0]
+    task_id = event["args"]["taskId"]
+    await relay.create_task(task_id=task_id, task_args=task_args)
+    return task_id
 
 
 async def test_node_manager(
@@ -275,39 +318,7 @@ async def test_node_manager(
                 await n.state_cache.get_node_state()
             ).status == models.NodeStatus.Running
 
-        prompt = ("best quality, ultra high res, photorealistic++++, 1girl, off-shoulder sweater, smiling, "
-                "faded ash gray messy bun hair+, border light, depth of field, looking at "
-                "viewer, closeup")
-
-        negative_prompt = ("paintings, sketches, worst quality+++++, low quality+++++, normal quality+++++, lowres, "
-                        "normal quality, monochrome++, grayscale++, skin spots, acnes, skin blemishes, "
-                        "age spot, glans")
-
-        args = {
-            "base_model": "runwayml/stable-diffusion-v1-5",
-            "prompt": prompt,
-            "negative_prompt": negative_prompt,
-            "task_config": {
-                "num_images": 9,
-                "safety_checker": False
-            }
-        }
-        task_args = json.dumps(args)
-
-        task_hash = get_task_hash(task_args)
-        data_hash = bytes([0]*32)
-        waiter = await node_contracts[0].task_contract.create_task(
-            task_hash=task_hash, data_hash=data_hash, option=tx_option
-        )
-        receipt = await waiter.wait()
-
-        events = await node_contracts[0].task_contract.get_events(
-            "TaskCreated",
-            from_block=receipt["blockNumber"],
-        )
-        event = events[0]
-        task_id = event["args"]["taskId"]
-        await relay.create_task(task_id=task_id, task_args=task_args)
+        task_id = await create_task(node_contracts[0], relay, tx_option=tx_option)
 
         with BytesIO() as dst:
             await relay.get_result(task_id=task_id, image_num=0, dst=dst)
@@ -372,6 +383,122 @@ async def test_node_manager(
         tg.cancel_scope.cancel()
 
 
+async def test_node_manager_cancel(
+    root_contracts: Contracts,
+    node_managers: List[NodeManager],
+    node_contracts: List[Contracts],
+    relay: Relay,
+    tx_option,
+):
+    try:
+        await root_contracts.task_contract.update_timeout(1, option=tx_option)
+        async with create_task_group() as tg:
+            for n in node_managers:
+                tg.start_soon(n.run, False)
+
+            waits = []
+            for m in node_managers:
+                assert m._node_state_manager is not None
+                waits.append(await m._node_state_manager.start(option=tx_option))
+            for n in node_managers:
+                assert (
+                    await n.state_cache.get_tx_state()
+                ).status == models.TxStatus.Pending
+            async with create_task_group() as sub_tg:
+                for w in waits:
+                    sub_tg.start_soon(w)
+
+            for n in node_managers:
+                assert (
+                    await n.state_cache.get_node_state()
+                ).status == models.NodeStatus.Running
+
+            task_id = await create_task(node_contracts[0], relay, tx_option=tx_option)
+
+            await sleep(1.1)
+            await node_contracts[0].task_contract.cancel_task(
+                task_id=task_id, option=tx_option
+            )
+            await sleep(1)
+
+            for n in node_managers:
+                assert n._task_system is not None
+                assert task_id not in n._task_system._runners
+                state = await n._task_system.state_cache.load(task_id=task_id)
+                assert state.status == models.TaskStatus.Aborted
+
+            for n in node_managers:
+                await n.finish()
+            tg.cancel_scope.cancel()
+    finally:
+        await root_contracts.task_contract.update_timeout(900, option=tx_option)
+
+
+async def test_node_manager_auto_cancel(
+    root_contracts: Contracts,
+    node_managers: List[NodeManager],
+    node_contracts: List[Contracts],
+    relay: Relay,
+    tx_option,
+):
+    try:
+        await root_contracts.task_contract.update_timeout(1, option=tx_option)
+
+        for n in node_managers:
+            assert n._task_system is not None
+            runner_cls = n._task_system._runner_cls
+
+            class DelayRunner(runner_cls):
+                def __init__(self, *args, **kwargs):
+                    super().__init__(*args, **kwargs)
+                
+                async def process_event(self, event) -> bool:
+                    await sleep(1)
+                    return await super().process_event(event)
+            
+            n._task_system.set_runner_cls(DelayRunner)
+
+        async with create_task_group() as tg:
+            for n in node_managers:
+                tg.start_soon(n.run, False)
+
+            waits = []
+            for m in node_managers:
+                assert m._node_state_manager is not None
+                waits.append(await m._node_state_manager.start(option=tx_option))
+            for n in node_managers:
+                assert (
+                    await n.state_cache.get_tx_state()
+                ).status == models.TxStatus.Pending
+            async with create_task_group() as sub_tg:
+                for w in waits:
+                    sub_tg.start_soon(w)
+
+            for n in node_managers:
+                assert (
+                    await n.state_cache.get_node_state()
+                ).status == models.NodeStatus.Running
+
+            task_id = await create_task(node_contracts[0], relay, tx_option=tx_option)
+
+            with move_on_after(5):
+                with BytesIO() as dst:
+                    await relay.get_result(task_id=task_id, image_num=0, dst=dst)
+
+            for n in node_managers:
+                assert n._task_system is not None
+                await sleep(0.1)
+                assert task_id not in n._task_system._runners
+                state = await n._task_system.state_cache.load(task_id=task_id)
+                assert state.status == models.TaskStatus.Aborted
+
+            for n in node_managers:
+                await n.finish()
+            tg.cancel_scope.cancel()
+    finally:
+        await root_contracts.task_contract.update_timeout(900, option=tx_option)
+
+
 async def partial_run_task(
     config: Config,
     node_managers: List[NodeManager],
@@ -395,27 +522,28 @@ async def partial_run_task(
         ).status == models.NodeStatus.Running
 
     # create task
-    prompt = ("best quality, ultra high res, photorealistic++++, 1girl, off-shoulder sweater, smiling, "
-              "faded ash gray messy bun hair+, border light, depth of field, looking at "
-              "viewer, closeup")
+    prompt = (
+        "best quality, ultra high res, photorealistic++++, 1girl, off-shoulder sweater, smiling, "
+        "faded ash gray messy bun hair+, border light, depth of field, looking at "
+        "viewer, closeup"
+    )
 
-    negative_prompt = ("paintings, sketches, worst quality+++++, low quality+++++, normal quality+++++, lowres, "
-                       "normal quality, monochrome++, grayscale++, skin spots, acnes, skin blemishes, "
-                       "age spot, glans")
+    negative_prompt = (
+        "paintings, sketches, worst quality+++++, low quality+++++, normal quality+++++, lowres, "
+        "normal quality, monochrome++, grayscale++, skin spots, acnes, skin blemishes, "
+        "age spot, glans"
+    )
 
     args = {
         "base_model": "runwayml/stable-diffusion-v1-5",
         "prompt": prompt,
         "negative_prompt": negative_prompt,
-        "task_config": {
-            "num_images": 9,
-            "safety_checker": False
-        }
+        "task_config": {"num_images": 9, "safety_checker": False},
     }
     task_args = json.dumps(args)
 
     task_hash = get_task_hash(task_args)
-    data_hash = bytes([0]*32)
+    data_hash = bytes([0] * 32)
 
     waiter = await node_contracts[0].task_contract.create_task(
         task_hash=task_hash, data_hash=data_hash, option=tx_option
