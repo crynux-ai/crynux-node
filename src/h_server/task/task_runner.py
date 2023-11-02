@@ -312,6 +312,10 @@ class InferenceTaskRunner(TaskRunner):
             _logger.info(f"Task {self.task_id} timeout. Cancel the task.")
         except TxRevertedError as e:
             _logger.debug(f"Cancel task {self.task_id} failed due to {e.reason}")
+        except get_cancelled_exc_class():
+            raise
+        except Exception as e:
+            _logger.debug(f"Cancel task {self.task_id} failed")
 
     async def process_event(self, event: models.TaskEvent):
         if event.kind == "TaskAborted":
