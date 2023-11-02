@@ -1,11 +1,21 @@
 import logging
 import os.path
 import shutil
+import time
 from abc import ABC, abstractmethod
+from collections import deque
 from contextlib import asynccontextmanager
-from typing import List, Optional
+from typing import Awaitable, Callable, Deque, List, Optional, Tuple
 
-from anyio import Lock, fail_after, to_thread
+from anyio import (
+    Condition,
+    Lock,
+    create_task_group,
+    fail_after,
+    get_cancelled_exc_class,
+    to_thread,
+)
+from anyio.abc import TaskGroup
 from celery.result import AsyncResult
 from tenacity import (
     AsyncRetrying,
@@ -24,15 +34,19 @@ from h_server import models
 from h_server.config import TaskConfig as LocalConfig
 from h_server.config import get_config
 from h_server.contracts import Contracts, TxRevertedError, get_contracts
-from h_server.event_queue import EventQueue
-from h_server.relay import Relay, get_relay, RelayError
+from h_server.event_queue import EventQueue, get_event_queue
+from h_server.relay import Relay, RelayError, get_relay
 from h_server.watcher import EventWatcher, get_watcher
 from h_worker.task.error import TaskInvalid
 
-from .state_cache import TaskStateCache
+from .state_cache import TaskStateCache, get_task_state_cache
 from .utils import make_result_commitments
 
 _logger = logging.getLogger(__name__)
+
+
+OkCallback = Callable[[bool], Awaitable[None]]
+ErrCallback = Callable[[Exception], Awaitable[None]]
 
 
 class TaskRunner(ABC):
@@ -40,18 +54,25 @@ class TaskRunner(ABC):
     def __init__(
         self,
         task_id: int,
-        state_cache: TaskStateCache,
-        queue: EventQueue,
         task_name: str,
         distributed: bool,
+        state_cache: Optional[TaskStateCache] = None,
+        queue: Optional[EventQueue] = None,
     ):
         self.task_id = task_id
-        self.cache = state_cache
-        self.queue = queue
         self.task_name = task_name
         self.distributed = distributed
+        if state_cache is None:
+            state_cache = get_task_state_cache()
+        self.cache = state_cache
+        if queue is None:
+            queue = get_event_queue()
+        self.queue = queue
 
         self._state: Optional[models.TaskState] = None
+
+        self._condition = Condition()
+        self._deque: Deque[Tuple[int, models.TaskEvent]] = deque()
 
     @property
     def state(self) -> models.TaskState:
@@ -68,8 +89,16 @@ class TaskRunner(ABC):
         assert self._state is not None, "The task runner's state has not been set."
         self._state = None
 
-    async def init(self) -> bool:
+    @asynccontextmanager
+    async def state_context(self):
         try:
+            yield self.state
+        finally:
+            with fail_after(10, shield=True):
+                await self.cache.dump(task_state=self.state)
+
+    async def init(self) -> bool:
+        if self._state is None:
             if await self.cache.has(self.task_id):
                 state = await self.cache.load(self.task_id)
                 self.state = state
@@ -77,27 +106,108 @@ class TaskRunner(ABC):
                 state = models.TaskState(
                     task_id=self.task_id,
                     round=0,
+                    timeout=0,
                     status=models.TaskStatus.Pending,
                 )
                 await self.cache.dump(state)
                 self.state = state
-            return True
-        except KeyError:
+        # check if the task exists on chain
+        task = await self.get_task()
+        if task is None:
+            # task doesn't exist on chain, abort
+            self.state.status = models.TaskStatus.Aborted
             return False
+        self.state.timeout = task.timeout
+        return True
 
     @abstractmethod
     async def process_event(self, event: models.TaskEvent) -> bool:
         ...
+
+    @abstractmethod
+    async def cleanup(self):
+        ...
+
+    @abstractmethod
+    async def get_task(self) -> Optional[models.ChainTask]:
+        ...
+
+    @abstractmethod
+    async def cancel_task(self):
+        ...
+
+    async def _run_event(self, ack_id: int, event: models.TaskEvent, tg: TaskGroup):
+        try:
+            finished = await self.process_event(event)
+            await self.queue.ack(ack_id)
+            if finished:
+                tg.cancel_scope.cancel()
+        except get_cancelled_exc_class():
+            _logger.debug(f"Task {self.task_id} process event {event.kind} cancelled.")
+            self._deque.append((ack_id, event))
+            raise
+        except Exception:
+            _logger.debug(f"Task {self.task_id} process event {event.kind} failed.")
+            self._deque.append((ack_id, event))
+            raise
+
+    async def run(self):
+        try:
+            success = await self.init()
+            if not success:
+                return
+            delay = self.state.timeout - time.time()
+            if delay <= 0:
+                raise TimeoutError
+            with fail_after(delay, shield=False):
+                async with create_task_group() as tg:
+                    while True:
+                        ack_id, event = await self.recv()
+
+                        tg.start_soon(self._run_event, ack_id, event, tg)
+        except get_cancelled_exc_class():
+            raise
+        except TimeoutError:
+            # cancel task
+            async with self.state_context() as state:
+                state.status = models.TaskStatus.Aborted
+            await self.cancel_task()
+        finally:
+            with fail_after(10, shield=True):
+                if self._state is not None and (
+                    self.state.status == models.TaskStatus.Aborted
+                    or self.state.status == models.TaskStatus.Success
+                ):
+                    for ack_id, event in self._deque:
+                        await self.queue.ack(ack_id)
+                        _logger.debug(f"Ack task {self.task_id} event {event.kind}")
+                    await self.cleanup()
+                else:
+                    for ack_id, event in self._deque:
+                        await self.queue.no_ack(ack_id)
+                        _logger.debug(f"No ack task {self.task_id} event {event.kind}")
+
+    async def recv(self) -> Tuple[int, models.TaskEvent]:
+        async with self._condition:
+            while len(self._deque) == 0:
+                await self._condition.wait()
+            ack_id, event = self._deque.popleft()
+            return ack_id, event
+
+    async def send(self, ack_id: int, event: models.TaskEvent):
+        async with self._condition:
+            self._deque.append((ack_id, event))
+            self._condition.notify(1)
 
 
 class InferenceTaskRunner(TaskRunner):
     def __init__(
         self,
         task_id: int,
-        state_cache: TaskStateCache,
-        queue: EventQueue,
         task_name: str,
         distributed: bool,
+        state_cache: Optional[TaskStateCache] = None,
+        queue: Optional[EventQueue] = None,
         contracts: Optional[Contracts] = None,
         relay: Optional[Relay] = None,
         watcher: Optional[EventWatcher] = None,
@@ -106,10 +216,10 @@ class InferenceTaskRunner(TaskRunner):
     ) -> None:
         super().__init__(
             task_id=task_id,
-            state_cache=state_cache,
-            queue=queue,
             task_name=task_name,
             distributed=distributed,
+            state_cache=state_cache,
+            queue=queue,
         )
         if contracts is None:
             self.contracts = get_contracts()
@@ -166,14 +276,6 @@ class InferenceTaskRunner(TaskRunner):
             filter_args={"taskId": self.task_id},
         )
 
-    @asynccontextmanager
-    async def state_context(self):
-        try:
-            yield self.state
-        finally:
-            with fail_after(5, shield=True):
-                await self.cache.dump(task_state=self.state)
-
     @retry(
         stop=stop_after_attempt(3),
         wait=wait_fixed(10),
@@ -190,7 +292,6 @@ class InferenceTaskRunner(TaskRunner):
             self.task_id, round
         )
         await waiter.wait()
-        await self.cleanup()
 
     @property
     def lock(self) -> Lock:
@@ -198,7 +299,26 @@ class InferenceTaskRunner(TaskRunner):
             self._lock = Lock()
         return self._lock
 
+    async def get_task(self):
+        task = await self.contracts.task_contract.get_task(self.task_id)
+        # task not exist
+        if task.id == 0 or task.id != self.task_id:
+            return None
+        return task
+
+    async def cancel_task(self):
+        try:
+            await self.contracts.task_contract.cancel_task(self.task_id)
+            _logger.info(f"Task {self.task_id} timeout. Cancel the task.")
+        except TxRevertedError as e:
+            _logger.debug(f"Cancel task {self.task_id} failed due to {e.reason}")
+
     async def process_event(self, event: models.TaskEvent):
+        if event.kind == "TaskAborted":
+            assert isinstance(event, models.TaskAborted)
+            await self.task_aborted(event)
+            return True
+
         async with self.lock:
             try:
                 async for attemp in AsyncRetrying(
@@ -227,10 +347,6 @@ class InferenceTaskRunner(TaskRunner):
                         elif event.kind == "TaskSuccess":
                             assert isinstance(event, models.TaskSuccess)
                             await self.task_success(event)
-                            return True
-                        elif event.kind == "TaskAborted":
-                            assert isinstance(event, models.TaskAborted)
-                            await self.task_aborted(event)
                             return True
                         else:
                             raise ValueError(f"Unknown event kind {event.kind}")
@@ -342,13 +458,11 @@ class InferenceTaskRunner(TaskRunner):
             if len(state.result) == 0:
                 result, commitment, nonce = make_result_commitments(event.hashes)
                 try:
-                    waiter = (
-                        await self.contracts.task_contract.submit_task_result_commitment(
-                            task_id=self.task_id,
-                            round=state.round,
-                            commitment=commitment,
-                            nonce=nonce,
-                        )
+                    waiter = await self.contracts.task_contract.submit_task_result_commitment(
+                        task_id=self.task_id,
+                        round=state.round,
+                        commitment=commitment,
+                        nonce=nonce,
                     )
                     await waiter.wait()
                 except TxRevertedError as e:
@@ -394,22 +508,12 @@ class InferenceTaskRunner(TaskRunner):
 
             state.status = models.TaskStatus.Success
 
-        await self.cleanup()
-
     async def task_aborted(self, event: models.TaskAborted):
         async with self.state_context() as state:
             state.status = models.TaskStatus.Aborted
 
-        await self.cleanup()
-
     async def cleanup(self):
         if not self._cleaned:
-            assert self.state.status in [
-                models.TaskStatus.Success,
-                models.TaskStatus.Aborted,
-                models.TaskStatus.Error,
-            ], "Task status is not success or aborted when shutdown."
-
             self.watcher.unwatch_event(self._commitment_watch_id)
             self.watcher.unwatch_event(self._success_watch_id)
             self.watcher.unwatch_event(self._aborted_watch_id)
@@ -420,38 +524,33 @@ class InferenceTaskRunner(TaskRunner):
                     if os.path.exists(dirname):
                         shutil.rmtree(dirname)
 
-            with fail_after(5, shield=True):
+            with fail_after(10, shield=True):
                 await to_thread.run_sync(delete_result_files, self.state.files)
 
             del self.state
             self._cleaned = True
 
+
 class MockTaskRunner(TaskRunner):
     def __init__(
         self,
         task_id: int,
-        state_cache: TaskStateCache,
-        queue: EventQueue,
         task_name: str,
         distributed: bool,
+        state_cache: Optional[TaskStateCache] = None,
+        queue: Optional[EventQueue] = None,
+        timeout: int = 900
     ):
         super().__init__(
             task_id=task_id,
-            state_cache=state_cache,
-            queue=queue,
             task_name=task_name,
             distributed=distributed,
+            state_cache=state_cache,
+            queue=queue,
         )
 
+        self._timeout = timeout
         self._lock: Optional[Lock] = None
-
-    @asynccontextmanager
-    async def state_context(self):
-        try:
-            yield self.state
-        finally:
-            with fail_after(5, shield=True):
-                await self.cache.dump(task_state=self.state)
 
     @property
     def lock(self) -> Lock:
@@ -459,7 +558,32 @@ class MockTaskRunner(TaskRunner):
             self._lock = Lock()
         return self._lock
 
+    async def get_task(self):
+        return models.ChainTask(
+            id=self.task_id,
+            creator="",
+            task_hash=b"",
+            data_hash=b"",
+            is_success=False,
+            selected_nodes=[],
+            commitments=[],
+            nonces=[],
+            results=[],
+            result_disclosed_rounds=[],
+            result_node="",
+            aborted=False,
+            timeout=self._timeout + int(time.time())
+        )
+
+    async def cancel_task(self):
+        pass
+
     async def process_event(self, event: models.TaskEvent):
+        if event.kind == "TaskAborted":
+            assert isinstance(event, models.TaskAborted)
+            await self.task_aborted(event)
+            return True
+
         async with self.lock:
             if event.kind == "TaskCreated":
                 assert isinstance(event, models.TaskCreated)
@@ -473,10 +597,6 @@ class MockTaskRunner(TaskRunner):
                 assert isinstance(event, models.TaskResultCommitmentsReady)
                 await self.commitment_ready(event)
                 return False
-            elif event.kind == "TaskAborted":
-                assert isinstance(event, models.TaskAborted)
-                await self.task_aborted(event)
-                return True
             elif event.kind == "TaskSuccess":
                 assert isinstance(event, models.TaskSuccess)
                 await self.task_success(event)
@@ -512,13 +632,11 @@ class MockTaskRunner(TaskRunner):
 
             state.status = models.TaskStatus.Success
 
-        await self.cleanup()
 
     async def task_aborted(self, event: models.TaskAborted):
         async with self.state_context() as state:
             state.status = models.TaskStatus.Aborted
 
-        await self.cleanup()
 
     async def cleanup(self):
         del self.state

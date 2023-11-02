@@ -49,7 +49,19 @@ class TaskSystem(object):
     def event_queue(self) -> EventQueue:
         return self._queue
 
-    async def _recover(self):
+    async def _run_task(self, task_id: int):
+        runner = self._runners[task_id]
+        try:
+            await runner.run()
+            del self._runners[task_id]
+        except get_cancelled_exc_class():
+            raise
+        except Exception as e:
+            _logger.exception(e)
+            _logger.error(f"Task {task_id} unknown error: {str(e)}")
+
+
+    async def _recover(self, tg: TaskGroup):
         running_status = [TaskStatus.Pending, TaskStatus.Executing, TaskStatus.ResultUploaded, TaskStatus.Disclosed]
         running_states = await self.state_cache.find(status=running_status)
         for state in running_states:
@@ -62,6 +74,7 @@ class TaskSystem(object):
             )
             runner.state = state
             self._runners[state.task_id] = runner
+            tg.start_soon(self._run_task, state.task_id)
             _logger.debug(f"Recreate task runner for {state.task_id}")
 
 
@@ -74,7 +87,7 @@ class TaskSystem(object):
         try:
             async with create_task_group() as tg:
                 self._tg = tg
-                await self._recover()
+                await self._recover(tg)
                 while not self._stop_event.is_set():
                     ack_id, event = await self.event_queue.get()
                     task_id = event.task_id
@@ -88,42 +101,11 @@ class TaskSystem(object):
                             task_name=self._task_name,
                             distributed=self._distributed,
                         )
-                        valid = await runner.init()
-                        if valid:
-                            self._runners[task_id] = runner
-                            _logger.debug(f"Create task runner for {event.task_id}")
-                        else:
-                            _logger.debug(
-                                f"Cannot process event {event.kind} of task {event.task_id}."
-                                " Perhaps the task has finished by error."
-                            )
-                            continue
+                        self._runners[task_id] = runner
+                        tg.start_soon(self._run_task, task_id)
+                    
+                    await runner.send(ack_id, event)
 
-                    async def _process_event(ack_id: int, event: TaskEvent):
-                        try:
-                            finished = await runner.process_event(event)
-                            with fail_after(5, shield=True):
-                                if finished:
-                                    del self._runners[task_id]
-                                    _logger.debug(f"Task {event.task_id} finished")
-                                await self.event_queue.ack(ack_id)
-                                _logger.debug(
-                                    f"Task {event.task_id} process event {event.kind} success."
-                                )
-                        except get_cancelled_exc_class():
-                            with fail_after(5, shield=True):
-                                await self.event_queue.no_ack(ack_id)
-                                _logger.debug(f"No ack task {event.task_id} event {event.kind}")
-                            raise
-                        except Exception:
-                            _logger.debug(f"Task {event.task_id} process event {event.kind} failed.")
-                            with fail_after(5, shield=True):
-                                await self.event_queue.no_ack(ack_id=ack_id)
-                                _logger.debug(f"No ack task {event.task_id} event {event.kind}")
-                                del self._runners[task_id]
-                            raise
-
-                    tg.start_soon(_process_event, ack_id, event)
         except get_cancelled_exc_class():
             raise
         except Exception as e:

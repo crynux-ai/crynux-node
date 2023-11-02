@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from typing import List, Optional, Type, cast
 
 from anyio import (Event, create_task_group, fail_after,
@@ -285,9 +286,11 @@ class NodeManager(object):
             return
 
         task = await self._contracts.task_contract.get_task(task_id=task_id)
+        if task.timeout <= time.time():
+            return 
         round = task.selected_nodes.index(self._contracts.account)
         state = models.TaskState(
-            task_id=task_id, round=round, status=models.TaskStatus.Pending
+            task_id=task_id, round=round, timeout=task.timeout, status=models.TaskStatus.Pending
         )
 
         events = []

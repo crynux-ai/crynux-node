@@ -13,6 +13,7 @@ class TaskState(Base, BaseMixin):
 
     task_id: Mapped[int] = mapped_column(sa.Integer, nullable=False, index=True)
     round: Mapped[int] = mapped_column(sa.Integer, nullable=False, index=False)
+    timeout: Mapped[int] = mapped_column(sa.Integer, nullable=False, index=False)
     status: Mapped[TaskStatus] = mapped_column(
         sa.Enum(TaskStatus), nullable=False, index=False
     )
