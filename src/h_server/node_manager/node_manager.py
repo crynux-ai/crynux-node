@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from typing import List, Optional, Type, cast
 
 from anyio import (Event, create_task_group, fail_after,
@@ -8,6 +9,7 @@ from anyio import (Event, create_task_group, fail_after,
 from anyio.abc import TaskGroup
 from web3 import Web3
 from web3.types import EventData
+from tenacity import AsyncRetrying, before_sleep_log, wait_fixed
 
 from h_server import models
 from h_server.config import Config, wait_privkey
@@ -60,11 +62,9 @@ def _make_watcher(
     contracts: Contracts,
     queue: EventQueue,
     block_number_cache_cls: Type[BlockNumberCache],
-    retry_count: int = 3,
-    retry_delay: float = 30,
 ):
     watcher = EventWatcher.from_contracts(
-        contracts, retry_count=retry_count, retry_delay=retry_delay
+        contracts
     )
 
     block_cache = block_number_cache_cls()
@@ -85,12 +85,12 @@ def _make_watcher(
 
 
 def _make_task_system(
-    queue: EventQueue, distributed: bool, task_state_cache_cls: Type[TaskStateCache]
+    queue: EventQueue, distributed: bool, retry: bool, task_state_cache_cls: Type[TaskStateCache]
 ) -> TaskSystem:
     cache = task_state_cache_cls()
     set_task_state_cache(cache)
 
-    system = TaskSystem(state_cache=cache, queue=queue, distributed=distributed)
+    system = TaskSystem(state_cache=cache, queue=queue, distributed=distributed, retry=retry)
     system.set_runner_cls(runner_cls=InferenceTaskRunner)
 
     set_task_system(system)
@@ -100,14 +100,10 @@ def _make_task_system(
 def _make_node_state_manager(
     state_cache: ManagerStateCache,
     contracts: Contracts,
-    retry_count: int = 3,
-    retry_delay: float = 30,
 ):
     state_manager = NodeStateManager(
         state_cache=state_cache,
         contracts=contracts,
-        retry_count=retry_count,
-        retry_delay=retry_delay,
     )
     set_node_state_manager(state_manager)
     return state_manager
@@ -130,7 +126,7 @@ class NodeManager(object):
         node_state_manager: Optional[NodeStateManager] = None,
         watcher: Optional[EventWatcher] = None,
         task_system: Optional[TaskSystem] = None,
-        retry_count: int = 3,
+        retry: bool = True,
         retry_delay: float = 30,
     ) -> None:
         self.config = config
@@ -154,7 +150,7 @@ class NodeManager(object):
         self._watcher = watcher
         self._task_system = task_system
 
-        self._retry_count = retry_count
+        self._retry = retry
         self._retry_delay = retry_delay
 
         self._tg: Optional[TaskGroup] = None
@@ -193,8 +189,6 @@ class NodeManager(object):
             self._node_state_manager = _make_node_state_manager(
                 state_cache=self.state_cache,
                 contracts=self._contracts,
-                retry_count=self._retry_count,
-                retry_delay=self._retry_delay,
             )
 
         if self._watcher is None or self._task_system is None:
@@ -205,13 +199,12 @@ class NodeManager(object):
                     contracts=self._contracts,
                     queue=self._event_queue,
                     block_number_cache_cls=self.block_number_cache_cls,
-                    retry_count=self._retry_count,
-                    retry_delay=self._retry_delay,
                 )
             if self._task_system is None:
                 self._task_system = _make_task_system(
                     queue=self._event_queue,
                     distributed=self.config.distributed,
+                    retry=self._retry,
                     task_state_cache_cls=self.task_state_cache_cls,
                 )
         _logger.info("Node manager components initializing complete.")
@@ -285,9 +278,11 @@ class NodeManager(object):
             return
 
         task = await self._contracts.task_contract.get_task(task_id=task_id)
+        if task.timeout <= time.time():
+            return 
         round = task.selected_nodes.index(self._contracts.account)
         state = models.TaskState(
-            task_id=task_id, round=round, status=models.TaskStatus.Pending
+            task_id=task_id, round=round, timeout=task.timeout, status=models.TaskStatus.Pending
         )
 
         events = []
@@ -337,6 +332,60 @@ class NodeManager(object):
         await self._task_system.state_cache.dump(state)
         _logger.debug(f"Recover task state {state}")
 
+    async def _sync_state(self):
+
+        async def _inner():
+            assert self._node_state_manager is not None
+            try:
+                await self._node_state_manager.start_sync()
+            except Exception as e:
+                _logger.exception(e)
+                _logger.error("Cannot sync node state from chain")
+                with fail_after(5, shield=True):
+                    await self.state_cache.set_node_state(
+                        status=models.NodeStatus.Error,
+                        message="Node manager running error: cannot sync node state from chain."
+                    )
+                raise
+        
+        if self._retry:
+            async for attemp in AsyncRetrying(
+                wait=wait_fixed(self._retry_delay),
+                before_sleep=before_sleep_log(_logger, logging.ERROR, exc_info=True),
+                reraise=True,
+            ):
+                with attemp:
+                    await _inner()
+        else:
+            await _inner()
+
+    async def _watch_events(self):
+
+        async def _inner():
+            assert self._watcher is not None
+            try:
+                await self._watcher.start()
+            except Exception as e:
+                _logger.exception(e)
+                _logger.error("Cannot watch events from chain")
+                with fail_after(5, shield=True):
+                    await self.state_cache.set_node_state(
+                        status=models.NodeStatus.Error,
+                        message="Node manager running error: cannot watch events from chain."
+                    )
+                raise
+
+        if self._retry:
+            async for attemp in AsyncRetrying(
+                wait=wait_fixed(self._retry_delay),
+                before_sleep=before_sleep_log(_logger, logging.ERROR, exc_info=True),
+                reraise=True,
+            ):
+                with attemp:
+                    await _inner()
+        else:
+            await _inner()
+
     async def _run(self, prefetch: bool = True):
         assert self._tg is None, "Node manager is running."
 
@@ -363,15 +412,14 @@ class NodeManager(object):
 
                 await self._recover()
 
-                assert self._node_state_manager is not None
-                assert self._watcher is not None
                 assert self._task_system is not None
 
                 if self.config.headless:
+                    assert self._node_state_manager is not None
                     tg.start_soon(self._node_state_manager.try_start)
                 else:
-                    tg.start_soon(self._node_state_manager.start_sync)
-                tg.start_soon(self._watcher.start)
+                    tg.start_soon(self._sync_state)
+                tg.start_soon(self._watch_events)
                 tg.start_soon(self._task_system.start)
         finally:
             self._tg = None

@@ -22,6 +22,7 @@ class DbTaskStateCache(TaskStateCache):
                 return TaskState(
                     task_id=task_id,
                     round=state.round,
+                    timeout=state.timeout,
                     status=state.status,
                     files=files,
                     result=state.result,
@@ -42,6 +43,7 @@ class DbTaskStateCache(TaskStateCache):
                 state = db_models.TaskState(
                     task_id=task_id,
                     round=task_state.round,
+                    timeout=task_state.timeout,
                     status=task_state.status,
                     files=",".join(task_state.files),
                     result=task_state.result,
@@ -50,6 +52,7 @@ class DbTaskStateCache(TaskStateCache):
                 sess.add(state)
             else:
                 state.round = task_state.round
+                state.timeout = task_state.timeout
                 state.status = task_state.status
                 state.files = ",".join(task_state.files)
                 state.result = task_state.result
@@ -84,6 +87,7 @@ class DbTaskStateCache(TaskStateCache):
                 TaskState(
                     task_id=state.task_id,
                     round=state.round,
+                    timeout=state.timeout,
                     status=state.status,
                     files=state.files.split(","),
                     result=state.result,

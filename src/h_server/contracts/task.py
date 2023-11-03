@@ -93,6 +93,15 @@ class TaskContract(ContractWrapperBase):
             round=round,
         )
 
+    async def cancel_task(
+        self, task_id: int, *, option: "Optional[TxOption]" = None
+    ) -> TxWaiter:
+        return await self._transaction_call(
+            "cancelTask",
+            option=option,
+            taskId=task_id,
+        )
+
     async def update_distance_threshold(
         self, threshold: int, *, option: "Optional[TxOption]" = None
     ) -> TxWaiter:
@@ -100,6 +109,15 @@ class TaskContract(ContractWrapperBase):
             "updateDistanceThreshold",
             option=option,
             threshold=threshold,
+        )
+
+    async def update_timeout(
+        self, timeout: int, *, option: "Optional[TxOption]" = None
+    ) -> TxWaiter:
+        return await self._transaction_call(
+            "updateTimeout",
+            option=option,
+            t=timeout,
         )
 
     async def get_task(self, task_id: int) -> ChainTask:
@@ -115,7 +133,9 @@ class TaskContract(ContractWrapperBase):
             nonces=res[7],
             results=res[8],
             result_disclosed_rounds=res[9],
-            result_node=res[10]
+            result_node=res[10],
+            aborted=res[11],
+            timeout=res[12],
         )
 
     async def get_node_task(self, address: str) -> int:

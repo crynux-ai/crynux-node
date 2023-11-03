@@ -16,6 +16,8 @@ class ChainTask(BaseModel):
     results: List[bytes]
     result_disclosed_rounds: List[int]
     result_node: str
+    aborted: bool
+    timeout: int
 
 
 class TaskConfig(BaseModel):
@@ -48,12 +50,12 @@ class TaskStatus(Enum):
     Disclosed = "disclosed"
     Success = "success"
     Aborted = "aborted"
-    Error = "error"
 
 
 class TaskState(BaseModel):
     task_id: int
     round: int
+    timeout: int
     status: TaskStatus
     files: List[str] = []
     result: bytes = b""

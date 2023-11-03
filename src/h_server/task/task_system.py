@@ -1,8 +1,9 @@
 import logging
 from typing import Dict, Optional, Type, TypeVar
 
-from anyio import Event, create_task_group, fail_after, get_cancelled_exc_class, sleep
+from anyio import create_task_group, get_cancelled_exc_class
 from anyio.abc import TaskGroup
+from tenacity import AsyncRetrying, before_sleep_log, wait_exponential
 
 from h_server.event_queue import EventQueue
 from h_server.models import TaskEvent, TaskStatus
@@ -22,17 +23,16 @@ class TaskSystem(object):
         state_cache: TaskStateCache,
         queue: EventQueue,
         distributed: bool = False,
-        retry_delay: float = 5,
+        retry: bool = True,
         task_name: str = "sd_lora_inference",
     ) -> None:
         self._state_cache = state_cache
         self._queue = queue
-        self._retry_delay = retry_delay
+        self._retry = retry
         self._distributed = distributed
         self._task_name = task_name
 
         self._tg: Optional[TaskGroup] = None
-        self._stop_event: Optional[Event] = None
 
         self._runners: Dict[int, TaskRunner] = {}
 
@@ -49,8 +49,38 @@ class TaskSystem(object):
     def event_queue(self) -> EventQueue:
         return self._queue
 
-    async def _recover(self):
-        running_status = [TaskStatus.Pending, TaskStatus.Executing, TaskStatus.ResultUploaded, TaskStatus.Disclosed]
+    async def _run_task(self, task_id: int):
+        async def _inner():
+            runner = self._runners[task_id]
+            try:
+                await runner.run()
+            except get_cancelled_exc_class():
+                raise
+            except Exception as e:
+                _logger.exception(e)
+                _logger.error(f"Task {task_id} error: {str(e)}")
+                raise
+            finally:
+                del self._runners[task_id]
+
+        if self._retry:
+            async for attemp in AsyncRetrying(
+                wait=wait_exponential(multiplier=10),
+                before_sleep=before_sleep_log(_logger, logging.ERROR, exc_info=True),
+                reraise=True,
+            ):
+                with attemp:
+                    await _inner()
+        else:
+            await _inner()
+
+    async def _recover(self, tg: TaskGroup):
+        running_status = [
+            TaskStatus.Pending,
+            TaskStatus.Executing,
+            TaskStatus.ResultUploaded,
+            TaskStatus.Disclosed,
+        ]
         running_states = await self.state_cache.find(status=running_status)
         for state in running_states:
             runner = self._runner_cls(
@@ -62,20 +92,17 @@ class TaskSystem(object):
             )
             runner.state = state
             self._runners[state.task_id] = runner
+            tg.start_soon(self._run_task, state.task_id)
             _logger.debug(f"Recreate task runner for {state.task_id}")
 
-
     async def start(self):
-        assert self._stop_event is None, "The TaskSystem has already been started."
         assert self._tg is None, "The TaskSystem has already been started."
-
-        self._stop_event = Event()
 
         try:
             async with create_task_group() as tg:
                 self._tg = tg
-                await self._recover()
-                while not self._stop_event.is_set():
+                await self._recover(tg)
+                while True:
                     ack_id, event = await self.event_queue.get()
                     task_id = event.task_id
                     if task_id in self._runners:
@@ -88,42 +115,11 @@ class TaskSystem(object):
                             task_name=self._task_name,
                             distributed=self._distributed,
                         )
-                        valid = await runner.init()
-                        if valid:
-                            self._runners[task_id] = runner
-                            _logger.debug(f"Create task runner for {event.task_id}")
-                        else:
-                            _logger.debug(
-                                f"Cannot process event {event.kind} of task {event.task_id}."
-                                " Perhaps the task has finished by error."
-                            )
-                            continue
+                        self._runners[task_id] = runner
+                        tg.start_soon(self._run_task, task_id)
 
-                    async def _process_event(ack_id: int, event: TaskEvent):
-                        try:
-                            finished = await runner.process_event(event)
-                            with fail_after(5, shield=True):
-                                if finished:
-                                    del self._runners[task_id]
-                                    _logger.debug(f"Task {event.task_id} finished")
-                                await self.event_queue.ack(ack_id)
-                                _logger.debug(
-                                    f"Task {event.task_id} process event {event.kind} success."
-                                )
-                        except get_cancelled_exc_class():
-                            with fail_after(5, shield=True):
-                                await self.event_queue.no_ack(ack_id)
-                                _logger.debug(f"No ack task {event.task_id} event {event.kind}")
-                            raise
-                        except Exception:
-                            _logger.debug(f"Task {event.task_id} process event {event.kind} failed.")
-                            with fail_after(5, shield=True):
-                                await self.event_queue.no_ack(ack_id=ack_id)
-                                _logger.debug(f"No ack task {event.task_id} event {event.kind}")
-                                del self._runners[task_id]
-                            raise
+                    await runner.send(ack_id, event)
 
-                    tg.start_soon(_process_event, ack_id, event)
         except get_cancelled_exc_class():
             raise
         except Exception as e:
@@ -131,11 +127,8 @@ class TaskSystem(object):
             raise
         finally:
             self._tg = None
-            self._stop_event = None
 
     def stop(self):
-        if self._stop_event is not None:
-            self._stop_event.set()
         if self._tg is not None and not self._tg.cancel_scope.cancel_called:
             self._tg.cancel_scope.cancel()
 
