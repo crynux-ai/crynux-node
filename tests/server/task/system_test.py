@@ -38,6 +38,8 @@ async def test_task_system():
     system = TaskSystem(
         queue=queue,
         state_cache=cache,
+        distributed=False,
+        retry=False
     )
 
     system.set_runner_cls(MockTaskRunner)
@@ -106,6 +108,8 @@ async def test_task_system_cancel():
     system = TaskSystem(
         queue=queue,
         state_cache=cache,
+        distributed=False,
+        retry=False
     )
 
     system.set_runner_cls(MockTaskRunner)
@@ -152,6 +156,8 @@ async def test_task_system_auto_cancel():
     system = TaskSystem(
         queue=queue,
         state_cache=cache,
+        distributed=False,
+        retry=False
     )
 
     class TimeoutTaskRunner(MockTaskRunner):

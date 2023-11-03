@@ -3,10 +3,10 @@ import secrets
 import os
 import shutil
 from io import BytesIO
-from typing import List, Optional
+from typing import List
 
 import pytest
-from anyio import create_task_group, sleep, move_on_after
+from anyio import create_task_group, sleep, fail_after, Event
 from eth_account import Account
 from PIL import Image
 from web3 import Web3
@@ -159,7 +159,7 @@ async def node_managers(
     for i, (privkey, contracts) in enumerate(zip(privkeys, node_contracts)):
         queue = MemoryEventQueue()
 
-        watcher = EventWatcher.from_contracts(contracts, retry_count=0)
+        watcher = EventWatcher.from_contracts(contracts)
         block_number_cache = MemoryBlockNumberCache()
         watcher.set_blocknumber_cache(block_number_cache)
 
@@ -229,7 +229,6 @@ async def node_managers(
         state_manager = NodeStateManager(
             state_cache=state_cache,
             contracts=contracts,
-            retry_count=0,
         )
 
         manager = NodeManager(
@@ -242,6 +241,7 @@ async def node_managers(
             relay=relay,
             watcher=watcher,
             task_system=system,
+            retry=False
         )
         managers.append(manager)
 
@@ -276,6 +276,7 @@ async def create_task(contracts: Contracts, relay: Relay, tx_option: TxOption):
 
     task_hash = get_task_hash(task_args)
     data_hash = bytes([0] * 32)
+
     waiter = await contracts.task_contract.create_task(
         task_hash=task_hash, data_hash=data_hash, option=tx_option
     )
@@ -288,8 +289,11 @@ async def create_task(contracts: Contracts, relay: Relay, tx_option: TxOption):
     event = events[0]
     task_id = event["args"]["taskId"]
     await relay.create_task(task_id=task_id, task_args=task_args)
-    return task_id
 
+    round_map = {
+        event["args"]["selectedNode"]: event["args"]["round"] for event in events
+    }
+    return task_id, round_map, receipt["blockNumber"]
 
 async def test_node_manager(
     node_managers: List[NodeManager],
@@ -318,7 +322,7 @@ async def test_node_manager(
                 await n.state_cache.get_node_state()
             ).status == models.NodeStatus.Running
 
-        task_id = await create_task(node_contracts[0], relay, tx_option=tx_option)
+        task_id, _, _ = await create_task(node_contracts[0], relay, tx_option=tx_option)
 
         with BytesIO() as dst:
             await relay.get_result(task_id=task_id, image_num=0, dst=dst)
@@ -413,7 +417,7 @@ async def test_node_manager_cancel(
                     await n.state_cache.get_node_state()
                 ).status == models.NodeStatus.Running
 
-            task_id = await create_task(node_contracts[0], relay, tx_option=tx_option)
+            task_id, _, _ = await create_task(node_contracts[0], relay, tx_option=tx_option)
 
             await sleep(1.1)
             await node_contracts[0].task_contract.cancel_task(
@@ -444,23 +448,8 @@ async def test_node_manager_auto_cancel(
     try:
         await root_contracts.task_contract.update_timeout(1, option=tx_option)
 
-        for n in node_managers:
-            assert n._task_system is not None
-            runner_cls = n._task_system._runner_cls
-
-            class DelayRunner(runner_cls):
-                def __init__(self, *args, **kwargs):
-                    super().__init__(*args, **kwargs)
-                
-                async def process_event(self, event) -> bool:
-                    await sleep(1)
-                    return await super().process_event(event)
-            
-            n._task_system.set_runner_cls(DelayRunner)
-
         async with create_task_group() as tg:
-            for n in node_managers:
-                tg.start_soon(n.run, False)
+            tg.start_soon(node_managers[0].run, False)
 
             waits = []
             for m in node_managers:
@@ -479,21 +468,30 @@ async def test_node_manager_auto_cancel(
                     await n.state_cache.get_node_state()
                 ).status == models.NodeStatus.Running
 
-            task_id = await create_task(node_contracts[0], relay, tx_option=tx_option)
+            task_id, _, _ = await create_task(node_contracts[0], relay, tx_option=tx_option)
 
-            with move_on_after(5):
-                with BytesIO() as dst:
-                    await relay.get_result(task_id=task_id, image_num=0, dst=dst)
+            cancel_event = Event()
+            
+            async def _cancel(_):
+                cancel_event.set()
 
-            for n in node_managers:
-                assert n._task_system is not None
-                await sleep(0.1)
-                assert task_id not in n._task_system._runners
-                state = await n._task_system.state_cache.load(task_id=task_id)
-                assert state.status == models.TaskStatus.Aborted
+            assert node_managers[0]._watcher is not None
 
-            for n in node_managers:
-                await n.finish()
+            node_managers[0]._watcher.watch_event(
+                "task",
+                "TaskAborted",
+                callback=_cancel,
+                filter_args={"taskId": task_id},
+            )
+
+            assert node_managers[0]._task_system is not None
+
+            await cancel_event.wait()
+
+            state = await node_managers[0]._task_system.state_cache.load(task_id=task_id)
+            assert state.status == models.TaskStatus.Aborted
+
+            await node_managers[0].finish()
             tg.cancel_scope.cancel()
     finally:
         await root_contracts.task_contract.update_timeout(900, option=tx_option)
@@ -522,45 +520,7 @@ async def partial_run_task(
         ).status == models.NodeStatus.Running
 
     # create task
-    prompt = (
-        "best quality, ultra high res, photorealistic++++, 1girl, off-shoulder sweater, smiling, "
-        "faded ash gray messy bun hair+, border light, depth of field, looking at "
-        "viewer, closeup"
-    )
-
-    negative_prompt = (
-        "paintings, sketches, worst quality+++++, low quality+++++, normal quality+++++, lowres, "
-        "normal quality, monochrome++, grayscale++, skin spots, acnes, skin blemishes, "
-        "age spot, glans"
-    )
-
-    args = {
-        "base_model": "runwayml/stable-diffusion-v1-5",
-        "prompt": prompt,
-        "negative_prompt": negative_prompt,
-        "task_config": {"num_images": 9, "safety_checker": False},
-    }
-    task_args = json.dumps(args)
-
-    task_hash = get_task_hash(task_args)
-    data_hash = bytes([0] * 32)
-
-    waiter = await node_contracts[0].task_contract.create_task(
-        task_hash=task_hash, data_hash=data_hash, option=tx_option
-    )
-    receipt = await waiter.wait()
-
-    events = await node_contracts[0].task_contract.get_events(
-        "TaskCreated",
-        from_block=receipt["blockNumber"],
-    )
-    event = events[0]
-    task_id = event["args"]["taskId"]
-    await relay.create_task(task_id=task_id, task_args=task_args)
-
-    round_map = {
-        event["args"]["selectedNode"]: event["args"]["round"] for event in events
-    }
+    task_id, round_map, block_number = await create_task(node_contracts[0], relay, tx_option=tx_option)
 
     result = bytes.fromhex("0102030405060708")
     if 1 <= stage:
@@ -573,8 +533,9 @@ async def partial_run_task(
                 task_id, round_map[c.account], commitment, nonce, option=tx_option
             )
             receipt = await waiter.wait()
+            block_number = receipt["blockNumber"]
         events = await node_contracts[0].task_contract.get_events(
-            "TaskResultCommitmentsReady", from_block=receipt["blockNumber"]
+            "TaskResultCommitmentsReady", from_block=block_number
         )
         assert len(events) == 1
         event = events[0]
@@ -583,7 +544,7 @@ async def partial_run_task(
 
     if 2 <= stage:
         # disclose task
-        from_block = receipt["blockNumber"]
+        from_block = block_number
         for c in node_contracts:
             waiter = await c.task_contract.disclose_task_result(
                 task_id=task_id,
@@ -592,7 +553,8 @@ async def partial_run_task(
                 option=tx_option,
             )
             receipt = await waiter.wait()
-        to_block = receipt["blockNumber"]
+            block_number = receipt["blockNumber"]
+        to_block = block_number
         events = await node_contracts[0].task_contract.get_events(
             "TaskSuccess", from_block=from_block, to_block=to_block
         )
