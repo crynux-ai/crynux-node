@@ -19,52 +19,31 @@ class NodeStateManager(object):
         self,
         state_cache: ManagerStateCache,
         contracts: Contracts,
-        retry_count: int = 3,
-        retry_delay: float = 10,
     ):
         self.state_cache = state_cache
         self.contracts = contracts
-        self.retry_count = retry_count
-        self.retry_delay = retry_delay
-
         self._cancel_scope: Optional[CancelScope] = None
-        self._stop_event: Optional[Event] = None
 
     async def start_sync(self, interval: float = 5):
         assert self._cancel_scope is None, "NodeStateManager has started synchronizing."
-        assert self._stop_event is None, "NodeStateManager has started synchronizing"
-
-        self._stop_event = Event()
 
         try:
             with CancelScope() as scope:
                 self._cancel_scope = scope
 
-                async for attemp in AsyncRetrying(
-                    stop=stop_after_attempt(self.retry_count),
-                    wait=wait_fixed(self.retry_delay),
-                    before_sleep=before_sleep_log(
-                        _logger, logging.ERROR, exc_info=True
-                    ),
-                    reraise=True,
-                ):
-                    with attemp:
-                        while not self._stop_event.is_set():
-                            remote_status = (
-                                await self.contracts.node_contract.get_node_status(
-                                    self.contracts.account
-                                )
-                            )
-                            local_status = models.convert_node_status(remote_status)
-                            await self.state_cache.set_node_state(local_status)
-                            await sleep(interval)
+                while True:
+                    remote_status = (
+                        await self.contracts.node_contract.get_node_status(
+                            self.contracts.account
+                        )
+                    )
+                    local_status = models.convert_node_status(remote_status)
+                    await self.state_cache.set_node_state(local_status)
+                    await sleep(interval)
         finally:
-            self._stop_event = None
             self._cancel_scope = None
 
     def stop_sync(self):
-        if self._stop_event is not None:
-            self._stop_event.set()
         if self._cancel_scope is not None and not self._cancel_scope.cancel_called:
             self._cancel_scope.cancel()
 

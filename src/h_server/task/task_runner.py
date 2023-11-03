@@ -18,14 +18,10 @@ from anyio import (
 from anyio.abc import TaskGroup
 from celery.result import AsyncResult
 from tenacity import (
-    AsyncRetrying,
     before_sleep_log,
     retry,
     retry_if_exception,
-    retry_if_not_exception_type,
-    stop_after_attempt,
     stop_after_delay,
-    wait_exponential,
     wait_fixed,
 )
 from web3.types import EventData
@@ -111,6 +107,9 @@ class TaskRunner(ABC):
                 )
                 await self.cache.dump(state)
                 self.state = state
+        # check if the task has successed or aborted
+        if self.state.status in [models.TaskStatus.Success, models.TaskStatus.Aborted]:
+            return False
         # check if the task exists on chain
         task = await self.get_task()
         if task is None:
@@ -212,7 +211,6 @@ class InferenceTaskRunner(TaskRunner):
         relay: Optional[Relay] = None,
         watcher: Optional[EventWatcher] = None,
         local_config: Optional[LocalConfig] = None,
-        retry_count: int = 5,
     ) -> None:
         super().__init__(
             task_id=task_id,
@@ -247,7 +245,6 @@ class InferenceTaskRunner(TaskRunner):
         else:
             self.local_config = None
 
-        self._retry_count = retry_count
 
         self._lock: Optional[Lock] = None
 
@@ -276,22 +273,18 @@ class InferenceTaskRunner(TaskRunner):
             filter_args={"taskId": self.task_id},
         )
 
-    @retry(
-        stop=stop_after_attempt(3),
-        wait=wait_fixed(10),
-        retry=retry_if_not_exception_type(TxRevertedError),
-        before_sleep=before_sleep_log(_logger, logging.ERROR, exc_info=True),
-        reraise=True,
-    )
     async def _report_error(self):
         async with self.state_context() as state:
             round = state.round
-            state.status = models.TaskStatus.Error
+            state.status = models.TaskStatus.Aborted
 
-        waiter = await self.contracts.task_contract.report_task_error(
-            self.task_id, round
-        )
-        await waiter.wait()
+        try:
+            waiter = await self.contracts.task_contract.report_task_error(
+                self.task_id, round
+            )
+            await waiter.wait()
+        except TxRevertedError as e:
+            _logger.error(f"Report error of task {self.task_id} failed due to {e.reason}")
 
     @property
     def lock(self) -> Lock:
@@ -311,7 +304,7 @@ class InferenceTaskRunner(TaskRunner):
             await self.contracts.task_contract.cancel_task(self.task_id)
             _logger.info(f"Task {self.task_id} timeout. Cancel the task.")
         except TxRevertedError as e:
-            _logger.debug(f"Cancel task {self.task_id} failed due to {e.reason}")
+            _logger.error(f"Cancel task {self.task_id} failed due to {e.reason}")
         except get_cancelled_exc_class():
             raise
         except Exception as e:
@@ -324,42 +317,25 @@ class InferenceTaskRunner(TaskRunner):
             return True
 
         async with self.lock:
-            try:
-                async for attemp in AsyncRetrying(
-                    stop=stop_after_attempt(self._retry_count),
-                    wait=wait_exponential(multiplier=10),
-                    retry=retry_if_not_exception_type((TaskInvalid, AssertionError)),
-                    before_sleep=before_sleep_log(
-                        _logger, logging.ERROR, exc_info=True
-                    ),
-                    reraise=True,
-                ):
-                    with attemp:
-                        _logger.debug(f"Process event {event}")
-                        if event.kind == "TaskCreated":
-                            assert isinstance(event, models.TaskCreated)
-                            await self.task_created(event)
-                            return False
-                        elif event.kind == "TaskResultReady":
-                            assert isinstance(event, models.TaskResultReady)
-                            await self.result_ready(event)
-                            return False
-                        elif event.kind == "TaskResultCommitmentsReady":
-                            assert isinstance(event, models.TaskResultCommitmentsReady)
-                            await self.commitment_ready(event)
-                            return False
-                        elif event.kind == "TaskSuccess":
-                            assert isinstance(event, models.TaskSuccess)
-                            await self.task_success(event)
-                            return True
-                        else:
-                            raise ValueError(f"Unknown event kind {event.kind}")
-            except TaskInvalid as e:
-                _logger.exception(e)
-                _logger.error("Task error, report error to the chain.")
-                with fail_after(delay=60, shield=True):
-                    await self._report_error()
+            _logger.debug(f"Process event {event}")
+            if event.kind == "TaskCreated":
+                assert isinstance(event, models.TaskCreated)
+                await self.task_created(event)
+                return False
+            elif event.kind == "TaskResultReady":
+                assert isinstance(event, models.TaskResultReady)
+                await self.result_ready(event)
+                return False
+            elif event.kind == "TaskResultCommitmentsReady":
+                assert isinstance(event, models.TaskResultCommitmentsReady)
+                await self.commitment_ready(event)
+                return False
+            elif event.kind == "TaskSuccess":
+                assert isinstance(event, models.TaskSuccess)
+                await self.task_success(event)
                 return True
+            else:
+                raise ValueError(f"Unknown event kind {event.kind}")
 
     async def task_created(self, event: models.TaskCreated):
         async with self.state_context() as state:
@@ -369,89 +345,98 @@ class InferenceTaskRunner(TaskRunner):
 
             state.round = event.round
 
-            def should_retry(e: BaseException) -> bool:
-                if isinstance(e, RelayError) and (
-                    "Task not found" in e.message or "Task not ready" in e.message
-                ):
-                    return True
-                return False
+        def should_retry(e: BaseException) -> bool:
+            if isinstance(e, RelayError) and (
+                "Task not found" in e.message or "Task not ready" in e.message
+            ):
+                return True
+            return False
 
-            @retry(
-                stop=stop_after_delay(1800),
-                wait=wait_fixed(60),
-                retry=retry_if_exception(should_retry),
-                before_sleep=before_sleep_log(_logger, logging.ERROR, exc_info=True),
-                reraise=True,
-            )
-            async def get_task():
-                return await self.relay.get_task(event.task_id)
+        @retry(
+            stop=stop_after_delay(1800),
+            wait=wait_fixed(60),
+            retry=retry_if_exception(should_retry),
+            before_sleep=before_sleep_log(_logger, logging.ERROR, exc_info=True),
+            reraise=True,
+        )
+        async def get_task():
+            return await self.relay.get_task(event.task_id)
 
-            task = await get_task()
+        task = await get_task()
 
-            if self.distributed:
+        if self.distributed:
 
-                def run_distributed_task():
-                    from h_server.celery_app import get_celery
+            def run_distributed_task():
+                from h_server.celery_app import get_celery
 
-                    celery = get_celery()
-                    kwargs = {
-                        "task_id": task.task_id,
-                        "task_args": task.task_args,
-                        "distributed": True,
-                    }
-                    res: AsyncResult = celery.send_task(
-                        self.task_name,
-                        kwargs=kwargs,
-                    )
-                    res.get()
+                celery = get_celery()
+                kwargs = {
+                    "task_id": task.task_id,
+                    "task_args": task.task_args,
+                    "distributed": True,
+                }
+                res: AsyncResult = celery.send_task(
+                    self.task_name,
+                    kwargs=kwargs,
+                )
+                res.get()
 
-                await to_thread.run_sync(run_distributed_task, cancellable=True)
+            await to_thread.run_sync(run_distributed_task, cancellable=True)
+            async with self.state_context() as state:
                 state.status = models.TaskStatus.Executing
 
-            else:
+        else:
 
-                def run_local_task():
-                    import h_worker.task as h_task
-                    from h_worker.task.utils import get_image_hash
+            def run_local_task():
+                import h_worker.task as h_task
+                from h_worker.task.utils import get_image_hash
 
-                    assert self.local_config is not None
-                    proxy = None
-                    if self.local_config.proxy is not None:
-                        proxy = self.local_config.proxy.model_dump()
+                assert self.local_config is not None
+                proxy = None
+                if self.local_config.proxy is not None:
+                    proxy = self.local_config.proxy.model_dump()
 
-                    task_func = getattr(h_task, self.task_name)
-                    kwargs = dict(
-                        task_id=task.task_id,
-                        task_args=task.task_args,
-                        distributed=False,
-                        result_url="",
-                        output_dir=self.local_config.output_dir,
-                        hf_cache_dir=self.local_config.hf_cache_dir,
-                        external_cache_dir=self.local_config.external_cache_dir,
-                        script_dir=self.local_config.script_dir,
-                        inference_logs_dir=self.local_config.inference_logs_dir,
-                        proxy=proxy,
-                    )
+                task_func = getattr(h_task, self.task_name)
+                kwargs = dict(
+                    task_id=task.task_id,
+                    task_args=task.task_args,
+                    distributed=False,
+                    result_url="",
+                    output_dir=self.local_config.output_dir,
+                    hf_cache_dir=self.local_config.hf_cache_dir,
+                    external_cache_dir=self.local_config.external_cache_dir,
+                    script_dir=self.local_config.script_dir,
+                    inference_logs_dir=self.local_config.inference_logs_dir,
+                    proxy=proxy,
+                )
 
-                    task_func(**kwargs)
+                task_func(**kwargs)
 
-                    image_dir = os.path.join(
-                        self.local_config.output_dir, str(task.task_id)
-                    )
-                    image_files = sorted(os.listdir(image_dir))
-                    image_paths = [
-                        os.path.join(image_dir, file) for file in image_files
-                    ]
-                    hashes = [get_image_hash(path) for path in image_paths]
-                    return models.TaskResultReady(
-                        task_id=self.task_id,
-                        hashes=hashes,
-                        files=image_paths,
-                    )
+                image_dir = os.path.join(
+                    self.local_config.output_dir, str(task.task_id)
+                )
+                image_files = sorted(os.listdir(image_dir))
+                image_paths = [
+                    os.path.join(image_dir, file) for file in image_files
+                ]
+                hashes = [get_image_hash(path) for path in image_paths]
+                return models.TaskResultReady(
+                    task_id=self.task_id,
+                    hashes=hashes,
+                    files=image_paths,
+                )
 
+            try:
                 next_event = await to_thread.run_sync(run_local_task, cancellable=True)
-                state.status = models.TaskStatus.Executing
+                async with self.state_context() as state:
+                    state.status = models.TaskStatus.Executing
                 await self.result_ready(next_event)
+            except TaskInvalid as e:
+                _logger.exception(e)
+                _logger.error("Task error, report error to the chain.")
+                with fail_after(delay=60, shield=True):
+                    await self._report_error()
+                return True
 
     async def result_ready(self, event: models.TaskResultReady):
         async with self.state_context() as state:

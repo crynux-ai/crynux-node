@@ -1,8 +1,9 @@
 import logging
 from typing import Dict, Optional, Type, TypeVar
 
-from anyio import Event, create_task_group, fail_after, get_cancelled_exc_class, sleep
+from anyio import create_task_group, get_cancelled_exc_class
 from anyio.abc import TaskGroup
+from tenacity import AsyncRetrying, before_sleep_log, wait_exponential
 
 from h_server.event_queue import EventQueue
 from h_server.models import TaskEvent, TaskStatus
@@ -22,17 +23,16 @@ class TaskSystem(object):
         state_cache: TaskStateCache,
         queue: EventQueue,
         distributed: bool = False,
-        retry_delay: float = 5,
+        retry: bool = True,
         task_name: str = "sd_lora_inference",
     ) -> None:
         self._state_cache = state_cache
         self._queue = queue
-        self._retry_delay = retry_delay
+        self._retry = retry
         self._distributed = distributed
         self._task_name = task_name
 
         self._tg: Optional[TaskGroup] = None
-        self._stop_event: Optional[Event] = None
 
         self._runners: Dict[int, TaskRunner] = {}
 
@@ -50,19 +50,37 @@ class TaskSystem(object):
         return self._queue
 
     async def _run_task(self, task_id: int):
-        runner = self._runners[task_id]
-        try:
-            await runner.run()
-            del self._runners[task_id]
-        except get_cancelled_exc_class():
-            raise
-        except Exception as e:
-            _logger.exception(e)
-            _logger.error(f"Task {task_id} unknown error: {str(e)}")
+        async def _inner():
+            runner = self._runners[task_id]
+            try:
+                await runner.run()
+            except get_cancelled_exc_class():
+                raise
+            except Exception as e:
+                _logger.exception(e)
+                _logger.error(f"Task {task_id} error: {str(e)}")
+                raise
+            finally:
+                del self._runners[task_id]
 
+        if self._retry:
+            async for attemp in AsyncRetrying(
+                wait=wait_exponential(multiplier=10),
+                before_sleep=before_sleep_log(_logger, logging.ERROR, exc_info=True),
+                reraise=True,
+            ):
+                with attemp:
+                    await _inner()
+        else:
+            await _inner()
 
     async def _recover(self, tg: TaskGroup):
-        running_status = [TaskStatus.Pending, TaskStatus.Executing, TaskStatus.ResultUploaded, TaskStatus.Disclosed]
+        running_status = [
+            TaskStatus.Pending,
+            TaskStatus.Executing,
+            TaskStatus.ResultUploaded,
+            TaskStatus.Disclosed,
+        ]
         running_states = await self.state_cache.find(status=running_status)
         for state in running_states:
             runner = self._runner_cls(
@@ -77,18 +95,14 @@ class TaskSystem(object):
             tg.start_soon(self._run_task, state.task_id)
             _logger.debug(f"Recreate task runner for {state.task_id}")
 
-
     async def start(self):
-        assert self._stop_event is None, "The TaskSystem has already been started."
         assert self._tg is None, "The TaskSystem has already been started."
-
-        self._stop_event = Event()
 
         try:
             async with create_task_group() as tg:
                 self._tg = tg
                 await self._recover(tg)
-                while not self._stop_event.is_set():
+                while True:
                     ack_id, event = await self.event_queue.get()
                     task_id = event.task_id
                     if task_id in self._runners:
@@ -103,7 +117,7 @@ class TaskSystem(object):
                         )
                         self._runners[task_id] = runner
                         tg.start_soon(self._run_task, task_id)
-                    
+
                     await runner.send(ack_id, event)
 
         except get_cancelled_exc_class():
@@ -113,11 +127,8 @@ class TaskSystem(object):
             raise
         finally:
             self._tg = None
-            self._stop_event = None
 
     def stop(self):
-        if self._stop_event is not None:
-            self._stop_event.set()
         if self._tg is not None and not self._tg.cancel_scope.cancel_called:
             self._tg.cancel_scope.cancel()
 
