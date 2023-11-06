@@ -624,11 +624,11 @@ const topRowClasses = computed(() => {
       &nbsp;|&nbsp;
       <a-typography-link href="https://blog.crynux.ai" target="_blank">Blog</a-typography-link>
       &nbsp;|&nbsp;
-      <a-typography-link href="https://twitter.com/crynux" target="_blank"
+      <a-typography-link href="https://twitter.com/crynuxai" target="_blank"
         >Twitter</a-typography-link
       >
       &nbsp;|&nbsp;
-      <a-typography-link href="https://discord.gg/crynux" target="_blank"
+      <a-typography-link href="https://discord.gg/Ug2AHUbrrm" target="_blank"
         >Discord</a-typography-link
       >
     </a-space>
