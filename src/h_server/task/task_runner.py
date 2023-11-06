@@ -94,30 +94,38 @@ class TaskRunner(ABC):
                 await self.cache.dump(task_state=self.state)
 
     async def init(self) -> bool:
-        if self._state is None:
-            if await self.cache.has(self.task_id):
-                state = await self.cache.load(self.task_id)
-                self.state = state
-            else:
-                state = models.TaskState(
-                    task_id=self.task_id,
-                    round=0,
-                    timeout=0,
-                    status=models.TaskStatus.Pending,
-                )
-                await self.cache.dump(state)
-                self.state = state
-        # check if the task has successed or aborted
-        if self.state.status in [models.TaskStatus.Success, models.TaskStatus.Aborted]:
-            return False
-        # check if the task exists on chain
-        task = await self.get_task()
-        if task is None:
-            # task doesn't exist on chain, abort
-            self.state.status = models.TaskStatus.Aborted
-            return False
-        self.state.timeout = task.timeout
-        return True
+        need_dump = False
+        try:
+            if self._state is None:
+                if await self.cache.has(self.task_id):
+                    state = await self.cache.load(self.task_id)
+                    self.state = state
+                else:
+                    state = models.TaskState(
+                        task_id=self.task_id,
+                        round=0,
+                        timeout=0,
+                        status=models.TaskStatus.Pending,
+                    )
+                    self.state = state
+                    need_dump = True
+            # check if the task has successed or aborted
+            if self.state.status in [models.TaskStatus.Success, models.TaskStatus.Aborted]:
+                return False
+            # check if the task exists on chain
+            task = await self.get_task()
+            if task is None:
+                # task doesn't exist on chain, abort
+                self.state.status = models.TaskStatus.Aborted
+                need_dump = True
+                return False
+            if self.state.timeout != task.timeout:
+                self.state.timeout = task.timeout
+                need_dump = True
+            return True
+        finally:
+            if self._state is not None and need_dump:
+                await self.cache.dump(self.state)
 
     @abstractmethod
     async def process_event(self, event: models.TaskEvent) -> bool:
