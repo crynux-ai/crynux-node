@@ -438,6 +438,8 @@ class NodeManager(object):
             with fail_after(5, shield=True):
                 await self.state_cache.set_node_state(models.NodeStatus.Error, msg)
             await self.finish()
+            if self.config.headless:
+                raise
 
     async def finish(self):
         if self._relay is not None:
