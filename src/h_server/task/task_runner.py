@@ -7,23 +7,12 @@ from collections import deque
 from contextlib import asynccontextmanager
 from typing import Awaitable, Callable, Deque, List, Optional, Tuple
 
-from anyio import (
-    Condition,
-    Lock,
-    create_task_group,
-    fail_after,
-    get_cancelled_exc_class,
-    to_thread,
-)
+from anyio import (Condition, Lock, create_task_group, fail_after,
+                   get_cancelled_exc_class, to_thread)
 from anyio.abc import TaskGroup
 from celery.result import AsyncResult
-from tenacity import (
-    before_sleep_log,
-    retry,
-    retry_if_exception,
-    stop_after_delay,
-    wait_fixed,
-)
+from tenacity import (before_sleep_log, retry, retry_if_exception,
+                      stop_after_delay, wait_chain, wait_fixed)
 from web3.types import EventData
 
 from h_server import models
@@ -110,7 +99,10 @@ class TaskRunner(ABC):
                     self.state = state
                     need_dump = True
             # check if the task has successed or aborted
-            if self.state.status in [models.TaskStatus.Success, models.TaskStatus.Aborted]:
+            if self.state.status in [
+                models.TaskStatus.Success,
+                models.TaskStatus.Aborted,
+            ]:
                 return False
             # check if the task exists on chain
             task = await self.get_task()
@@ -253,7 +245,6 @@ class InferenceTaskRunner(TaskRunner):
         else:
             self.local_config = None
 
-
         self._lock: Optional[Lock] = None
 
         self._cleaned = False
@@ -292,7 +283,9 @@ class InferenceTaskRunner(TaskRunner):
             )
             await waiter.wait()
         except TxRevertedError as e:
-            _logger.error(f"Report error of task {self.task_id} failed due to {e.reason}")
+            _logger.error(
+                f"Report error of task {self.task_id} failed due to {e.reason}"
+            )
 
     @property
     def lock(self) -> Lock:
@@ -362,7 +355,7 @@ class InferenceTaskRunner(TaskRunner):
 
         @retry(
             stop=stop_after_delay(1800),
-            wait=wait_fixed(60),
+            wait=wait_chain(*[wait_fixed(1) for _ in range(30)] + [wait_fixed(60)]),
             retry=retry_if_exception(should_retry),
             before_sleep=before_sleep_log(_logger, logging.ERROR, exc_info=True),
             reraise=True,
@@ -424,9 +417,7 @@ class InferenceTaskRunner(TaskRunner):
                     self.local_config.output_dir, str(task.task_id)
                 )
                 image_files = sorted(os.listdir(image_dir))
-                image_paths = [
-                    os.path.join(image_dir, file) for file in image_files
-                ]
+                image_paths = [os.path.join(image_dir, file) for file in image_files]
                 hashes = [get_image_hash(path) for path in image_paths]
                 return models.TaskResultReady(
                     task_id=self.task_id,
@@ -536,7 +527,7 @@ class MockTaskRunner(TaskRunner):
         distributed: bool,
         state_cache: Optional[TaskStateCache] = None,
         queue: Optional[EventQueue] = None,
-        timeout: int = 900
+        timeout: int = 900,
     ):
         super().__init__(
             task_id=task_id,
@@ -569,7 +560,7 @@ class MockTaskRunner(TaskRunner):
             result_disclosed_rounds=[],
             result_node="",
             aborted=False,
-            timeout=self._timeout + int(time.time())
+            timeout=self._timeout + int(time.time()),
         )
 
     async def cancel_task(self):
@@ -629,11 +620,9 @@ class MockTaskRunner(TaskRunner):
 
             state.status = models.TaskStatus.Success
 
-
     async def task_aborted(self, event: models.TaskAborted):
         async with self.state_context() as state:
             state.status = models.TaskStatus.Aborted
-
 
     async def cleanup(self):
         del self.state
