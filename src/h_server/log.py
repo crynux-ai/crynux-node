@@ -36,7 +36,7 @@ def init(config: Optional[Config] = None, root: bool = False):
         logger_names.append(None)
     else:
         logger_names.append("h_server")
-        if config.distributed:
+        if not config.distributed:
             logger_names.append("h_worker")
 
     for name in logger_names:
