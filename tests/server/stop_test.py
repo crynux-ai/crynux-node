@@ -1,0 +1,132 @@
+import pytest
+
+from h_server.models import NodeStatus
+from h_server.config import Config, set_config
+from h_server.contracts import Contracts
+from h_server.node_manager import NodeStateManager, ManagerStateCache
+from h_server.node_manager.state_cache import MemoryNodeStateCache, MemoryTxStateCache
+from h_server.stop import _stop
+
+
+@pytest.fixture
+def tx_option():
+    return {}
+
+
+@pytest.fixture
+def test_config():
+    test_config = Config.model_validate(
+        {
+            "log": {"dir": "logs", "level": "INFO"},
+            "ethereum": {
+                "privkey": "",
+                "provider": "",
+                "chain_id": None,
+                "gas": None,
+                "gas_price": None,
+                "contract": {"token": "", "node": "", "task": ""},
+            },
+            "task_dir": "task",
+            "db": "",
+            "relay_url": "",
+            "celery": {"broker": "", "backend": ""},
+            "distributed": False,
+            "task_config": {
+                "output_dir": "build/data/images",
+                "hf_cache_dir": "build/data/huggingface",
+                "external_cache_dir": "build/data/external",
+                "inference_logs_dir": "build/data/inference-logs",
+                "script_dir": "stable-diffusion-task",
+                "result_url": "",
+            },
+        }
+    )
+    set_config(test_config)
+    return test_config
+
+
+@pytest.fixture
+def privkey():
+    return "0xa627246a109551432ac5db6535566af34fdddfaa11df17b8afd53eb987e209a2"
+
+
+@pytest.fixture
+async def node_contracts(privkey, tx_option):
+    from web3 import Web3
+    from web3.providers.eth_tester import AsyncEthereumTesterProvider
+    from eth_account import Account
+
+    provider = AsyncEthereumTesterProvider()
+    root_contracts = Contracts(provider=provider, default_account_index=0)
+
+    await root_contracts.init(option=tx_option)
+
+    waiter = await root_contracts.node_contract.update_task_contract_address(
+        root_contracts.task_contract.address, option=tx_option
+    )
+    await waiter.wait()
+
+    provider.ethereum_tester.add_account(privkey)
+    account = Account.from_key(privkey)
+    amount = Web3.to_wei(1000, "ether")
+    await root_contracts.transfer(account.address, amount, option=tx_option)
+
+    token_contract_address = root_contracts.token_contract.address
+    node_contract_address = root_contracts.node_contract.address
+    task_contract_address = root_contracts.task_contract.address
+
+    contracts = Contracts(provider=root_contracts.provider, privkey=privkey)
+    await contracts.init(
+        token_contract_address=token_contract_address,
+        node_contract_address=node_contract_address,
+        task_contract_address=task_contract_address,
+        option=tx_option,
+    )
+    amount = Web3.to_wei(1000, "ether")
+    if (await contracts.token_contract.balance_of(contracts.account)) < amount:
+        waiter = await root_contracts.token_contract.transfer(
+            contracts.account, amount, option=tx_option
+        )
+        await waiter.wait()
+    task_amount = Web3.to_wei(400, "ether")
+    if (
+        await contracts.token_contract.allowance(task_contract_address)
+    ) < task_amount:
+        waiter = await contracts.token_contract.approve(
+            task_contract_address, task_amount, option=tx_option
+        )
+        await waiter.wait()
+    node_amount = Web3.to_wei(400, "ether")
+    if (
+        await contracts.token_contract.allowance(node_contract_address)
+    ) < node_amount:
+        waiter = await contracts.token_contract.approve(
+            node_contract_address, node_amount, option=tx_option
+        )
+        await waiter.wait()
+
+    return contracts
+
+
+
+@pytest.fixture
+def state_cache():
+    return ManagerStateCache(
+        node_state_cache_cls=MemoryNodeStateCache, tx_state_cache_cls=MemoryTxStateCache
+    )
+
+
+@pytest.fixture
+async def state_manager(node_contracts, state_cache):
+    return NodeStateManager(state_cache=state_cache, contracts=node_contracts)
+
+
+async def test_stop(tx_option, test_config, state_manager):
+    await state_manager.state_cache.set_node_state(NodeStatus.Stopped)
+    waiter = await state_manager.start(option=tx_option)
+    await waiter()
+
+    await _stop(state_manager=state_manager)
+
+    state = await state_manager.state_cache.get_node_state()
+    assert state.status == NodeStatus.Stopped
