@@ -27,6 +27,8 @@ class DbTaskStateCache(TaskStateCache):
                     files=files,
                     result=state.result,
                     disclosed=state.disclosed,
+                    waiting_tx_hash=state.waiting_tx_hash,
+                    waiting_tx_method=state.waiting_tx_method,
                 )
             else:
                 raise KeyError(f"Task state of {task_id} not found.")
@@ -48,6 +50,8 @@ class DbTaskStateCache(TaskStateCache):
                     files=",".join(task_state.files),
                     result=task_state.result,
                     disclosed=task_state.disclosed,
+                    waiting_tx_hash=task_state.waiting_tx_hash,
+                    waiting_tx_method=task_state.waiting_tx_method,
                 )
                 sess.add(state)
             else:
@@ -57,6 +61,8 @@ class DbTaskStateCache(TaskStateCache):
                 state.files = ",".join(task_state.files)
                 state.result = task_state.result
                 state.disclosed = task_state.disclosed
+                state.waiting_tx_hash = task_state.waiting_tx_hash
+                state.waiting_tx_method = task_state.waiting_tx_method
             await sess.commit()
 
     async def has(self, task_id: int) -> bool:
@@ -92,6 +98,8 @@ class DbTaskStateCache(TaskStateCache):
                     files=state.files.split(","),
                     result=state.result,
                     disclosed=state.disclosed,
+                    waiting_tx_hash=state.waiting_tx_hash,
+                    waiting_tx_method=state.waiting_tx_method,
                 )
                 for state in states
             ]

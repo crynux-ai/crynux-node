@@ -34,7 +34,7 @@ T = TypeVar("T")
 P = ParamSpec("P")
 
 class TxWaiter(object):
-    def __init__(self, w3: AsyncWeb3, method: str, tx_hash: HexBytes, timeout: float = 120,interval: float = 0.1):
+    def __init__(self, w3: AsyncWeb3, method: str, tx_hash: HexBytes, timeout: float = 120, interval: float = 0.1):
         self.w3 = w3
         self.method = method
         self.tx_hash = tx_hash

@@ -50,8 +50,8 @@ class TaskSystem(object):
         return self._queue
 
     async def _run_task(self, task_id: int):
-        async def _inner():
-            runner = self._runners[task_id]
+
+        async def _inner(runner: TaskRunner):
             try:
                 await runner.run()
             except get_cancelled_exc_class():
@@ -60,19 +60,22 @@ class TaskSystem(object):
                 _logger.exception(e)
                 _logger.error(f"Task {task_id} error: {str(e)}")
                 raise
-            finally:
-                del self._runners[task_id]
 
-        if self._retry:
-            async for attemp in AsyncRetrying(
-                wait=wait_exponential(multiplier=10),
-                before_sleep=before_sleep_log(_logger, logging.ERROR, exc_info=True),
-                reraise=True,
-            ):
-                with attemp:
-                    await _inner()
-        else:
-            await _inner()
+        try:
+            runner = self._runners[task_id]
+
+            if self._retry:
+                async for attemp in AsyncRetrying(
+                    wait=wait_exponential(multiplier=10),
+                    before_sleep=before_sleep_log(_logger, logging.ERROR, exc_info=True),
+                    reraise=True,
+                ):
+                    with attemp:
+                        await _inner(runner)
+            else:
+                await _inner(runner)
+        finally:
+            del self._runners[task_id]
 
     async def _recover(self, tg: TaskGroup):
         running_status = [
