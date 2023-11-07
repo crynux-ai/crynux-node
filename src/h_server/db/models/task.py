@@ -1,7 +1,7 @@
 from typing import get_args
+
 import sqlalchemy as sa
 from sqlalchemy.orm import Mapped, mapped_column
-
 
 from h_server.models import TaskKind, TaskStatus
 
@@ -23,6 +23,12 @@ class TaskState(Base, BaseMixin):
     )
     disclosed: Mapped[bool] = mapped_column(
         sa.Boolean, nullable=False, index=False, default=False
+    )
+    waiting_tx_hash: Mapped[bytes] = mapped_column(
+        sa.BINARY, nullable=False, index=False, default=b""
+    )
+    waiting_tx_method: Mapped[str] = mapped_column(
+        nullable=False, index=False, default=""
     )
 
 

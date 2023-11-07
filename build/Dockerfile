@@ -68,3 +68,4 @@ COPY --from=web-builder /app/dist/ dist/
 ENV H_SERVER_CONFIG="/app/config/config.yml"
 
 ENTRYPOINT ["bash", "start.sh"]
+CMD [ "run" ]

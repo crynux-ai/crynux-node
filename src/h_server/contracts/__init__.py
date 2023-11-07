@@ -10,11 +10,12 @@ from web3.providers.async_base import AsyncBaseProvider
 
 from . import crynux_token, node, task
 from .exceptions import TxRevertedError
+from .utils import TxWaiter
 
 from h_server.config import get_default_tx_option, TxOption
 
 
-__all__ = ["TxRevertedError", "Contracts", "get_contracts", "set_contracts"]
+__all__ = ["TxRevertedError", "Contracts", "TxWaiter", "get_contracts", "set_contracts"]
 
 _logger = logging.getLogger(__name__)
 

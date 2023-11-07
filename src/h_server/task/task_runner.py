@@ -7,10 +7,11 @@ from collections import deque
 from contextlib import asynccontextmanager
 from typing import Awaitable, Callable, Deque, List, Optional, Tuple
 
-from anyio import (Condition, Lock, create_task_group, fail_after,
+from anyio import (Condition, create_task_group, fail_after,
                    get_cancelled_exc_class, to_thread)
 from anyio.abc import TaskGroup
 from celery.result import AsyncResult
+from hexbytes import HexBytes
 from tenacity import (before_sleep_log, retry, retry_if_exception,
                       stop_after_delay, wait_chain, wait_fixed)
 from web3.types import EventData
@@ -18,7 +19,8 @@ from web3.types import EventData
 from h_server import models
 from h_server.config import TaskConfig as LocalConfig
 from h_server.config import get_config
-from h_server.contracts import Contracts, TxRevertedError, get_contracts
+from h_server.contracts import (Contracts, TxRevertedError, TxWaiter,
+                                get_contracts)
 from h_server.event_queue import EventQueue, get_event_queue
 from h_server.relay import Relay, RelayError, get_relay
 from h_server.watcher import EventWatcher, get_watcher
@@ -56,8 +58,10 @@ class TaskRunner(ABC):
 
         self._state: Optional[models.TaskState] = None
 
-        self._condition = Condition()
+        self._queue_condition = Condition()
         self._deque: Deque[Tuple[int, models.TaskEvent]] = deque()
+
+        self._state_condition = Condition()
 
     @property
     def state(self) -> models.TaskState:
@@ -77,10 +81,17 @@ class TaskRunner(ABC):
     @asynccontextmanager
     async def state_context(self):
         try:
-            yield self.state
+            yield
         finally:
-            with fail_after(10, shield=True):
-                await self.cache.dump(task_state=self.state)
+            async with self._state_condition:
+                with fail_after(10, shield=True):
+                    await self.cache.dump(task_state=self.state)
+                self._state_condition.notify_all()
+
+    async def wait_for_status(self, status: models.TaskStatus):
+        async with self._state_condition:
+            while self.state.status != status:
+                await self._state_condition.wait()
 
     async def init(self) -> bool:
         need_dump = False
@@ -119,8 +130,49 @@ class TaskRunner(ABC):
             if self._state is not None and need_dump:
                 await self.cache.dump(self.state)
 
+    async def process_event(self, event: models.TaskEvent):
+        _logger.debug(f"Process event {event}")
+        if event.kind == "TaskCreated":
+            assert isinstance(event, models.TaskCreated)
+            await self.task_created(event)
+            return False
+        elif event.kind == "TaskResultReady":
+            assert isinstance(event, models.TaskResultReady)
+            await self.result_ready(event)
+            return False
+        elif event.kind == "TaskResultCommitmentsReady":
+            assert isinstance(event, models.TaskResultCommitmentsReady)
+            await self.commitment_ready(event)
+            return False
+        elif event.kind == "TaskSuccess":
+            assert isinstance(event, models.TaskSuccess)
+            await self.task_success(event)
+            return True
+        if event.kind == "TaskAborted":
+            assert isinstance(event, models.TaskAborted)
+            await self.task_aborted(event)
+            return True
+        else:
+            raise ValueError(f"Unknown event kind {event.kind}")
+
     @abstractmethod
-    async def process_event(self, event: models.TaskEvent) -> bool:
+    async def task_created(self, event: models.TaskCreated):
+        ...
+
+    @abstractmethod
+    async def result_ready(self, event: models.TaskResultReady):
+        ...
+
+    @abstractmethod
+    async def commitment_ready(self, event: models.TaskResultCommitmentsReady):
+        ...
+
+    @abstractmethod
+    async def task_success(self, event: models.TaskSuccess):
+        ...
+
+    @abstractmethod
+    async def task_aborted(self, event: models.TaskAborted):
         ...
 
     @abstractmethod
@@ -168,8 +220,8 @@ class TaskRunner(ABC):
             raise
         except TimeoutError:
             # cancel task
-            async with self.state_context() as state:
-                state.status = models.TaskStatus.Aborted
+            async with self.state_context():
+                self.state.status = models.TaskStatus.Aborted
             await self.cancel_task()
         finally:
             with fail_after(10, shield=True):
@@ -187,16 +239,16 @@ class TaskRunner(ABC):
                         _logger.debug(f"No ack task {self.task_id} event {event.kind}")
 
     async def recv(self) -> Tuple[int, models.TaskEvent]:
-        async with self._condition:
+        async with self._queue_condition:
             while len(self._deque) == 0:
-                await self._condition.wait()
+                await self._queue_condition.wait()
             ack_id, event = self._deque.popleft()
             return ack_id, event
 
     async def send(self, ack_id: int, event: models.TaskEvent):
-        async with self._condition:
+        async with self._queue_condition:
             self._deque.append((ack_id, event))
-            self._condition.notify(1)
+            self._queue_condition.notify(1)
 
 
 class InferenceTaskRunner(TaskRunner):
@@ -245,8 +297,6 @@ class InferenceTaskRunner(TaskRunner):
         else:
             self.local_config = None
 
-        self._lock: Optional[Lock] = None
-
         self._cleaned = False
 
         async def _push_event(event_data: EventData):
@@ -272,26 +322,54 @@ class InferenceTaskRunner(TaskRunner):
             filter_args={"taskId": self.task_id},
         )
 
+    async def _call_task_contract_method(self, method: str, *args, **kwargs):
+        if (
+            len(self.state.waiting_tx_method) == 0
+            and len(self.state.waiting_tx_hash) == 0
+        ):
+            if method == "submitTaskResultCommitment":
+                func = self.contracts.task_contract.submit_task_result_commitment
+            elif method == "discloseTaskResult":
+                func = self.contracts.task_contract.disclose_task_result
+            elif method == "reportResultsUploaded":
+                func = self.contracts.task_contract.report_results_uploaded
+            elif method == "reportTaskError":
+                func = self.contracts.task_contract.report_task_error
+            else:
+                raise ValueError(f"Unsupported task contract method: {method}")
+            waiter = await func(*args, **kwargs)
+        elif (
+            self.state.waiting_tx_method == method
+            and len(self.state.waiting_tx_hash) > 0
+        ):
+            waiter = TxWaiter(
+                w3=self.contracts.w3,
+                method=self.state.waiting_tx_method,
+                tx_hash=HexBytes(self.state.waiting_tx_hash),
+            )
+        else:
+            raise ValueError(
+                f"Error state waiting tx method: {self.state.waiting_tx_method}, "
+                f"waiting tx hash: {self.state.waiting_tx_hash} in report error"
+            )
+
+        await waiter.wait()
+        async with self.state_context():
+            self.state.waiting_tx_hash = b""
+            self.state.waiting_tx_method = ""
+
     async def _report_error(self):
-        async with self.state_context() as state:
-            round = state.round
-            state.status = models.TaskStatus.Aborted
+        async with self.state_context():
+            self.state.status = models.TaskStatus.Aborted
 
         try:
-            waiter = await self.contracts.task_contract.report_task_error(
-                self.task_id, round
+            await self._call_task_contract_method(
+                "reportTaskError", task_id=self.task_id, round=self.state.round
             )
-            await waiter.wait()
         except TxRevertedError as e:
             _logger.error(
                 f"Report error of task {self.task_id} failed due to {e.reason}"
             )
-
-    @property
-    def lock(self) -> Lock:
-        if self._lock is None:
-            self._lock = Lock()
-        return self._lock
 
     async def get_task(self):
         task = await self.contracts.task_contract.get_task(self.task_id)
@@ -311,40 +389,11 @@ class InferenceTaskRunner(TaskRunner):
         except Exception as e:
             _logger.debug(f"Cancel task {self.task_id} failed")
 
-    async def process_event(self, event: models.TaskEvent):
-        if event.kind == "TaskAborted":
-            assert isinstance(event, models.TaskAborted)
-            await self.task_aborted(event)
-            return True
-
-        async with self.lock:
-            _logger.debug(f"Process event {event}")
-            if event.kind == "TaskCreated":
-                assert isinstance(event, models.TaskCreated)
-                await self.task_created(event)
-                return False
-            elif event.kind == "TaskResultReady":
-                assert isinstance(event, models.TaskResultReady)
-                await self.result_ready(event)
-                return False
-            elif event.kind == "TaskResultCommitmentsReady":
-                assert isinstance(event, models.TaskResultCommitmentsReady)
-                await self.commitment_ready(event)
-                return False
-            elif event.kind == "TaskSuccess":
-                assert isinstance(event, models.TaskSuccess)
-                await self.task_success(event)
-                return True
-            else:
-                raise ValueError(f"Unknown event kind {event.kind}")
-
     async def task_created(self, event: models.TaskCreated):
-        async with self.state_context() as state:
-            assert (
-                state.status == models.TaskStatus.Pending
-            ), "Task status is not pending when receive event TaskCreated."
+        await self.wait_for_status(models.TaskStatus.Pending)
 
-            state.round = event.round
+        async with self.state_context():
+            self.state.round = event.round
 
         def should_retry(e: BaseException) -> bool:
             if isinstance(e, RelayError) and (
@@ -383,8 +432,8 @@ class InferenceTaskRunner(TaskRunner):
                 res.get()
 
             await to_thread.run_sync(run_distributed_task, cancellable=True)
-            async with self.state_context() as state:
-                state.status = models.TaskStatus.Executing
+            async with self.state_context():
+                self.state.status = models.TaskStatus.Executing
 
         else:
 
@@ -427,9 +476,9 @@ class InferenceTaskRunner(TaskRunner):
 
             try:
                 next_event = await to_thread.run_sync(run_local_task, cancellable=True)
-                async with self.state_context() as state:
-                    state.status = models.TaskStatus.Executing
-                await self.result_ready(next_event)
+                async with self.state_context():
+                    self.state.status = models.TaskStatus.Executing
+                await self.queue.put(next_event)
             except TaskInvalid as e:
                 _logger.exception(e)
                 _logger.error("Task error, report error to the chain.")
@@ -438,67 +487,63 @@ class InferenceTaskRunner(TaskRunner):
                 return True
 
     async def result_ready(self, event: models.TaskResultReady):
-        async with self.state_context() as state:
-            assert (
-                state.status == models.TaskStatus.Executing
-            ), "Task status is not executing when receive event TaskResultReady."
+        await self.wait_for_status(models.TaskStatus.Executing)
 
-            if len(state.result) == 0:
+        async with self.state_context():
+            if len(self.state.result) == 0:
                 result, commitment, nonce = make_result_commitments(event.hashes)
                 try:
-                    waiter = await self.contracts.task_contract.submit_task_result_commitment(
+                    await self._call_task_contract_method(
+                        "submitTaskResultCommitment",
                         task_id=self.task_id,
-                        round=state.round,
+                        round=self.state.round,
                         commitment=commitment,
                         nonce=nonce,
                     )
-                    await waiter.wait()
                 except TxRevertedError as e:
                     # all other nodes report error
                     if "Task is aborted" in e.reason:
                         await self._report_error()
                         return
-                state.result = result
-            _logger.info(f"Task {self.task_id} result 0x{state.result.hex()}")
-            state.status = models.TaskStatus.ResultUploaded
-            state.files = event.files
+                self.state.result = result
+            _logger.info(f"Task {self.task_id} result 0x{self.state.result.hex()}")
+            self.state.status = models.TaskStatus.ResultUploaded
+            self.state.files = event.files
 
     async def commitment_ready(self, event: models.TaskResultCommitmentsReady):
-        async with self.state_context() as state:
+        await self.wait_for_status(models.TaskStatus.ResultUploaded)
+
+        async with self.state_context():
             assert (
-                state.status == models.TaskStatus.ResultUploaded
-            ), "Task status is not result_uploaded when receive event TaskResultCommitmentsReady."
-            assert (
-                len(state.result) > 0
+                len(self.state.result) > 0
             ), "Task result not found when receive event TaskResultCommitmentsReady."
-            if not state.disclosed:
-                waiter = await self.contracts.task_contract.disclose_task_result(
+            if not self.state.disclosed:
+                await self._call_task_contract_method(
+                    "discloseTaskResult",
                     task_id=self.task_id,
-                    round=state.round,
-                    result=state.result,
+                    round=self.state.round,
+                    result=self.state.result,
                 )
-                await waiter.wait()
-                state.disclosed = True
-            state.status = models.TaskStatus.Disclosed
+                self.state.disclosed = True
+            self.state.status = models.TaskStatus.Disclosed
 
     async def task_success(self, event: models.TaskSuccess):
-        async with self.state_context() as state:
-            assert (
-                state.status == models.TaskStatus.Disclosed
-            ), "Task status is not disclosed when receive event TaskSuccess."
+        await self.wait_for_status(models.TaskStatus.Disclosed)
 
+        async with self.state_context():
             if event.result_node == self.contracts.account:
-                await self.relay.upload_task_result(self.task_id, state.files)
-                waiter = await self.contracts.task_contract.report_results_uploaded(
-                    self.task_id, state.round
+                await self.relay.upload_task_result(self.task_id, self.state.files)
+                await self._call_task_contract_method(
+                    "reportResultsUploaded",
+                    task_id=self.task_id,
+                    round=self.state.round,
                 )
-                await waiter.wait()
 
-            state.status = models.TaskStatus.Success
+            self.state.status = models.TaskStatus.Success
 
     async def task_aborted(self, event: models.TaskAborted):
-        async with self.state_context() as state:
-            state.status = models.TaskStatus.Aborted
+        async with self.state_context():
+            self.state.status = models.TaskStatus.Aborted
 
     async def cleanup(self):
         if not self._cleaned:
@@ -538,13 +583,6 @@ class MockTaskRunner(TaskRunner):
         )
 
         self._timeout = timeout
-        self._lock: Optional[Lock] = None
-
-    @property
-    def lock(self) -> Lock:
-        if self._lock is None:
-            self._lock = Lock()
-        return self._lock
 
     async def get_task(self):
         return models.ChainTask(
@@ -566,63 +604,37 @@ class MockTaskRunner(TaskRunner):
     async def cancel_task(self):
         pass
 
-    async def process_event(self, event: models.TaskEvent):
-        if event.kind == "TaskAborted":
-            assert isinstance(event, models.TaskAborted)
-            await self.task_aborted(event)
-            return True
-
-        async with self.lock:
-            if event.kind == "TaskCreated":
-                assert isinstance(event, models.TaskCreated)
-                await self.task_created(event)
-                return False
-            elif event.kind == "TaskResultReady":
-                assert isinstance(event, models.TaskResultReady)
-                await self.result_ready(event)
-                return False
-            elif event.kind == "TaskResultCommitmentsReady":
-                assert isinstance(event, models.TaskResultCommitmentsReady)
-                await self.commitment_ready(event)
-                return False
-            elif event.kind == "TaskSuccess":
-                assert isinstance(event, models.TaskSuccess)
-                await self.task_success(event)
-                return True
-            else:
-                raise ValueError(f"Unknown event kind {event.kind}")
-
     async def task_created(self, event: models.TaskCreated):
-        async with self.state_context() as state:
-            assert state.status == models.TaskStatus.Pending
+        await self.wait_for_status(models.TaskStatus.Pending)
 
-            state.round = event.round
-            state.status = models.TaskStatus.Executing
+        async with self.state_context():
+            self.state.round = event.round
+            self.state.status = models.TaskStatus.Executing
 
     async def result_ready(self, event: models.TaskResultReady):
-        async with self.state_context() as state:
-            assert state.status == models.TaskStatus.Executing
+        await self.wait_for_status(models.TaskStatus.Executing)
 
-            state.files = event.files
-            state.result = b"".join([bytes.fromhex(h[2:]) for h in event.hashes])
-            state.status = models.TaskStatus.ResultUploaded
+        async with self.state_context():
+            self.state.files = event.files
+            self.state.result = b"".join([bytes.fromhex(h[2:]) for h in event.hashes])
+            self.state.status = models.TaskStatus.ResultUploaded
 
     async def commitment_ready(self, event: models.TaskResultCommitmentsReady):
-        async with self.state_context() as state:
-            assert state.status == models.TaskStatus.ResultUploaded
+        await self.wait_for_status(models.TaskStatus.ResultUploaded)
 
-            state.status = models.TaskStatus.Disclosed
-            state.disclosed = True
+        async with self.state_context():
+            self.state.status = models.TaskStatus.Disclosed
+            self.state.disclosed = True
 
     async def task_success(self, event: models.TaskSuccess):
-        async with self.state_context() as state:
-            assert state.status == models.TaskStatus.Disclosed
+        await self.wait_for_status(models.TaskStatus.Disclosed)
 
-            state.status = models.TaskStatus.Success
+        async with self.state_context():
+            self.state.status = models.TaskStatus.Success
 
     async def task_aborted(self, event: models.TaskAborted):
-        async with self.state_context() as state:
-            state.status = models.TaskStatus.Aborted
+        async with self.state_context():
+            self.state.status = models.TaskStatus.Aborted
 
     async def cleanup(self):
         del self.state

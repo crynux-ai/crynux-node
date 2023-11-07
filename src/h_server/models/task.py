@@ -60,3 +60,5 @@ class TaskState(BaseModel):
     files: List[str] = []
     result: bytes = b""
     disclosed: bool = False
+    waiting_tx_hash: bytes = b""
+    waiting_tx_method: str = ""
