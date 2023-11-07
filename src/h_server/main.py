@@ -22,13 +22,14 @@ async def _main():
     set_node_manager(node_manager)
 
     async def signal_handler(scope: CancelScope):
-        with open_signal_receiver(signal.SIGINT) as signals:
+        with open_signal_receiver(signal.SIGINT, signal.SIGTERM) as signals:
             async for _ in signals:
                 if not config.headless:
                     server.stop()
                 with move_on_after(10, shield=True):
                     await node_manager.finish()
                 scope.cancel()
+                return
 
     try:
         async with create_task_group() as tg:
