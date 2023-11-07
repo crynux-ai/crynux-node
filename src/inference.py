@@ -1,5 +1,6 @@
 import argparse
 import os
+from datetime import datetime
 from typing import Optional, Type
 
 import pydantic
@@ -7,8 +8,7 @@ from huggingface_hub.utils._errors import RepositoryNotFoundError
 from requests.exceptions import HTTPError
 
 from sd_task.inference_task_args.task_args import InferenceTaskArgs
-from sd_task.inference_task_runner.errors import (ModelDownloadError,
-                                                  TaskExecutionError)
+from sd_task.inference_task_runner.errors import ModelDownloadError, TaskExecutionError
 from sd_task.inference_task_runner.inference_task import run_task
 
 
@@ -46,11 +46,17 @@ def main():
     task_args_str: str = args.task_args
 
     try:
+        print(
+            f"Inference task starts at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+        )
         task_args = InferenceTaskArgs.model_validate_json(task_args_str)
         imgs = run_task(task_args)
         for i, img in enumerate(imgs):
             dst = os.path.join(output_dir, f"{i}.png")
             img.save(dst)
+        print(
+            f"Inference task finishes at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+        )
     except pydantic.ValidationError:
         print("Task args validation error")
         raise
