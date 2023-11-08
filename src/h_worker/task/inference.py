@@ -106,20 +106,20 @@ def sd_lora_inference(
         envs["proxy"] = json.dumps(proxy)
 
     _logger.info("Start inference task.")
-    res = subprocess.run(
-        args,
-        env=envs,
-        capture_output=True,
-        encoding="utf-8",
-    )
     with open(log_file, mode="w", encoding="utf-8") as f:
-        print(res.stdout, file=f)
-        print(res.stderr, file=f)
+        res = subprocess.run(
+            args,
+            env=envs,
+            stdout=f,
+            stderr=subprocess.STDOUT,
+            encoding="utf-8",
+        )
     if res.returncode == 0:
         _logger.info("Inference task success.")
     else:
-        if match_error(res.stdout):
-            _logger.error(res.stderr)
+        with open(log_file, mode="r", encoding="utf-8") as f:
+            output = f.read()
+        if match_error(output):
             raise TaskInvalid
         else:
             raise TaskError
