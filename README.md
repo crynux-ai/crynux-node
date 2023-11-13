@@ -4,6 +4,12 @@ Start a Crynux Node to share the spared local GPU to others in exchange for toke
 
 ![Crynux Node WebUI](./docs/webui.png)
 
+## Getting Started
+
+A complete getting started guide to start a node is provided in the document:
+
+[Join the Network](https://docs.crynux.ai/node-hosting/join-the-network)
+
 ## Run the node
 
 1. Pull the Docker image from GitHub
