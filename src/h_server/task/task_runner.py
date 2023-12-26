@@ -229,12 +229,14 @@ class TaskRunner(ABC):
                     self.state.status == models.TaskStatus.Aborted
                     or self.state.status == models.TaskStatus.Success
                 ):
-                    for ack_id, event in self._deque:
+                    while len(self._deque):
+                        ack_id, event = self._deque.popleft()
                         await self.queue.ack(ack_id)
                         _logger.debug(f"Ack task {self.task_id} event {event.kind}")
                     await self.cleanup()
                 else:
-                    for ack_id, event in self._deque:
+                    while len(self._deque):
+                        ack_id, event = self._deque.popleft()
                         await self.queue.no_ack(ack_id)
                         _logger.debug(f"No ack task {self.task_id} event {event.kind}")
 
