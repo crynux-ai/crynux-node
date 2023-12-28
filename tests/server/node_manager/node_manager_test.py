@@ -3,7 +3,7 @@ import secrets
 import os
 import shutil
 from io import BytesIO
-from typing import List
+from typing import List, Callable, Awaitable
 
 import pytest
 from anyio import create_task_group, sleep, fail_after, Event
@@ -150,103 +150,141 @@ def relay():
 
 
 @pytest.fixture
-async def node_managers(
+async def create_node_managers(
     privkeys: List[str], node_contracts: List[Contracts], relay: Relay, config: Config
 ):
-    managers = []
     new_data_dirs = []
 
-    for i, (privkey, contracts) in enumerate(zip(privkeys, node_contracts)):
-        queue = MemoryEventQueue()
+    async def make_node_managers(fail_step: int):
+        managers = []
 
-        watcher = EventWatcher.from_contracts(contracts)
-        block_number_cache = MemoryBlockNumberCache()
-        watcher.set_blocknumber_cache(block_number_cache)
+        for i, (privkey, contracts) in enumerate(zip(privkeys, node_contracts)):
+            queue = MemoryEventQueue()
 
-        def make_callback(queue):
-            async def _push_event(event_data):
-                event = models.load_event_from_contracts(event_data)
-                await queue.put(event)
+            watcher = EventWatcher.from_contracts(contracts)
+            block_number_cache = MemoryBlockNumberCache()
+            watcher.set_blocknumber_cache(block_number_cache)
 
-            return _push_event
+            def make_callback(queue):
+                async def _push_event(event_data):
+                    event = models.load_event_from_contracts(event_data)
+                    await queue.put(event)
 
-        watcher.watch_event(
-            "task",
-            "TaskCreated",
-            callback=make_callback(queue),
-            filter_args={"selectedNode": contracts.account},
-        )
+                return _push_event
 
-        task_state_cache = MemoryTaskStateCache()
-        system = TaskSystem(
-            task_state_cache,
-            queue=queue,
-            distributed=config.distributed,
-            task_name="mock_lora_inference",
-        )
+            watcher.watch_event(
+                "task",
+                "TaskCreated",
+                callback=make_callback(queue),
+                filter_args={"selectedNode": contracts.account},
+            )
 
-        assert config.task_config is not None
-        local_config = config.task_config.model_copy()
-        data_dir = os.path.join(local_config.output_dir, f"node{i}")
-        if not os.path.exists(data_dir):
-            os.makedirs(data_dir, exist_ok=True)
-        local_config.output_dir = data_dir
-        new_data_dirs.append(data_dir)
+            task_state_cache = MemoryTaskStateCache()
+            system = TaskSystem(
+                task_state_cache,
+                queue=queue,
+                distributed=config.distributed,
+                task_name="mock_lora_inference",
+                retry=(fail_step > 0),
+            )
 
-        def make_runner_cls(contracts, relay, watcher, local_config):
-            class _InferenceTaskRunner(InferenceTaskRunner):
-                def __init__(
-                    self,
-                    task_id: int,
-                    task_name: str,
-                    distributed: bool,
-                    state_cache: TaskStateCache,
-                    queue: EventQueue,
-                ) -> None:
-                    super().__init__(
-                        task_id=task_id,
-                        task_name=task_name,
-                        distributed=distributed,
-                        state_cache=state_cache,
-                        queue=queue,
-                        contracts=contracts,
-                        relay=relay,
-                        watcher=watcher,
-                        local_config=local_config,
-                    )
+            assert config.task_config is not None
+            local_config = config.task_config.model_copy()
+            data_dir = os.path.join(local_config.output_dir, f"node_{fail_step}_{i}")
+            if not os.path.exists(data_dir):
+                os.makedirs(data_dir, exist_ok=True)
+            local_config.output_dir = data_dir
+            new_data_dirs.append(data_dir)
 
-            return _InferenceTaskRunner
+            def make_runner_cls(contracts, relay, watcher, local_config, fail_step):
+                class _InferenceTaskRunner(InferenceTaskRunner):
+                    def __init__(
+                        self,
+                        task_id: int,
+                        task_name: str,
+                        distributed: bool,
+                        state_cache: TaskStateCache,
+                        queue: EventQueue,
+                    ) -> None:
+                        super().__init__(
+                            task_id=task_id,
+                            task_name=task_name,
+                            distributed=distributed,
+                            state_cache=state_cache,
+                            queue=queue,
+                            contracts=contracts,
+                            relay=relay,
+                            watcher=watcher,
+                            local_config=local_config,
+                        )
+                        self._fail_count = 0
 
-        system.set_runner_cls(make_runner_cls(contracts, relay, watcher, local_config))
+                    async def task_created(self, event):
+                        if self._fail_count == 0 and fail_step == 1:
+                            self._fail_count += 1
+                            raise ValueError("mock fail")
+                        return await super().task_created(event)
 
-        state_cache = ManagerStateCache(
-            node_state_cache_cls=MemoryNodeStateCache,
-            tx_state_cache_cls=MemoryTxStateCache,
-        )
-        # set init state to stopped to bypass prefetch stage
-        await state_cache.set_node_state(models.NodeStatus.Stopped)
+                    async def result_ready(self, event):
+                        if self._fail_count == 0 and fail_step == 2:
+                            self._fail_count += 1
+                            raise ValueError("mock fail")
+                        return await super().result_ready(event)
 
-        state_manager = NodeStateManager(
-            state_cache=state_cache,
-            contracts=contracts,
-        )
+                    async def commitment_ready(self, event):
+                        if self._fail_count == 0 and fail_step == 3:
+                            self._fail_count += 1
+                            raise ValueError("mock fail")
+                        return await super().commitment_ready(event)
 
-        manager = NodeManager(
-            config=config,
-            manager_state_cache=state_cache,
-            node_state_manager=state_manager,
-            privkey=privkey,
-            event_queue=queue,
-            contracts=contracts,
-            relay=relay,
-            watcher=watcher,
-            task_system=system,
-            retry=False
-        )
-        managers.append(manager)
+                    async def task_success(self, event):
+                        if self._fail_count == 0 and fail_step == 4:
+                            self._fail_count += 1
+                            raise ValueError("mock fail")
+                        return await super().task_success(event)
+
+                    async def task_aborted(self, event):
+                        if self._fail_count == 0 and fail_step == 5:
+                            self._fail_count += 1
+                            raise ValueError("mock fail")
+                        return await super().task_aborted(event)
+
+                return _InferenceTaskRunner
+
+            system.set_runner_cls(
+                make_runner_cls(contracts, relay, watcher, local_config, fail_step)
+            )
+
+            state_cache = ManagerStateCache(
+                node_state_cache_cls=MemoryNodeStateCache,
+                tx_state_cache_cls=MemoryTxStateCache,
+            )
+            # set init state to stopped to bypass prefetch stage
+            await state_cache.set_node_state(models.NodeStatus.Stopped)
+
+            state_manager = NodeStateManager(
+                state_cache=state_cache,
+                contracts=contracts,
+            )
+
+            manager = NodeManager(
+                config=config,
+                manager_state_cache=state_cache,
+                node_state_manager=state_manager,
+                privkey=privkey,
+                event_queue=queue,
+                contracts=contracts,
+                relay=relay,
+                watcher=watcher,
+                task_system=system,
+                retry=False,
+            )
+            managers.append(manager)
+
+        return managers
 
     try:
-        yield managers
+        yield make_node_managers
     finally:
         for data_dir in new_data_dirs:
             if os.path.exists(data_dir):
@@ -295,12 +333,17 @@ async def create_task(contracts: Contracts, relay: Relay, tx_option: TxOption):
     }
     return task_id, round_map, receipt["blockNumber"]
 
+
+@pytest.mark.parametrize("fail_step", [0, 1, 2, 3])
 async def test_node_manager(
-    node_managers: List[NodeManager],
+    create_node_managers: Callable[[int], Awaitable[List[NodeManager]]],
     node_contracts: List[Contracts],
     relay: Relay,
     tx_option,
+    fail_step: int,
 ):
+    node_managers = await create_node_managers(fail_step)
+
     async with create_task_group() as tg:
         for n in node_managers:
             tg.start_soon(n.run, False)
@@ -389,11 +432,12 @@ async def test_node_manager(
 
 async def test_node_manager_cancel(
     root_contracts: Contracts,
-    node_managers: List[NodeManager],
+    create_node_managers: Callable[[int], Awaitable[List[NodeManager]]],
     node_contracts: List[Contracts],
     relay: Relay,
     tx_option,
 ):
+    node_managers = await create_node_managers(0)
     try:
         await root_contracts.task_contract.update_timeout(1, option=tx_option)
         async with create_task_group() as tg:
@@ -417,7 +461,9 @@ async def test_node_manager_cancel(
                     await n.state_cache.get_node_state()
                 ).status == models.NodeStatus.Running
 
-            task_id, _, _ = await create_task(node_contracts[0], relay, tx_option=tx_option)
+            task_id, _, _ = await create_task(
+                node_contracts[0], relay, tx_option=tx_option
+            )
 
             await sleep(1.1)
             await node_contracts[0].task_contract.cancel_task(
@@ -440,11 +486,12 @@ async def test_node_manager_cancel(
 
 async def test_node_manager_auto_cancel(
     root_contracts: Contracts,
-    node_managers: List[NodeManager],
+    create_node_managers: Callable[[int], Awaitable[List[NodeManager]]],
     node_contracts: List[Contracts],
     relay: Relay,
     tx_option,
 ):
+    node_managers = await create_node_managers(0)
     try:
         await root_contracts.task_contract.update_timeout(1, option=tx_option)
 
@@ -468,10 +515,12 @@ async def test_node_manager_auto_cancel(
                     await n.state_cache.get_node_state()
                 ).status == models.NodeStatus.Running
 
-            task_id, _, _ = await create_task(node_contracts[0], relay, tx_option=tx_option)
+            task_id, _, _ = await create_task(
+                node_contracts[0], relay, tx_option=tx_option
+            )
 
             cancel_event = Event()
-            
+
             async def _cancel(_):
                 cancel_event.set()
 
@@ -488,7 +537,9 @@ async def test_node_manager_auto_cancel(
 
             await cancel_event.wait()
 
-            state = await node_managers[0]._task_system.state_cache.load(task_id=task_id)
+            state = await node_managers[0]._task_system.state_cache.load(
+                task_id=task_id
+            )
             assert state.status == models.TaskStatus.Aborted
 
             await node_managers[0].finish()
@@ -520,7 +571,9 @@ async def partial_run_task(
         ).status == models.NodeStatus.Running
 
     # create task
-    task_id, round_map, block_number = await create_task(node_contracts[0], relay, tx_option=tx_option)
+    task_id, round_map, block_number = await create_task(
+        node_contracts[0], relay, tx_option=tx_option
+    )
 
     result = bytes.fromhex("0102030405060708")
     if 1 <= stage:
@@ -567,12 +620,13 @@ async def partial_run_task(
 @pytest.mark.parametrize("stage", [0, 1, 2])
 async def test_node_manager_with_recover(
     config: Config,
-    node_managers: List[NodeManager],
+    create_node_managers: Callable[[int], Awaitable[List[NodeManager]]],
     node_contracts: List[Contracts],
     relay: Relay,
     tx_option,
     stage: int,
 ):
+    node_managers = await create_node_managers(0)
     await partial_run_task(
         config, node_managers, node_contracts, relay, tx_option, stage
     )

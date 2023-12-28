@@ -25,8 +25,8 @@ ethereum:
   # The deployed addresses of the smart contracts
   contract:
     token: "0x95E7e7Ed5463Ff482f61585605a0ff278e0E1FFb"
-    node: "0xB0E9A451Ce0CC181EA9888C7B42BB8Ad90b73C78"
-    task: "0xba2489a25A5f542877D3825Ab802651f28878C4a"
+    node: "0x43fe24A779Cb463C080b95B8CbA4455A28AbA747"
+    task: "0x396d211faf280d6b2AF36EEd4675B2E74a7CEC12"
 
 # The directory to store the temp files related to the running task
 task_dir: tasks
@@ -71,11 +71,9 @@ task_config:
       - id: "runwayml/stable-diffusion-v1-5"
       - id: "emilianJR/chilloutmix_NiPrunedFp32Fix"
       - id: "stabilityai/stable-diffusion-xl-base-1.0"
-      - id: "stabilityai/stable-diffusion-xl-refiner-1.0"
     controlnet:
-      - id: "lllyasviel/sd-controlnet-canny"
       - id: "lllyasviel/control_v11p_sd15_openpose"
-      - id: "diffusers/controlnet-canny-sdxl-1.0"
+      - id: "thibaud/controlnet-openpose-sdxl-1.0"
     vae: []
     
   # The proxy server used when downloading models.
