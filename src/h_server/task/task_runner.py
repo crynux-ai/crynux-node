@@ -7,20 +7,31 @@ from collections import deque
 from contextlib import asynccontextmanager
 from typing import Awaitable, Callable, Deque, List, Optional, Tuple
 
-from anyio import (Condition, create_task_group, fail_after,
-                   get_cancelled_exc_class, to_thread)
-from anyio.abc import TaskGroup
+from anyio import (
+    Condition,
+    CancelScope,
+    create_task_group,
+    fail_after,
+    sleep_until,
+    get_cancelled_exc_class,
+    to_thread,
+)
 from celery.result import AsyncResult
 from hexbytes import HexBytes
-from tenacity import (before_sleep_log, retry, retry_if_exception,
-                      stop_after_delay, wait_chain, wait_fixed)
+from tenacity import (
+    before_sleep_log,
+    retry,
+    retry_if_exception,
+    stop_after_delay,
+    wait_chain,
+    wait_fixed,
+)
 from web3.types import EventData
 
 from h_server import models
 from h_server.config import TaskConfig as LocalConfig
 from h_server.config import get_config
-from h_server.contracts import (Contracts, TxRevertedError, TxWaiter,
-                                get_contracts)
+from h_server.contracts import Contracts, TxRevertedError, TxWaiter, get_contracts
 from h_server.event_queue import EventQueue, get_event_queue
 from h_server.relay import Relay, RelayError, get_relay
 from h_server.watcher import EventWatcher, get_watcher
@@ -130,49 +141,60 @@ class TaskRunner(ABC):
             if self._state is not None and need_dump:
                 await self.cache.dump(self.state)
 
-    async def process_event(self, event: models.TaskEvent):
+    async def process_event(
+        self, event: models.TaskEvent, finish_callback: Callable[[], Awaitable[None]]
+    ):
         _logger.debug(f"Process event {event}")
         if event.kind == "TaskCreated":
             assert isinstance(event, models.TaskCreated)
-            await self.task_created(event)
-            return False
+            return await self.task_created(event, finish_callback)
         elif event.kind == "TaskResultReady":
             assert isinstance(event, models.TaskResultReady)
-            await self.result_ready(event)
-            return False
+            return await self.result_ready(event, finish_callback)
         elif event.kind == "TaskResultCommitmentsReady":
             assert isinstance(event, models.TaskResultCommitmentsReady)
-            await self.commitment_ready(event)
-            return False
+            return await self.commitment_ready(event, finish_callback)
         elif event.kind == "TaskSuccess":
             assert isinstance(event, models.TaskSuccess)
-            await self.task_success(event)
-            return True
+            return await self.task_success(event, finish_callback)
         if event.kind == "TaskAborted":
             assert isinstance(event, models.TaskAborted)
-            await self.task_aborted(event)
-            return True
+            return await self.task_aborted(event, finish_callback)
         else:
             raise ValueError(f"Unknown event kind {event.kind}")
 
     @abstractmethod
-    async def task_created(self, event: models.TaskCreated):
+    async def task_created(
+        self, event: models.TaskCreated, finish_callback: Callable[[], Awaitable[None]]
+    ):
         ...
 
     @abstractmethod
-    async def result_ready(self, event: models.TaskResultReady):
+    async def result_ready(
+        self,
+        event: models.TaskResultReady,
+        finish_callback: Callable[[], Awaitable[None]],
+    ):
         ...
 
     @abstractmethod
-    async def commitment_ready(self, event: models.TaskResultCommitmentsReady):
+    async def commitment_ready(
+        self,
+        event: models.TaskResultCommitmentsReady,
+        finish_callback: Callable[[], Awaitable[None]],
+    ):
         ...
 
     @abstractmethod
-    async def task_success(self, event: models.TaskSuccess):
+    async def task_success(
+        self, event: models.TaskSuccess, finish_callback: Callable[[], Awaitable[None]]
+    ):
         ...
 
     @abstractmethod
-    async def task_aborted(self, event: models.TaskAborted):
+    async def task_aborted(
+        self, event: models.TaskAborted, finish_callback: Callable[[], Awaitable[None]]
+    ):
         ...
 
     @abstractmethod
@@ -187,12 +209,17 @@ class TaskRunner(ABC):
     async def cancel_task(self):
         ...
 
-    async def _run_event(self, ack_id: int, event: models.TaskEvent, tg: TaskGroup):
+    async def _run_event(
+        self,
+        ack_id: int,
+        event: models.TaskEvent,
+        finish_callback: Callable[[], Awaitable[None]],
+    ):
         try:
-            finished = await self.process_event(event)
-            await self.queue.ack(ack_id)
-            if finished:
-                tg.cancel_scope.cancel()
+            await self.process_event(event, finish_callback)
+            # sheild the ack operator from cancel to ensure the event to be acked when finish_callback is being called
+            with fail_after(10, shield=True):
+                await self.queue.ack(ack_id)
         except get_cancelled_exc_class():
             _logger.debug(f"Task {self.task_id} process event {event.kind} cancelled.")
             self._deque.append((ack_id, event))
@@ -212,10 +239,14 @@ class TaskRunner(ABC):
                 raise TimeoutError
             with fail_after(delay, shield=False):
                 async with create_task_group() as tg:
+
+                    async def finish_callback():
+                        tg.cancel_scope.cancel()
+
                     while True:
                         ack_id, event = await self.recv()
 
-                        tg.start_soon(self._run_event, ack_id, event, tg)
+                        tg.start_soon(self._run_event, ack_id, event, finish_callback)
         except get_cancelled_exc_class():
             raise
         except TimeoutError:
@@ -391,7 +422,9 @@ class InferenceTaskRunner(TaskRunner):
         except Exception as e:
             _logger.debug(f"Cancel task {self.task_id} failed")
 
-    async def task_created(self, event: models.TaskCreated):
+    async def task_created(
+        self, event: models.TaskCreated, finish_callback: Callable[[], Awaitable[None]]
+    ):
         await self.wait_for_status(models.TaskStatus.Pending)
 
         async with self.state_context():
@@ -486,9 +519,13 @@ class InferenceTaskRunner(TaskRunner):
                 _logger.error("Task error, report error to the chain.")
                 with fail_after(delay=60, shield=True):
                     await self._report_error()
-                return True
+                await finish_callback()
 
-    async def result_ready(self, event: models.TaskResultReady):
+    async def result_ready(
+        self,
+        event: models.TaskResultReady,
+        finish_callback: Callable[[], Awaitable[None]],
+    ):
         await self.wait_for_status(models.TaskStatus.Executing)
 
         async with self.state_context():
@@ -505,14 +542,19 @@ class InferenceTaskRunner(TaskRunner):
                 except TxRevertedError as e:
                     # all other nodes report error
                     if "Task is aborted" in e.reason:
-                        await self._report_error()
-                        return
+                        with fail_after(60, shield=True):
+                            await self._report_error()
+                        await finish_callback()
                 self.state.result = result
             _logger.info(f"Task {self.task_id} result 0x{self.state.result.hex()}")
             self.state.status = models.TaskStatus.ResultUploaded
             self.state.files = event.files
 
-    async def commitment_ready(self, event: models.TaskResultCommitmentsReady):
+    async def commitment_ready(
+        self,
+        event: models.TaskResultCommitmentsReady,
+        finish_callback: Callable[[], Awaitable[None]],
+    ):
         await self.wait_for_status(models.TaskStatus.ResultUploaded)
 
         async with self.state_context():
@@ -529,7 +571,9 @@ class InferenceTaskRunner(TaskRunner):
                 self.state.disclosed = True
             self.state.status = models.TaskStatus.Disclosed
 
-    async def task_success(self, event: models.TaskSuccess):
+    async def task_success(
+        self, event: models.TaskSuccess, finish_callback: Callable[[], Awaitable[None]]
+    ):
         await self.wait_for_status(models.TaskStatus.Disclosed)
 
         async with self.state_context():
@@ -542,10 +586,33 @@ class InferenceTaskRunner(TaskRunner):
                 )
 
             self.state.status = models.TaskStatus.Success
+        await finish_callback()
 
-    async def task_aborted(self, event: models.TaskAborted):
-        async with self.state_context():
-            self.state.status = models.TaskStatus.Aborted
+    async def task_aborted(
+        self, event: models.TaskAborted, finish_callback: Callable[[], Awaitable[None]]
+    ):
+        """
+        Receiving TaskAborted event means other nodes has reported error,
+        so we should report error as well to avoid being slashed.
+        But we can only report error before calling submitTaskResultCommitment.
+        If we have called submitTaskResultCommitment, we should not finish the task runner,
+        otherwise this node will be blocked on this task forever. In the contrast,
+        we should make the task runner running until the task deadline and the cancel the task.
+        """
+
+        # call finish callback to finish all other event processors
+        await finish_callback()
+        if self.state.status in [
+            models.TaskStatus.Pending,
+            models.TaskStatus.Executing,
+        ]:
+            with fail_after(60, shield=True):
+                await self._report_error()
+        else:
+            with CancelScope(shield=True):
+                async with self.state_context():
+                    self.state.status = models.TaskStatus.Aborted
+                await sleep_until(self.state.timeout + 1)
 
     async def cleanup(self):
         if not self._cleaned:
@@ -606,14 +673,20 @@ class MockTaskRunner(TaskRunner):
     async def cancel_task(self):
         pass
 
-    async def task_created(self, event: models.TaskCreated):
+    async def task_created(
+        self, event: models.TaskCreated, finish_callback: Callable[[], Awaitable[None]]
+    ):
         await self.wait_for_status(models.TaskStatus.Pending)
 
         async with self.state_context():
             self.state.round = event.round
             self.state.status = models.TaskStatus.Executing
 
-    async def result_ready(self, event: models.TaskResultReady):
+    async def result_ready(
+        self,
+        event: models.TaskResultReady,
+        finish_callback: Callable[[], Awaitable[None]],
+    ):
         await self.wait_for_status(models.TaskStatus.Executing)
 
         async with self.state_context():
@@ -621,22 +694,33 @@ class MockTaskRunner(TaskRunner):
             self.state.result = b"".join([bytes.fromhex(h[2:]) for h in event.hashes])
             self.state.status = models.TaskStatus.ResultUploaded
 
-    async def commitment_ready(self, event: models.TaskResultCommitmentsReady):
+    async def commitment_ready(
+        self,
+        event: models.TaskResultCommitmentsReady,
+        finish_callback: Callable[[], Awaitable[None]],
+    ):
         await self.wait_for_status(models.TaskStatus.ResultUploaded)
 
         async with self.state_context():
             self.state.status = models.TaskStatus.Disclosed
             self.state.disclosed = True
 
-    async def task_success(self, event: models.TaskSuccess):
+    async def task_success(
+        self, event: models.TaskSuccess, finish_callback: Callable[[], Awaitable[None]]
+    ):
         await self.wait_for_status(models.TaskStatus.Disclosed)
 
         async with self.state_context():
             self.state.status = models.TaskStatus.Success
+        await finish_callback()
 
-    async def task_aborted(self, event: models.TaskAborted):
-        async with self.state_context():
-            self.state.status = models.TaskStatus.Aborted
+    async def task_aborted(
+        self, event: models.TaskAborted, finish_callback: Callable[[], Awaitable[None]]
+    ):
+        await finish_callback()
+        with fail_after(10, shield=True):
+            async with self.state_context():
+                self.state.status = models.TaskStatus.Aborted
 
     async def cleanup(self):
         del self.state

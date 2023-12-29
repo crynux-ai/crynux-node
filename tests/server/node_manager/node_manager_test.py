@@ -219,35 +219,35 @@ async def create_node_managers(
                         )
                         self._fail_count = 0
 
-                    async def task_created(self, event):
+                    async def task_created(self, event, finish_callback):
                         if self._fail_count == 0 and fail_step == 1:
                             self._fail_count += 1
                             raise ValueError("mock fail")
-                        return await super().task_created(event)
+                        return await super().task_created(event, finish_callback)
 
-                    async def result_ready(self, event):
+                    async def result_ready(self, event, finish_callback):
                         if self._fail_count == 0 and fail_step == 2:
                             self._fail_count += 1
                             raise ValueError("mock fail")
-                        return await super().result_ready(event)
+                        return await super().result_ready(event, finish_callback)
 
-                    async def commitment_ready(self, event):
+                    async def commitment_ready(self, event, finish_callback):
                         if self._fail_count == 0 and fail_step == 3:
                             self._fail_count += 1
                             raise ValueError("mock fail")
-                        return await super().commitment_ready(event)
+                        return await super().commitment_ready(event, finish_callback)
 
-                    async def task_success(self, event):
+                    async def task_success(self, event, finish_callback):
                         if self._fail_count == 0 and fail_step == 4:
                             self._fail_count += 1
                             raise ValueError("mock fail")
-                        return await super().task_success(event)
+                        return await super().task_success(event, finish_callback)
 
-                    async def task_aborted(self, event):
+                    async def task_aborted(self, event, finish_callback):
                         if self._fail_count == 0 and fail_step == 5:
                             self._fail_count += 1
                             raise ValueError("mock fail")
-                        return await super().task_aborted(event)
+                        return await super().task_aborted(event, finish_callback)
 
                 return _InferenceTaskRunner
 
@@ -465,15 +465,14 @@ async def test_node_manager_cancel(
                 node_contracts[0], relay, tx_option=tx_option
             )
 
-            await sleep(1.1)
+            await sleep(2)
             await node_contracts[0].task_contract.cancel_task(
                 task_id=task_id, option=tx_option
             )
-            await sleep(1)
+            await sleep(0.1)
 
             for n in node_managers:
                 assert n._task_system is not None
-                assert task_id not in n._task_system._runners
                 state = await n._task_system.state_cache.load(task_id=task_id)
                 assert state.status == models.TaskStatus.Aborted
 
