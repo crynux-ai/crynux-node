@@ -81,13 +81,14 @@ async def test_upload_task_result(
     data = {
         "hashes": [result_hash],
     }
-    files = (("files", (result_file, open(result_file, "rb"), "image/png")),)
-    resp = running_client.post(
-        f"/manager/v1/tasks/{task_id}/result", data=data, files=files
-    )
-    resp.raise_for_status()
-    resp_data = resp.json()
-    assert resp_data["success"]
+    with open(result_file, "rb") as f:
+        files = (("files", (result_file, f, "image/png")),)
+        resp = running_client.post(
+            f"/manager/v1/tasks/{task_id}/result", data=data, files=files
+        )
+        resp.raise_for_status()
+        resp_data = resp.json()
+        assert resp_data["success"]
 
 
 async def test_get_task_stats(

@@ -176,7 +176,7 @@ async def managers(
         if i == 0:
             set_event_queue(queue)
 
-        watcher = EventWatcher.from_contracts(contracts, retry_count=0)
+        watcher = EventWatcher.from_contracts(contracts)
         block_number_cache = MemoryBlockNumberCache()
         watcher.set_blocknumber_cache(block_number_cache)
         if i == 0:
@@ -219,7 +219,7 @@ async def managers(
         await state_cache.set_node_state(models.NodeStatus.Stopped)
 
         state_manager = NodeStateManager(
-            state_cache=state_cache, contracts=contracts, retry_count=0
+            state_cache=state_cache, contracts=contracts
         )
         if i == 0:
             set_node_state_manager(state_manager)
@@ -247,7 +247,7 @@ async def running_client(managers):
     client = TestClient(Server().app)
     async with create_task_group() as tg:
         for manager in managers:
-            tg.start_soon(manager.run)
+            tg.start_soon(manager.run, False)
         yield client
         for manager in managers:
             await manager.finish()
