@@ -59,3 +59,29 @@ http://localhost:7412
 ```shell
 # docker run -d -p 127.0.0.1:7412:7412 --gpus all h_node:dev
 ```
+
+## Run tests
+
+1. Clone the project
+
+```shell
+# git clone https://github.com/crynux-ai/h-node.git
+```
+
+2. Go to the root folder of the project
+
+```shell
+# cd h-node
+```
+
+3. Install the dependencies and package (preferably in a virtualenv)
+
+```shell
+# pip install -r requirements.txt && pip install .[test]
+```
+
+4. Run tests 
+
+```shell
+# pytest tests
+```
