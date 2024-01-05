@@ -1,7 +1,9 @@
 from h_server import utils
 
 
-async def test_gpu_info():
+async def test_gpu_info(enable_gpu):
+    if not enable_gpu:
+        return
     gpu_info = await utils.get_gpu_info()
     assert len(gpu_info.model) > 0
     assert gpu_info.vram_total > 0

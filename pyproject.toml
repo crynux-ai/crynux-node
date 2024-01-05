@@ -37,3 +37,8 @@ include = ["h_server*", "h_worker*"]
 
 [project.optional-dependencies]
 test = ["pytest~=7.4.0", "Pillow"]
+
+[tool.pytest.ini_options]
+pythonpath = [
+    ".", "src",
+]
