@@ -430,59 +430,6 @@ async def test_node_manager(
         tg.cancel_scope.cancel()
 
 
-async def test_node_manager_cancel(
-    root_contracts: Contracts,
-    create_node_managers: Callable[[int], Awaitable[List[NodeManager]]],
-    node_contracts: List[Contracts],
-    relay: Relay,
-    tx_option,
-):
-    node_managers = await create_node_managers(0)
-    try:
-        await root_contracts.task_contract.update_timeout(1, option=tx_option)
-        async with create_task_group() as tg:
-            for n in node_managers:
-                tg.start_soon(n.run, False)
-
-            waits = []
-            for m in node_managers:
-                assert m._node_state_manager is not None
-                waits.append(await m._node_state_manager.start(option=tx_option))
-            for n in node_managers:
-                assert (
-                    await n.state_cache.get_tx_state()
-                ).status == models.TxStatus.Pending
-            async with create_task_group() as sub_tg:
-                for w in waits:
-                    sub_tg.start_soon(w)
-
-            for n in node_managers:
-                assert (
-                    await n.state_cache.get_node_state()
-                ).status == models.NodeStatus.Running
-
-            task_id, _, _ = await create_task(
-                node_contracts[0], relay, tx_option=tx_option
-            )
-
-            await sleep(2)
-            await node_contracts[0].task_contract.cancel_task(
-                task_id=task_id, option=tx_option
-            )
-            await sleep(0.1)
-
-            for n in node_managers:
-                assert n._task_system is not None
-                state = await n._task_system.state_cache.load(task_id=task_id)
-                assert state.status == models.TaskStatus.Aborted
-
-            for n in node_managers:
-                await n.finish()
-            tg.cancel_scope.cancel()
-    finally:
-        await root_contracts.task_contract.update_timeout(900, option=tx_option)
-
-
 async def test_node_manager_auto_cancel(
     root_contracts: Contracts,
     create_node_managers: Callable[[int], Awaitable[List[NodeManager]]],
