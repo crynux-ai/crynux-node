@@ -16,6 +16,7 @@ async def test_memory_state_cache():
         status=TaskStatus.Pending,
         files=["test.png"],
         result=bytes.fromhex("01020405060708"),
+        timeout=900
     )
 
     start = datetime.now()
@@ -58,6 +59,7 @@ async def test_db_state_cache(init_db):
         status=TaskStatus.Pending,
         files=["test.png"],
         result=bytes.fromhex("01020405060708"),
+        timeout=900,
     )
     
     start = datetime.now()
