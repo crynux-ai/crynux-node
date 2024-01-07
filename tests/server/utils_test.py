@@ -12,16 +12,19 @@ async def test_gpu_info(enable_gpu):
 
 async def test_cpu_info():
     cpu_info = await utils.get_cpu_info()
-    assert cpu_info.frequency > 0
+    if utils.get_os() == "Darwin":
+        assert cpu_info.description
+    elif utils.get_os() == "Linux":
+        assert cpu_info.frequency_mhz > 0
     assert cpu_info.num_cores > 0
     assert cpu_info.usage > 0
 
 
 async def test_memory_info():
     memory_info = await utils.get_memory_info()
-    assert memory_info.available > 0
-    assert memory_info.total > 0
-    assert memory_info.available < memory_info.total
+    assert memory_info.available_mb > 0
+    assert memory_info.total_mb > 0
+    assert memory_info.available_mb < memory_info.total_mb
 
 
 async def test_disk_info():

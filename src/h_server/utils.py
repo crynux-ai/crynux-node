@@ -1,6 +1,7 @@
 import json
 import re
 from collections import OrderedDict
+import platform
 from typing import Any, Dict, Optional
 
 from anyio import run_process, Path
@@ -10,6 +11,7 @@ from web3 import Web3
 
 __all__ = [
     "sort_dict",
+    "get_os",
     "get_task_hash",
     "GpuInfo",
     "get_gpu_info",
@@ -38,6 +40,10 @@ def sort_dict(input: Dict[str, Any]) -> Dict[str, Any]:
 def get_task_hash(task_args: str):
     res = Web3.keccak(task_args.encode("utf-8"))
     return res.hex()
+
+
+def get_os():
+    return platform.system()
 
 
 class GpuInfo(BaseModel):
@@ -69,10 +75,11 @@ async def get_gpu_info() -> GpuInfo:
 class CpuInfo(BaseModel):
     usage: int = 0
     num_cores: int = 0
-    frequency: int = 0
+    frequency_mhz: int = 0
+    description: str = ""
 
 
-async def get_cpu_info() -> CpuInfo:
+async def get_linux_cpu_info() -> CpuInfo:
     info = CpuInfo()
     usage_cmd = "grep 'cpu ' /proc/stat | awk '{usage=($2+$4)*100/($2+$4+$5)} END {print usage}'"
     res = await run_process(usage_cmd)
@@ -85,19 +92,47 @@ async def get_cpu_info() -> CpuInfo:
 
     m = re.search(r"cpu\s+MHz\s+:\s+(\d+\.?\d+?)\s+", output)
     if m is not None:
-        info.frequency = round(float(m.group(1)))
+        info.frequency_mhz = round(float(m.group(1)))
 
     ids = re.findall(r"processor\s+:\s+(\d+)\s+", output)
     info.num_cores = len(ids)
     return info
 
 
+async def get_osx_cpu_info() -> CpuInfo:
+    info = CpuInfo()
+    usage_cmd = r"ps -A -o %cpu | awk '{s+=$1} END {print s}'"
+    res = await run_process(usage_cmd)
+    output = res.stdout.decode()
+    info.usage = round(float(output) * 100)
+
+    res = await run_process(["sysctl", "-n", "machdep.cpu.brand_string"])
+    output = res.stdout.decode()
+    info.description = output
+
+    res = await run_process(["sysctl", "hw.logicalcpu"])
+    output = res.stdout.decode()
+    ids = re.match(r"hw.logicalcpu: (\d+)", output)
+    if ids:
+        info.num_cores = int(ids.group(1))
+    return info
+
+
+async def get_cpu_info() -> CpuInfo:
+    cpu_info_fn = {
+        "Darwin": get_osx_cpu_info,
+        "Linux": get_linux_cpu_info,
+    }
+    return await cpu_info_fn[get_os()]()
+
+
+
 class MemoryInfo(BaseModel):
-    available: int = 0
-    total: int = 0
+    available_mb: int = 0
+    total_mb: int = 0
 
 
-async def get_memory_info() -> MemoryInfo:
+async def get_linux_memory_info() -> MemoryInfo:
     info = MemoryInfo()
 
     res = await run_process(["cat", "/proc/meminfo"])
@@ -105,13 +140,39 @@ async def get_memory_info() -> MemoryInfo:
 
     m = re.search(r"MemAvailable:\s+(\d+)", output)
     if m is not None:
-        info.available = round(int(m.group(1)) / 1024)
+        info.available_mb = round(int(m.group(1)) / 1024)
 
     m = re.search(r"MemTotal:\s+(\d+)", output)
     if m is not None:
-        info.total = round(int(m.group(1)) / 1024)
+        info.total_mb = round(int(m.group(1)) / 1024)
 
     return info
+
+
+async def get_osx_memory_info() -> MemoryInfo:
+    info = MemoryInfo()
+    res = await run_process(["sysctl", "hw.memsize"])
+    output = res.stdout.decode()
+    total_mem = re.match(r"hw.memsize: (\d+)", output)
+    if total_mem:
+        info.total_mb = round(int(total_mem.group(1)) / 1024 / 1024)
+
+    usage_cmd = ("vm_stat | perl -ne '/page size of (\\d+)/ and $size=$1; "
+        "/Pages\\s+free[^\\d]+(\\d+)/ and printf(\"%.2f\",  $1 * $size / 1048576);'")
+    res = await run_process(usage_cmd)
+    output = res.stdout.decode()
+    info.available_mb = int(float(output))
+
+    return info
+
+
+
+async def get_memory_info() -> MemoryInfo:
+    memory_info_fn = {
+        "Darwin": get_osx_memory_info,
+        "Linux": get_linux_memory_info,
+    }
+    return await memory_info_fn[get_os()]()
 
 
 class DiskInfo(BaseModel):
