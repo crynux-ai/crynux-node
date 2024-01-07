@@ -1,11 +1,15 @@
 from fastapi.testclient import TestClient
 
 
-async def test_system_api(client: TestClient):
+async def test_system_api(client: TestClient, enable_gpu: bool):
+    if not enable_gpu:
+        return
+
     resp = client.get("/manager/v1/system")
     resp.raise_for_status()
 
     resp_data = resp.json()
+
     gpu_info = resp_data["gpu"]
     assert gpu_info["usage"] > 0
     assert len(gpu_info["model"]) > 0

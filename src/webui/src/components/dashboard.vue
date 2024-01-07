@@ -26,11 +26,12 @@ const systemInfo = reactive({
   cpu: {
     usage: 0,
     num_cores: 0,
-    frequency: 0
+    frequency_mhz: 0,
+    description: '',
   },
   memory: {
-    available: 0,
-    total: 0
+    available_mb: 0,
+    total_mb: 0
   },
   disk: {
     base_models: 0,
@@ -524,7 +525,7 @@ const topRowClasses = computed(() => {
             <a-row style="margin-top: 12px">
               <a-col :span="24">
                 <a-statistic
-                  :value="systemInfo.cpu.frequency"
+                  :value="systemInfo.cpu.frequency_mhz"
                   :value-style="{ 'font-size': '14px' }"
                 >
                   <template #title><span style="font-size: 12px">Frequency</span></template>
@@ -545,8 +546,8 @@ const topRowClasses = computed(() => {
               :size="80"
               :percent="
                 Math.round(
-                  ((systemInfo.memory.total - systemInfo.memory.available) /
-                    systemInfo.memory.total) *
+                  ((systemInfo.memory.total_mb - systemInfo.memory.available_mb) /
+                    systemInfo.memory.total_mb) *
                     100
                 )
               "
@@ -556,7 +557,7 @@ const topRowClasses = computed(() => {
             <a-row>
               <a-col :span="24">
                 <a-statistic
-                  :value="systemInfo.memory.total - systemInfo.memory.available"
+                  :value="systemInfo.memory.total_mb - systemInfo.memory.available_mb"
                   :value-style="{ 'font-size': '14px' }"
                 >
                   <template #title><span style="font-size: 12px">RAM Used</span></template>
@@ -567,7 +568,7 @@ const topRowClasses = computed(() => {
             <a-row style="margin-top: 12px">
               <a-col :span="24">
                 <a-statistic
-                  :value="systemInfo.memory.total"
+                  :value="systemInfo.memory.total_mb"
                   :value-style="{ 'font-size': '14px' }"
                 >
                   <template #title><span style="font-size: 12px">RAM Total</span></template>
