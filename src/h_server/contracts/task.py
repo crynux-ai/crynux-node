@@ -1,11 +1,11 @@
 from typing import TYPE_CHECKING, Any, Dict, Optional, Union, cast
 
 from eth_typing import ChecksumAddress
+from solcx import link_code
 from web3 import AsyncWeb3
 from web3.contract.async_contract import AsyncContractEvent
-from solcx import link_code
 
-from h_server.models import ChainTask
+from h_server.models import ChainTask, ChainTaskType
 
 from .utils import ContractWrapperBase, TxWaiter
 
@@ -28,22 +28,32 @@ class TaskContract(ContractWrapperBase):
         hamming_lib = ContractWrapperBase(self.w3, "Hamming")
         await hamming_lib.deploy(*args, **kwargs)
 
-        self.bytecode = link_code(self.bytecode, {
-            "Random": random_lib.address,
-            "Hamming": hamming_lib.address,
-        })
+        self.bytecode = link_code(
+            self.bytecode,
+            {
+                "Random": random_lib.address,
+                "Hamming": hamming_lib.address,
+            },
+        )
 
         return await super().deploy(*args, **kwargs)
 
     async def create_task(
         self,
+        task_type: ChainTaskType,
         task_hash: Union[str, bytes],
         data_hash: Union[str, bytes],
+        vram_limit: int,
         *,
         option: "Optional[TxOption]" = None,
     ) -> TxWaiter:
         return await self._transaction_call(
-            "createTask", option=option, taskHash=task_hash, dataHash=data_hash
+            "createTask",
+            option=option,
+            taskType=task_type,
+            taskHash=task_hash,
+            dataHash=data_hash,
+            vramLimit=vram_limit,
         )
 
     async def get_selected_node(
@@ -138,18 +148,20 @@ class TaskContract(ContractWrapperBase):
         res = await self._function_call("getTask", taskId=task_id)
         return ChainTask(
             id=res[0],
-            creator=res[1],
-            task_hash=res[2],
-            data_hash=res[3],
-            is_success=res[4],
-            selected_nodes=res[5],
-            commitments=res[6],
-            nonces=res[7],
-            results=res[8],
-            result_disclosed_rounds=res[9],
-            result_node=res[10],
-            aborted=res[11],
-            timeout=res[12],
+            task_type=res[1],
+            creator=res[2],
+            task_hash=res[3],
+            data_hash=res[4],
+            vram_limit=res[5],
+            is_success=res[6],
+            selected_nodes=res[7],
+            commitments=res[8],
+            nonces=res[9],
+            results=res[10],
+            result_disclosed_rounds=res[11],
+            result_node=res[12],
+            aborted=res[13],
+            timeout=res[14],
         )
 
     async def get_node_task(self, address: str) -> int:

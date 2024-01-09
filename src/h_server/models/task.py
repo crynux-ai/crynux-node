@@ -1,14 +1,20 @@
-from enum import Enum
-from typing import List, Optional
+from enum import Enum, IntEnum
+from typing import List
 
 from pydantic import BaseModel
 
 
+class ChainTaskType(IntEnum):
+    SD = 0
+    LLM = 1
+
 class ChainTask(BaseModel):
     id: int
+    task_type: ChainTaskType
     creator: str
     task_hash: bytes
     data_hash: bytes
+    vram_limit: int
     is_success: bool
     selected_nodes: List[str]
     commitments: List[bytes]
