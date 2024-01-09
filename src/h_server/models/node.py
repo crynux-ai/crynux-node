@@ -12,6 +12,17 @@ class ChainNodeStatus(IntEnum):
     PAUSED = 5
 
 
+class GpuInfo(BaseModel):
+    name: str
+    vram: int
+
+
+class ChainNodeInfo(BaseModel):
+    status: ChainNodeStatus
+    gpu_id: bytes
+    gpu: GpuInfo
+
+
 class NodeStatus(Enum):
     Init = "initializing"
     Running = "running"

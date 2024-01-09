@@ -1,9 +1,9 @@
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, List, Optional
 
 from eth_typing import ChecksumAddress
 from web3 import AsyncWeb3
 
-from h_server.models import ChainNodeStatus
+from h_server.models import ChainNodeInfo, ChainNodeStatus, GpuInfo
 
 from .utils import ContractWrapperBase, TxWaiter
 
@@ -48,3 +48,24 @@ class NodeContract(ContractWrapperBase):
     async def get_node_status(self, address: str) -> ChainNodeStatus:
         res = await self._function_call("getNodeStatus", nodeAddress=address)
         return ChainNodeStatus(res)
+
+    async def get_node_info(self, address: str) -> ChainNodeInfo:
+        res = await self._function_call("getNodeInfo", nodeAddress=address)
+        info = ChainNodeInfo(
+            status=ChainNodeStatus(res[0]),
+            gpu_id=res[1],
+            gpu=GpuInfo(name=res[2][0], vram=res[2][1]),
+        )
+        return info
+
+    async def get_all_node_addresses(self) -> List[str]:
+        res = await self._function_call("getAllNodeAddresses")
+        return res
+
+    async def get_available_nodes(self) -> List[str]:
+        res = await self._function_call("getAvailableNodes")
+        return res
+
+    async def get_available_gpus(self) -> List[GpuInfo]:
+        res = await self._function_call("getAvailableGPUs")
+        return [GpuInfo(name=item[0], vram=item[1]) for item in res]
