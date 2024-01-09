@@ -3,6 +3,7 @@ from typing import TYPE_CHECKING, Any, Dict, Optional, Union, cast
 from eth_typing import ChecksumAddress
 from web3 import AsyncWeb3
 from web3.contract.async_contract import AsyncContractEvent
+from solcx import link_code
 
 from h_server.models import ChainTask
 
@@ -20,6 +21,19 @@ class TaskContract(ContractWrapperBase):
         self, w3: AsyncWeb3, contract_address: Optional[ChecksumAddress] = None
     ):
         super().__init__(w3, "Task", contract_address)
+
+    async def deploy(self, *args, **kwargs):
+        random_lib = ContractWrapperBase(self.w3, "Random")
+        await random_lib.deploy(*args, **kwargs)
+        hamming_lib = ContractWrapperBase(self.w3, "Hamming")
+        await hamming_lib.deploy(*args, **kwargs)
+
+        self.bytecode = link_code(self.bytecode, {
+            "Random": random_lib.address,
+            "Hamming": hamming_lib.address,
+        })
+
+        return await super().deploy(*args, **kwargs)
 
     async def create_task(
         self,
