@@ -20,8 +20,12 @@ class NodeContract(ContractWrapperBase):
     ):
         super().__init__(w3, "Node", contract_address)
 
-    async def join(self, *, option: "Optional[TxOption]" = None) -> TxWaiter:
-        return await self._transaction_call("join", option=option)
+    async def join(
+        self, gpu_name: str, gpu_vram: int, *, option: "Optional[TxOption]" = None
+    ) -> TxWaiter:
+        return await self._transaction_call(
+            "join", gpuName=gpu_name, gpuVram=gpu_vram, option=option
+        )
 
     async def quit(self, *, option: "Optional[TxOption]" = None) -> TxWaiter:
         return await self._transaction_call("quit", option=option)
