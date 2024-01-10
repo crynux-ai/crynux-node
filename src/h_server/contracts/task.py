@@ -22,22 +22,6 @@ class TaskContract(ContractWrapperBase):
     ):
         super().__init__(w3, "Task", contract_address)
 
-    async def deploy(self, *args, **kwargs):
-        random_lib = ContractWrapperBase(self.w3, "Random")
-        await random_lib.deploy(*args, **kwargs)
-        hamming_lib = ContractWrapperBase(self.w3, "Hamming")
-        await hamming_lib.deploy(*args, **kwargs)
-
-        self.bytecode = link_code(
-            self.bytecode,
-            {
-                "Random": random_lib.address,
-                "Hamming": hamming_lib.address,
-            },
-        )
-
-        return await super().deploy(*args, **kwargs)
-
     async def create_task(
         self,
         task_type: ChainTaskType,
