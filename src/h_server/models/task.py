@@ -4,13 +4,13 @@ from typing import List
 from pydantic import BaseModel
 
 
-class ChainTaskType(IntEnum):
+class TaskType(IntEnum):
     SD = 0
     LLM = 1
 
 class ChainTask(BaseModel):
     id: int
-    task_type: ChainTaskType
+    task_type: TaskType
     creator: str
     task_hash: bytes
     data_hash: bytes

@@ -57,6 +57,7 @@ async def test_task_system():
     events = [
         models.TaskCreated(
             task_id=task_id,
+            task_type=models.TaskType.SD,
             creator=creator,
             selected_node=address,
             task_hash=task_hash,
@@ -124,6 +125,7 @@ async def test_task_system_cancel():
     events = [
         models.TaskCreated(
             task_id=task_id,
+            task_type=models.TaskType.SD,
             creator=creator,
             selected_node=address,
             task_hash=task_hash,
@@ -186,6 +188,7 @@ async def test_task_system_auto_cancel():
     events = [
         models.TaskCreated(
             task_id=task_id,
+            task_type=models.TaskType.SD,
             creator=creator,
             selected_node=address,
             task_hash=task_hash,

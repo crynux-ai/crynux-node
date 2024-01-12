@@ -6,7 +6,7 @@ from anyio import create_task_group, create_memory_object_stream
 import pytest
 from web3 import Web3
 
-from h_server.models import ChainNodeStatus, ChainTaskType
+from h_server.models import ChainNodeStatus, TaskType
 from h_server.contracts import Contracts, TxRevertedError
 from h_server.watcher import EventWatcher
 
@@ -95,7 +95,7 @@ async def test_task(
     data_hash = Web3.keccak(text="data_hash")
 
     waiter = await c1.task_contract.create_task(
-        task_type=ChainTaskType.SD,
+        task_type=TaskType.SD,
         task_hash=task_hash,
         data_hash=data_hash,
         vram_limit=8,
@@ -193,7 +193,7 @@ async def test_task_with_event_watcher(
             "task", "TaskCreated", _push_event, filter_args={"creator": c1.account}
         )
         waiter = await c1.task_contract.create_task(
-            task_type=ChainTaskType.SD,
+            task_type=TaskType.SD,
             task_hash=task_hash,
             data_hash=data_hash,
             vram_limit=8,
@@ -289,7 +289,7 @@ async def test_fail_task_creation(
 
     with pytest.raises(Exception) as e:
         waiter = await c1.task_contract.create_task(
-            task_type=ChainTaskType.SD,
+            task_type=TaskType.SD,
             task_hash=task_hash,
             data_hash=data_hash,
             vram_limit=16,
@@ -301,7 +301,7 @@ async def test_fail_task_creation(
 
     with pytest.raises(Exception) as e:
         waiter = await c1.task_contract.create_task(
-            task_type=ChainTaskType.LLM,
+            task_type=TaskType.LLM,
             task_hash=task_hash,
             data_hash=data_hash,
             vram_limit=8,
@@ -323,7 +323,7 @@ async def test_get_task(
     data_hash = Web3.keccak(text="data_hash")
 
     waiter = await c1.task_contract.create_task(
-        task_type=ChainTaskType.SD,
+        task_type=TaskType.SD,
         task_hash=task_hash,
         data_hash=data_hash,
         vram_limit=8,
@@ -341,7 +341,7 @@ async def test_get_task(
 
     task = await c1.task_contract.get_task(task_id=task_id)
     assert task.id == task_id
-    assert task.task_type == ChainTaskType.SD
+    assert task.task_type == TaskType.SD
     assert task.task_hash == task_hash
     assert task.data_hash == data_hash
     assert task.vram_limit == 8

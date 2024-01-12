@@ -457,6 +457,7 @@ class InferenceTaskRunner(TaskRunner):
                 celery = get_celery()
                 kwargs = {
                     "task_id": task.task_id,
+                    "task_type": int(event.task_type),
                     "task_args": task.task_args,
                     "distributed": True,
                 }
@@ -484,6 +485,7 @@ class InferenceTaskRunner(TaskRunner):
                 task_func = getattr(h_task, self.task_name)
                 kwargs = dict(
                     task_id=task.task_id,
+                    task_type=int(event.task_type),
                     task_args=task.task_args,
                     distributed=False,
                     result_url="",
@@ -657,8 +659,10 @@ class MockTaskRunner(TaskRunner):
         return models.ChainTask(
             id=self.task_id,
             creator="",
+            task_type=models.TaskType.SD,
             task_hash=b"",
             data_hash=b"",
+            vram_limit=0,
             is_success=False,
             selected_nodes=[],
             commitments=[],

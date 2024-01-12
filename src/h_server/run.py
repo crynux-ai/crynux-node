@@ -4,7 +4,7 @@ import anyio
 from anyio import create_task_group, move_on_after, open_signal_receiver
 from anyio.abc import CancelScope
 
-from h_server import db, log
+from h_server import db, log, utils
 from h_server.config import get_config
 from h_server.node_manager import NodeManager, set_node_manager
 from h_server.server import Server
@@ -18,7 +18,12 @@ async def _run():
     await db.init(config.db)
 
     server = Server(config.web_dist)
-    node_manager = NodeManager(config=config)
+
+    gpu_info = await utils.get_gpu_info()
+    gpu_name = gpu_info.model
+    gpu_vram = gpu_info.vram_total // 1024
+
+    node_manager = NodeManager(config=config, gpu_name=gpu_name, gpu_vram=gpu_vram)
     set_node_manager(node_manager)
 
     async def signal_handler(scope: CancelScope):

@@ -5,7 +5,7 @@ from solcx import link_code
 from web3 import AsyncWeb3
 from web3.contract.async_contract import AsyncContractEvent
 
-from h_server.models import ChainTask, ChainTaskType
+from h_server.models import ChainTask, TaskType
 
 from .utils import ContractWrapperBase, TxWaiter
 
@@ -24,7 +24,7 @@ class TaskContract(ContractWrapperBase):
 
     async def create_task(
         self,
-        task_type: ChainTaskType,
+        task_type: TaskType,
         task_hash: Union[str, bytes],
         data_hash: Union[str, bytes],
         vram_limit: int,

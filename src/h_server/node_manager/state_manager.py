@@ -2,8 +2,7 @@ import logging
 from contextlib import asynccontextmanager
 from typing import Optional
 
-from anyio import CancelScope, Event, fail_after, get_cancelled_exc_class, sleep
-from tenacity import AsyncRetrying, before_sleep_log, stop_after_attempt, wait_fixed
+from anyio import CancelScope, fail_after, get_cancelled_exc_class, sleep
 from web3 import Web3
 
 from h_server import models
@@ -32,10 +31,8 @@ class NodeStateManager(object):
                 self._cancel_scope = scope
 
                 while True:
-                    remote_status = (
-                        await self.contracts.node_contract.get_node_status(
-                            self.contracts.account
-                        )
+                    remote_status = await self.contracts.node_contract.get_node_status(
+                        self.contracts.account
                     )
                     local_status = models.convert_node_status(remote_status)
                     await self.state_cache.set_node_state(local_status)
@@ -66,7 +63,7 @@ class NodeStateManager(object):
             raise
 
     async def try_start(
-        self, interval: float = 5, *, option: "Optional[TxOption]" = None
+        self, gpu_name: str, gpu_vram: int, interval: float = 5, *, option: "Optional[TxOption]" = None
     ):
         async with self._wrap_tx_error():
             while True:
@@ -103,7 +100,11 @@ class NodeStateManager(object):
                             option=option,
                         )
                         await waiter.wait()
-                    waiter = await self.contracts.node_contract.join(option=option)
+                    waiter = await self.contracts.node_contract.join(
+                        gpu_name=gpu_name,
+                        gpu_vram=gpu_vram,
+                        option=option,
+                    )
                     await waiter.wait()
                 elif status == models.ChainNodeStatus.PAUSED:
                     waiter = await self.contracts.node_contract.pause(option=option)
@@ -131,6 +132,8 @@ class NodeStateManager(object):
 
     async def start(
         self,
+        gpu_name: str,
+        gpu_vram: int,
         *,
         option: "Optional[TxOption]" = None,
     ):
@@ -159,7 +162,11 @@ class NodeStateManager(object):
                 )
                 await waiter.wait()
 
-            waiter = await self.contracts.node_contract.join(option=option)
+            waiter = await self.contracts.node_contract.join(
+                gpu_name=gpu_name,
+                gpu_vram=gpu_vram,
+                option=option,
+            )
             await self.state_cache.set_tx_state(models.TxStatus.Pending)
 
         async def wait():

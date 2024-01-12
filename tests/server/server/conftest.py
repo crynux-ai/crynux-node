@@ -164,8 +164,18 @@ def relay():
 
 
 @pytest.fixture
+def gpu_name():
+    return "NVIDIA GeForce GTX 1070 Ti"
+
+
+@pytest.fixture
+def gpu_vram():
+    return 8
+
+
+@pytest.fixture
 async def managers(
-    privkeys: List[str], node_contracts: List[Contracts], relay: Relay, config: Config
+    privkeys: List[str], node_contracts: List[Contracts], relay: Relay, config: Config, gpu_name: str, gpu_vram: int
 ):
     managers: List[NodeManager] = []
 
@@ -201,7 +211,7 @@ async def managers(
             task_state_cache,
             queue=queue,
             distributed=config.distributed,
-            task_name="mock_lora_inference",
+            task_name="mock_inference",
         )
         if i == 0:
             set_task_state_cache(task_state_cache)
@@ -226,6 +236,8 @@ async def managers(
 
         manager = NodeManager(
             config=config,
+            gpu_name=gpu_name,
+            gpu_vram=gpu_vram,
             manager_state_cache=state_cache,
             privkey=privkey,
             event_queue=queue,

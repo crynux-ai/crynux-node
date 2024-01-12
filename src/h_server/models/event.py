@@ -5,6 +5,8 @@ from pydantic import BaseModel, Field
 from web3.types import EventData
 from web3 import Web3
 
+from .task import TaskType
+
 TaskKind = Literal[
     "TaskCreated",
     "TaskResultReady",
@@ -21,6 +23,7 @@ class TaskEvent(BaseModel):
 
 class TaskCreated(TaskEvent):
     kind: TaskKind = Field(default="TaskCreated", init_var=False, frozen=True)
+    task_type: TaskType
     creator: ChecksumAddress
     selected_node: ChecksumAddress
     task_hash: str
@@ -70,6 +73,7 @@ def load_event_from_contracts(event_data: EventData) -> TaskEvent:
     if name == "TaskCreated":
         return TaskCreated(
             task_id=event_data["args"]["taskId"],
+            task_type=event_data["args"]["taskType"],
             creator=Web3.to_checksum_address(event_data["args"]["creator"]),
             selected_node=Web3.to_checksum_address(event_data["args"]["selectedNode"]),
             task_hash=Web3.to_hex(event_data["args"]["taskHash"]),
