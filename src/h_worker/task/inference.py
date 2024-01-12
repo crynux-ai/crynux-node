@@ -133,7 +133,7 @@ def inference(
         result_files = sorted(os.listdir(result_dir))
         result_paths = [os.path.join(result_dir, file) for file in result_files]
 
-        utils.upload_result(result_url + f"/v1/tasks/{task_id}/result", result_paths)
+        utils.upload_result(task_type, result_url + f"/v1/tasks/{task_id}/result", result_paths)
         _logger.info("Upload inference task result.")
 
 
@@ -210,5 +210,5 @@ def mock_inference(
             json.dump(res, f, ensure_ascii=False)
 
     if distributed:
-        utils.upload_result(result_url + f"/v1/tasks/{task_id}/result", ["test.png"])
+        utils.upload_result(task_type, result_url + f"/v1/tasks/{task_id}/result", ["test.png"])
         _logger.info("Upload inference task result.")

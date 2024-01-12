@@ -475,7 +475,7 @@ class InferenceTaskRunner(TaskRunner):
 
             def run_local_task():
                 import h_worker.task as h_task
-                from h_worker.task.utils import get_image_hash
+                from h_worker.task.utils import get_image_hash, get_gpt_resp_hash
 
                 assert self.local_config is not None
                 proxy = None
@@ -499,16 +499,19 @@ class InferenceTaskRunner(TaskRunner):
 
                 task_func(**kwargs)
 
-                image_dir = os.path.join(
+                result_dir = os.path.join(
                     self.local_config.output_dir, str(task.task_id)
                 )
-                image_files = sorted(os.listdir(image_dir))
-                image_paths = [os.path.join(image_dir, file) for file in image_files]
-                hashes = [get_image_hash(path) for path in image_paths]
+                result_files = sorted(os.listdir(result_dir))
+                result_paths = [os.path.join(result_dir, file) for file in result_files]
+                if event.task_type == models.TaskType.SD:
+                    hashes = [get_image_hash(path) for path in result_paths]
+                else:
+                    hashes = [get_gpt_resp_hash(path) for path in result_paths]
                 return models.TaskResultReady(
                     task_id=self.task_id,
                     hashes=hashes,
-                    files=image_paths,
+                    files=result_paths,
                 )
 
             try:

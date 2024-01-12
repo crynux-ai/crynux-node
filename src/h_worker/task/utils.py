@@ -1,3 +1,4 @@
+import json
 import hashlib
 import os.path
 from mimetypes import guess_extension, guess_type
@@ -15,6 +16,17 @@ http_client = httpx.Client()
 
 def get_image_hash(filename: str) -> str:
     return imhash.getPHash(filename)  # type: ignore
+
+
+def get_gpt_resp_hash(filename: str) -> str:
+    with open(filename, mode="r", encoding="utf-8") as f:
+        resp = json.load(f)
+    
+    content = ""
+    for choice in resp["choices"]:
+        content += choice["message"]["content"]
+    
+    return "0x" + hashlib.sha256(content.encode("utf-8")).hexdigest()
 
 
 def is_valid_url(url: str) -> bool:
@@ -74,17 +86,26 @@ def get_pose_file(data_dir: str, task_id: int, pose_url: str) -> str:
     return pose_file
 
 
-def upload_result(result_url: str, images: List[str]):
+def upload_result(task_type: int, result_url: str, files: List[str]):
+    assert task_type == 0 or task_type == 1, f"Invalid task type: {task_type}"
     hashes = []
-    files = []
-    for image in images:
-        image_name = os.path.basename(image)
-        hashes.append(get_image_hash(image))
-        files.append(("files", (image_name, open(image, "rb"), "image/png")))
+    upload_files = []
+    if task_type == 0:
+        # sd task
+        for file in files:
+            filename = os.path.basename(file)
+            hashes.append(get_image_hash(file))
+            upload_files.append(("files", (filename, open(file, "rb"), "image/png")))
+    else:
+        # llm task
+        for file in files:
+            hashes.append(get_gpt_resp_hash(file))
+            filename = os.path.basename(file)
+            upload_files.append(("files", (filename, open(file, "rb"), "application/json")))
 
     resp = http_client.post(
         result_url,
-        files=files,
+        files=upload_files,
         data={"hashes": hashes},
     )
     resp.raise_for_status()
