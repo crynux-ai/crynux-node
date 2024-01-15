@@ -27,7 +27,7 @@ async def start_nodes(
     waits = []
     for m in managers:
         assert m._node_state_manager is not None
-        waits.append(m._node_state_manager.start(gpu_name, gpu_vram, option=tx_option))
+        waits.append(await m._node_state_manager.start(gpu_name, gpu_vram, option=tx_option))
     async with create_task_group() as tg:
         for w in waits:
             tg.start_soon(w)
@@ -82,7 +82,7 @@ async def test_upload_task_result(
         "hashes": [result_hash],
     }
     with open(result_file, "rb") as f:
-        files = (("files", (result_file, f, "image/png")),)
+        files = (("files", (result_file, f)),)
         resp = running_client.post(
             f"/manager/v1/tasks/{task_id}/result", data=data, files=files
         )

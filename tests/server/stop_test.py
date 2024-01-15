@@ -123,7 +123,7 @@ async def state_manager(node_contracts, state_cache):
 
 async def test_stop(tx_option, test_config, state_manager):
     await state_manager.state_cache.set_node_state(NodeStatus.Stopped)
-    waiter = await state_manager.start(option=tx_option)
+    waiter = await state_manager.start("NVIDIA GeForce GTX 1070 Ti", 8, option=tx_option)
     await waiter()
 
     await _stop(state_manager=state_manager)

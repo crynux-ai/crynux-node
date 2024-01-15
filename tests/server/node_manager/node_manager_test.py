@@ -382,7 +382,7 @@ async def start_nodes(
     for m in node_managers:
         assert m._node_state_manager is not None
         waits.append(
-            m._node_state_manager.start(
+            await m._node_state_manager.start(
                 gpu_name=gpu_name, gpu_vram=gpu_vram, option=tx_option
             )
         )
@@ -422,7 +422,7 @@ async def test_node_manager(
         )
 
         with BytesIO() as dst:
-            await relay.get_result(task_id=task_id, image_num=0, dst=dst)
+            await relay.get_result(task_id=task_id, index=0, dst=dst)
             dst.seek(0)
             if task_type == models.TaskType.SD:
                 img = Image.open(dst)
@@ -639,7 +639,7 @@ async def test_node_manager_with_recover(
             ).status == models.NodeStatus.Running
 
         with BytesIO() as dst:
-            await relay.get_result(task_id=1, image_num=0, dst=dst)
+            await relay.get_result(task_id=1, index=0, dst=dst)
             dst.seek(0)
             if task_type == models.TaskType.SD:
                 img = Image.open(dst)
