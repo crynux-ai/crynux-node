@@ -1,6 +1,7 @@
 import json
 import hashlib
 import os.path
+from contextlib import ExitStack
 from mimetypes import guess_extension, guess_type
 from typing import List
 from urllib.parse import urlparse
@@ -88,24 +89,27 @@ def get_pose_file(data_dir: str, task_id: int, pose_url: str) -> str:
 
 def upload_result(task_type: int, result_url: str, files: List[str]):
     assert task_type == 0 or task_type == 1, f"Invalid task type: {task_type}"
-    hashes = []
-    upload_files = []
-    if task_type == 0:
-        # sd task
-        for file in files:
-            filename = os.path.basename(file)
-            hashes.append(get_image_hash(file))
-            upload_files.append(("files", (filename, open(file, "rb"), "image/png")))
-    else:
-        # llm task
-        for file in files:
-            hashes.append(get_gpt_resp_hash(file))
-            filename = os.path.basename(file)
-            upload_files.append(("files", (filename, open(file, "rb"), "application/json")))
+    with ExitStack() as stack:
+        hashes = []
+        upload_files = []
+        if task_type == 0:
+            # sd task
+            for file in files:
+                hashes.append(get_image_hash(file))
+                filename = os.path.basename(file)
+                file_obj = stack.enter_context(open(file, "rb"))
+                upload_files.append(("files", (filename, file_obj)))
+        else:
+            # llm task
+            for file in files:
+                hashes.append(get_gpt_resp_hash(file))
+                filename = os.path.basename(file)
+                file_obj = stack.enter_context(open(file, "rb"))
+                upload_files.append(("files", (filename, file_obj)))
 
-    resp = http_client.post(
-        result_url,
-        files=upload_files,
-        data={"hashes": hashes},
-    )
-    resp.raise_for_status()
+        resp = http_client.post(
+            result_url,
+            files=upload_files,
+            data={"hashes": hashes},
+        )
+        resp.raise_for_status()
