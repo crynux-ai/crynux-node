@@ -5,6 +5,7 @@ import threading
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
+from anyio import fail_after
 from sqlalchemy.ext.asyncio import (AsyncEngine, AsyncSession,
                                     async_sessionmaker, create_async_engine)
 
@@ -25,7 +26,8 @@ async def get_session() -> AsyncGenerator[AsyncSession, None]:
         try:
             yield sess
         except:
-            await sess.rollback()
+            with fail_after(5, shield=True):
+                await sess.rollback()
             raise
 
 
