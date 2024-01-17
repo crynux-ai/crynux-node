@@ -4,7 +4,7 @@ from fastapi import APIRouter, Body, BackgroundTasks, HTTPException
 from pydantic import BaseModel
 from typing_extensions import Annotated
 
-from h_server import models
+from h_server import models, utils
 
 from ..depends import NodeStateManagerDep, ManagerStateCacheDep
 from .utils import CommonResponse
@@ -47,7 +47,11 @@ async def control_node(
     if state_manager is None:
         raise HTTPException(400, detail="Private key has not been set.")
     if input.action == "start":
-        wait = await state_manager.start()
+        gpu_info = await utils.get_gpu_info()
+        wait = await state_manager.start(
+            gpu_name=gpu_info.model,
+            gpu_vram=gpu_info.vram_total // 1024
+        )
     elif input.action == "pause":
         wait = await state_manager.pause()
     elif input.action == "resume":

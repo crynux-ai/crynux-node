@@ -46,6 +46,16 @@ def privkeys():
 
 
 @pytest.fixture
+def gpu_name():
+    return "NVIDIA GeForce GTX 1070 Ti"
+
+
+@pytest.fixture
+def gpu_vram():
+    return 8
+
+
+@pytest.fixture
 async def root_contracts(tx_option, privkeys):
     from web3.providers.eth_tester import AsyncEthereumTesterProvider
 
@@ -151,7 +161,12 @@ def relay():
 
 @pytest.fixture
 async def create_node_managers(
-    privkeys: List[str], node_contracts: List[Contracts], relay: Relay, config: Config
+    privkeys: List[str],
+    node_contracts: List[Contracts],
+    relay: Relay,
+    config: Config,
+    gpu_name: str,
+    gpu_vram: int,
 ):
     new_data_dirs = []
 
@@ -184,7 +199,7 @@ async def create_node_managers(
                 task_state_cache,
                 queue=queue,
                 distributed=config.distributed,
-                task_name="mock_lora_inference",
+                task_name="mock_inference",
                 retry=(fail_step > 0),
             )
 
@@ -269,6 +284,8 @@ async def create_node_managers(
 
             manager = NodeManager(
                 config=config,
+                gpu_name=gpu_name,
+                gpu_vram=gpu_vram,
                 manager_state_cache=state_cache,
                 node_state_manager=state_manager,
                 privkey=privkey,
@@ -291,32 +308,56 @@ async def create_node_managers(
                 shutil.rmtree(data_dir)
 
 
-async def create_task(contracts: Contracts, relay: Relay, tx_option: TxOption):
-    prompt = (
-        "best quality, ultra high res, photorealistic++++, 1girl, off-shoulder sweater, smiling, "
-        "faded ash gray messy bun hair+, border light, depth of field, looking at "
-        "viewer, closeup"
-    )
+async def create_task(
+    task_type: models.TaskType, contracts: Contracts, relay: Relay, tx_option: TxOption
+):
+    if task_type == models.TaskType.SD:
+        prompt = (
+            "best quality, ultra high res, photorealistic++++, 1girl, off-shoulder sweater, smiling, "
+            "faded ash gray messy bun hair+, border light, depth of field, looking at "
+            "viewer, closeup"
+        )
 
-    negative_prompt = (
-        "paintings, sketches, worst quality+++++, low quality+++++, normal quality+++++, lowres, "
-        "normal quality, monochrome++, grayscale++, skin spots, acnes, skin blemishes, "
-        "age spot, glans"
-    )
+        negative_prompt = (
+            "paintings, sketches, worst quality+++++, low quality+++++, normal quality+++++, lowres, "
+            "normal quality, monochrome++, grayscale++, skin spots, acnes, skin blemishes, "
+            "age spot, glans"
+        )
 
-    args = {
-        "base_model": "runwayml/stable-diffusion-v1-5",
-        "prompt": prompt,
-        "negative_prompt": negative_prompt,
-        "task_config": {"num_images": 9, "safety_checker": False},
-    }
-    task_args = json.dumps(args)
+        args = {
+            "base_model": "runwayml/stable-diffusion-v1-5",
+            "prompt": prompt,
+            "negative_prompt": negative_prompt,
+            "task_config": {"num_images": 9, "safety_checker": False},
+        }
+        task_args = json.dumps(args)
 
-    task_hash = get_task_hash(task_args)
-    data_hash = bytes([0] * 32)
+        task_hash = get_task_hash(task_args)
+        data_hash = bytes([0] * 32)
+    else:
+        messages = [
+            {"role": "user", "content": "I want to create a chat bot. Any suggestions?"}
+        ]
+        args = {
+            "model": "gpt2",
+            "messages": messages,
+            "generation_config": {
+                "max_new_tokens": 30,
+            },
+            "seed": 42,
+        }
+
+        task_args = json.dumps(args)
+
+        task_hash = get_task_hash(task_args)
+        data_hash = bytes([0] * 32)
 
     waiter = await contracts.task_contract.create_task(
-        task_hash=task_hash, data_hash=data_hash, option=tx_option
+        task_type=task_type,
+        task_hash=task_hash,
+        data_hash=data_hash,
+        vram_limit=8,
+        option=tx_option,
     )
     receipt = await waiter.wait()
 
@@ -334,13 +375,39 @@ async def create_task(contracts: Contracts, relay: Relay, tx_option: TxOption):
     return task_id, round_map, receipt["blockNumber"]
 
 
+async def start_nodes(
+    node_managers: List[NodeManager], gpu_name: str, gpu_vram: int, tx_option
+):
+    waits = []
+    for m in node_managers:
+        assert m._node_state_manager is not None
+        waits.append(
+            await m._node_state_manager.start(
+                gpu_name=gpu_name, gpu_vram=gpu_vram, option=tx_option
+            )
+        )
+    for n in node_managers:
+        assert (await n.state_cache.get_tx_state()).status == models.TxStatus.Pending
+    async with create_task_group() as sub_tg:
+        for w in waits:
+            sub_tg.start_soon(w)
+    for n in node_managers:
+        assert (
+            await n.state_cache.get_node_state()
+        ).status == models.NodeStatus.Running
+
+
 @pytest.mark.parametrize("fail_step", [0, 1, 2, 3])
+@pytest.mark.parametrize("task_type", [models.TaskType.SD, models.TaskType.LLM])
 async def test_node_manager(
     create_node_managers: Callable[[int], Awaitable[List[NodeManager]]],
     node_contracts: List[Contracts],
     relay: Relay,
     tx_option,
+    gpu_name: str,
+    gpu_vram: int,
     fail_step: int,
+    task_type: models.TaskType,
 ):
     node_managers = await create_node_managers(fail_step)
 
@@ -348,31 +415,24 @@ async def test_node_manager(
         for n in node_managers:
             tg.start_soon(n.run, False)
 
-        waits = []
-        for m in node_managers:
-            assert m._node_state_manager is not None
-            waits.append(await m._node_state_manager.start(option=tx_option))
-        for n in node_managers:
-            assert (
-                await n.state_cache.get_tx_state()
-            ).status == models.TxStatus.Pending
-        async with create_task_group() as sub_tg:
-            for w in waits:
-                sub_tg.start_soon(w)
+        await start_nodes(node_managers, gpu_name, gpu_vram, tx_option)
 
-        for n in node_managers:
-            assert (
-                await n.state_cache.get_node_state()
-            ).status == models.NodeStatus.Running
-
-        task_id, _, _ = await create_task(node_contracts[0], relay, tx_option=tx_option)
+        task_id, _, _ = await create_task(
+            task_type, node_contracts[0], relay, tx_option=tx_option
+        )
 
         with BytesIO() as dst:
-            await relay.get_result(task_id=task_id, image_num=0, dst=dst)
+            await relay.get_result(task_id=task_id, index=0, dst=dst)
             dst.seek(0)
-            img = Image.open(dst)
-            assert img.width == 512
-            assert img.height == 512
+            if task_type == models.TaskType.SD:
+                img = Image.open(dst)
+                assert img.width == 512
+                assert img.height == 512
+            else:
+                resp = json.load(dst)
+                assert resp["model"] == "gpt2"
+                assert len(resp["choices"]) == 1
+                assert len(resp["choices"][0]["message"]["content"]) > 0
 
         waits = []
         for m in node_managers:
@@ -430,12 +490,16 @@ async def test_node_manager(
         tg.cancel_scope.cancel()
 
 
+@pytest.mark.parametrize("task_type", [models.TaskType.SD, models.TaskType.LLM])
 async def test_node_manager_auto_cancel(
     root_contracts: Contracts,
     create_node_managers: Callable[[int], Awaitable[List[NodeManager]]],
     node_contracts: List[Contracts],
     relay: Relay,
     tx_option,
+    gpu_name: str,
+    gpu_vram: int,
+    task_type: models.TaskType,
 ):
     node_managers = await create_node_managers(0)
     try:
@@ -444,25 +508,10 @@ async def test_node_manager_auto_cancel(
         async with create_task_group() as tg:
             tg.start_soon(node_managers[0].run, False)
 
-            waits = []
-            for m in node_managers:
-                assert m._node_state_manager is not None
-                waits.append(await m._node_state_manager.start(option=tx_option))
-            for n in node_managers:
-                assert (
-                    await n.state_cache.get_tx_state()
-                ).status == models.TxStatus.Pending
-            async with create_task_group() as sub_tg:
-                for w in waits:
-                    sub_tg.start_soon(w)
-
-            for n in node_managers:
-                assert (
-                    await n.state_cache.get_node_state()
-                ).status == models.NodeStatus.Running
+            await start_nodes(node_managers, gpu_name, gpu_vram, tx_option)
 
             task_id, _, _ = await create_task(
-                node_contracts[0], relay, tx_option=tx_option
+                task_type, node_contracts[0], relay, tx_option=tx_option
             )
 
             cancel_event = Event()
@@ -500,25 +549,17 @@ async def partial_run_task(
     node_contracts: List[Contracts],
     relay: Relay,
     tx_option,
+    gpu_name: str,
+    gpu_vram: int,
     stage: int,
+    task_type: models.TaskType,
 ):
     # start nodes
-    waits = []
-    for m in node_managers:
-        assert m._node_state_manager is not None
-        waits.append(await m._node_state_manager.start(option=tx_option))
-    async with create_task_group() as sub_tg:
-        for w in waits:
-            sub_tg.start_soon(w)
-
-    for n in node_managers:
-        assert (
-            await n.state_cache.get_node_state()
-        ).status == models.NodeStatus.Running
+    await start_nodes(node_managers, gpu_name, gpu_vram, tx_option)
 
     # create task
     task_id, round_map, block_number = await create_task(
-        node_contracts[0], relay, tx_option=tx_option
+        task_type, node_contracts[0], relay, tx_option=tx_option
     )
 
     result = bytes.fromhex("0102030405060708")
@@ -564,17 +605,29 @@ async def partial_run_task(
 
 
 @pytest.mark.parametrize("stage", [0, 1, 2])
+@pytest.mark.parametrize("task_type", [models.TaskType.SD, models.TaskType.LLM])
 async def test_node_manager_with_recover(
     config: Config,
     create_node_managers: Callable[[int], Awaitable[List[NodeManager]]],
     node_contracts: List[Contracts],
     relay: Relay,
     tx_option,
+    gpu_name: str,
+    gpu_vram: int,
     stage: int,
+    task_type: models.TaskType,
 ):
     node_managers = await create_node_managers(0)
     await partial_run_task(
-        config, node_managers, node_contracts, relay, tx_option, stage
+        config=config,
+        node_managers=node_managers,
+        node_contracts=node_contracts,
+        relay=relay,
+        tx_option=tx_option,
+        gpu_name=gpu_name,
+        gpu_vram=gpu_vram,
+        stage=stage,
+        task_type=task_type,
     )
     async with create_task_group() as tg:
         for n in node_managers:
@@ -586,11 +639,17 @@ async def test_node_manager_with_recover(
             ).status == models.NodeStatus.Running
 
         with BytesIO() as dst:
-            await relay.get_result(task_id=1, image_num=0, dst=dst)
+            await relay.get_result(task_id=1, index=0, dst=dst)
             dst.seek(0)
-            img = Image.open(dst)
-            assert img.width == 512
-            assert img.height == 512
+            if task_type == models.TaskType.SD:
+                img = Image.open(dst)
+                assert img.width == 512
+                assert img.height == 512
+            else:
+                resp = json.load(dst)
+                assert resp["model"] == "gpt2"
+                assert len(resp["choices"]) == 1
+                assert len(resp["choices"][0]["message"]["content"]) > 0
 
         waits = []
         for m in node_managers:

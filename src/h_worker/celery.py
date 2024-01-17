@@ -9,7 +9,7 @@ from celery.signals import celeryd_after_setup
 from h_worker import log
 from h_worker.config import get_config
 from h_worker.prefetch import prefetch, ModelConfig, ProxyConfig
-from h_worker.task import mock_lora_inference, sd_lora_inference
+from h_worker.task import mock_inference, inference
 
 _logger = logging.getLogger(__name__)
 
@@ -19,8 +19,8 @@ celery = Celery(
     backend=get_config().celery.backend,
 )
 
-celery.task(name="sd_lora_inference", track_started=True)(sd_lora_inference)
-celery.task(name="mock_lora_inference", track_started=True)(mock_lora_inference)
+celery.task(name="inference", track_started=True)(inference)
+celery.task(name="mock_inference", track_started=True)(mock_inference)
 
 
 @celeryd_after_setup.connect

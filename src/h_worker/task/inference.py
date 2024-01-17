@@ -24,8 +24,9 @@ def match_error(stdout: str) -> bool:
     return pattern.search(stdout) is not None
 
 
-def sd_lora_inference(
+def inference(
     task_id: int,
+    task_type: int,
     task_args: str,
     output_dir: str | None = None,
     hf_cache_dir: str | None = None,
@@ -36,6 +37,8 @@ def sd_lora_inference(
     distributed: bool = True,
     **kwargs,
 ):
+    assert task_type == 0 or task_type == 1, f"Invalid task type: {task_type}"
+
     if output_dir is None:
         config = get_config()
         output_dir = config.task.output_dir
@@ -65,6 +68,7 @@ def sd_lora_inference(
 
     _logger.info(
         f"task id: {task_id},"
+        f"task type: {task_type},"
         f"output_dir: {output_dir},"
         f"task_args: {task_args},"
         f"hf_cache_dir: {hf_cache_dir},"
@@ -80,9 +84,9 @@ def sd_lora_inference(
     if os.path.exists(worker_venv):
         exe = os.path.join(worker_venv, "bin", "python")
 
-    image_dir = os.path.abspath(os.path.join(output_dir, str(task_id)))
-    if not os.path.exists(image_dir):
-        os.makedirs(image_dir, exist_ok=True)
+    result_dir = os.path.abspath(os.path.join(output_dir, str(task_id)))
+    if not os.path.exists(result_dir):
+        os.makedirs(result_dir, exist_ok=True)
 
     if not os.path.exists(inference_logs_dir):
         os.makedirs(inference_logs_dir, exist_ok=True)
@@ -91,7 +95,8 @@ def sd_lora_inference(
     args = [
         exe,
         os.path.abspath(os.path.join(script_dir, "inference.py")),
-        image_dir,
+        str(task_type),
+        result_dir,
         f"{task_args}",
     ]
 
@@ -125,15 +130,16 @@ def sd_lora_inference(
             raise TaskError
 
     if distributed:
-        image_files = sorted(os.listdir(image_dir))
-        image_paths = [os.path.join(image_dir, file) for file in image_files]
+        result_files = sorted(os.listdir(result_dir))
+        result_paths = [os.path.join(result_dir, file) for file in result_files]
 
-        utils.upload_result(result_url + f"/v1/tasks/{task_id}/result", image_paths)
+        utils.upload_result(task_type, result_url + f"/v1/tasks/{task_id}/result", result_paths)
         _logger.info("Upload inference task result.")
 
 
-def mock_lora_inference(
+def mock_inference(
     task_id: int,
+    task_type: int,
     task_args: str,
     output_dir: str | None = None,
     hf_cache_dir: str | None = None,
@@ -144,6 +150,8 @@ def mock_lora_inference(
     distributed: bool = True,
     **kwargs,
 ):
+    assert task_type == 0 or task_type == 1, f"Invalid task type: {task_type}"
+
     if output_dir is None:
         config = get_config()
         output_dir = config.task.output_dir
@@ -165,6 +173,7 @@ def mock_lora_inference(
 
     _logger.info(
         f"task id: {task_id},"
+        f"task type: {task_type},"
         f"output_dir: {output_dir},"
         f"task_args: {task_args},"
         f"hf_cache_dir: {hf_cache_dir},"
@@ -174,12 +183,32 @@ def mock_lora_inference(
         f"result_url: {result_url},"
     )
 
-    image_dir = os.path.abspath(os.path.join(output_dir, str(task_id)))
-    if not os.path.exists(image_dir):
-        os.makedirs(image_dir, exist_ok=True)
+    result_dir = os.path.abspath(os.path.join(output_dir, str(task_id)))
+    if not os.path.exists(result_dir):
+        os.makedirs(result_dir, exist_ok=True)
 
-    shutil.copyfile("test.png", os.path.join(image_dir, "test.png"))
+    if task_type == 0:
+        shutil.copyfile("test.png", os.path.join(result_dir, "test.png"))
+    elif task_type == 1:
+        res = {
+            "model": "gpt2",
+            "choices": [
+                {
+                    "finish_reason": "length",
+                    "message": {
+                        "role": "assistant",
+                        "content": '\n\nI have a chat bot, called "Eleanor" which was developed by my team on Skype. '
+                        "The only thing I will say is this",
+                    },
+                    "index": 0,
+                }
+            ],
+            "usage": {"prompt_tokens": 11, "completion_tokens": 30, "total_tokens": 41},
+        }
+        dst = os.path.join(result_dir, "test.json")
+        with open(dst, mode="w", encoding="utf-8") as f:
+            json.dump(res, f, ensure_ascii=False)
 
     if distributed:
-        utils.upload_result(result_url + f"/v1/tasks/{task_id}/result", ["test.png"])
+        utils.upload_result(task_type, result_url + f"/v1/tasks/{task_id}/result", ["test.png"])
         _logger.info("Upload inference task result.")

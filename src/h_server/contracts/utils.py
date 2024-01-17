@@ -82,20 +82,21 @@ class ContractWrapperBase(object):
         self.w3 = w3
 
         abi, bytecode = read_abi(contract_name)
+        self.abi = abi
+        self.bytecode = bytecode
         self._address = contract_address
         if contract_address is not None:
             self._contract = w3.eth.contract(address=contract_address, abi=abi)
-            self._contract_builder = None
         else:
             self._contract = None
-            self._contract_builder = w3.eth.contract(abi=abi, bytecode=bytecode)
 
         self._nonce_lock = Lock()
 
     async def deploy(self, *args, **kwargs):
-        assert (
-            self._contract is None and self._contract_builder is not None
-        ), "Contract has been deployed"
+        assert self._contract is None, "Contract has been deployed"
+
+        _contract_builder = self.w3.eth.contract(abi=self.abi, bytecode=self.bytecode)
+
         option = kwargs.pop("option", None)
         if option is None:
             option = get_default_tx_option()
@@ -111,7 +112,7 @@ class ContractWrapperBase(object):
             if "from" not in option:
                 option["from"] = self.w3.eth.default_account
 
-            tx_hash = await self._contract_builder.constructor(
+            tx_hash = await _contract_builder.constructor(
                 *args, **kwargs
             ).transact(  # type: ignore
                 option
@@ -122,9 +123,8 @@ class ContractWrapperBase(object):
         assert address is not None, "Deployed contract address is None"
         self._address = address
         self._contract = self.w3.eth.contract(
-            address=address, abi=self._contract_builder.abi
+            address=address, abi=self.abi
         )
-        self._contract_builder = None
 
     @property
     def address(self) -> ChecksumAddress:

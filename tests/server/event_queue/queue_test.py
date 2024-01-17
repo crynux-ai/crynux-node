@@ -21,6 +21,7 @@ async def test_memory_event_queue():
     events = [
         models.TaskCreated(
             task_id=task_id,
+            task_type=models.TaskType.SD,
             creator=creator,
             selected_node=address,
             task_hash=task_hash,
@@ -73,6 +74,7 @@ async def test_db_event_queue(init_db):
     events = [
         models.TaskCreated(
             task_id=task_id,
+            task_type=models.TaskType.SD,
             creator=creator,
             selected_node=address,
             task_hash=task_hash,

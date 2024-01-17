@@ -24,7 +24,7 @@ class TaskSystem(object):
         queue: EventQueue,
         distributed: bool = False,
         retry: bool = True,
-        task_name: str = "sd_lora_inference",
+        task_name: str = "inference",
     ) -> None:
         self._state_cache = state_cache
         self._queue = queue

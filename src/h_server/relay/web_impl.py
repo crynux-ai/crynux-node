@@ -1,5 +1,6 @@
 import json
 import os
+from contextlib import ExitStack
 from typing import BinaryIO, List
 
 import httpx
@@ -67,31 +68,33 @@ class WebRelay(Relay):
         input = {"task_id": task_id}
         timestamp, signature = self.signer.sign(input)
 
-        files = []
-        for file_path in file_paths:
-            filename = os.path.basename(file_path)
-            files.append(("images", (filename, open(file_path, "rb"), "image/png")))
+        with ExitStack() as stack:
+            files = []
+            for file_path in file_paths:
+                filename = os.path.basename(file_path)
+                file_obj = stack.enter_context(open(file_path, "rb"))
+                files.append(("images", (filename, file_obj)))
 
-        resp = await self.client.post(
-            f"/v1/inference_tasks/{task_id}/results",
-            data={"timestamp": timestamp, "signature": signature},
-            files=files,
-        )
-        resp = _process_resp(resp, "uploadTaskResult")
-        content = resp.json()
-        message = content["message"]
-        if message != "success":
-            raise RelayError(resp.status_code, "uploadTaskResult", message)
+            resp = await self.client.post(
+                f"/v1/inference_tasks/{task_id}/results",
+                data={"timestamp": timestamp, "signature": signature},
+                files=files,
+            )
+            resp = _process_resp(resp, "uploadTaskResult")
+            content = resp.json()
+            message = content["message"]
+            if message != "success":
+                raise RelayError(resp.status_code, "uploadTaskResult", message)
 
-    async def get_result(self, task_id: int, image_num: int, dst: BinaryIO):
-        input = {"task_id": task_id, "image_num": str(image_num)}
+    async def get_result(self, task_id: int, index: int, dst: BinaryIO):
+        input = {"task_id": task_id, "image_num": str(index)}
         timestamp, signature = self.signer.sign(input)
 
         async_dst = wrap_file(dst)
 
         async with self.client.stream(
             "GET",
-            f"/v1/inference_tasks/{task_id}/results/{image_num}",
+            f"/v1/inference_tasks/{task_id}/results/{index}",
             params={"timestamp": timestamp, "signature": signature},
         ) as resp:
             resp = _process_resp(resp, "getTask")

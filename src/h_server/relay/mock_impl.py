@@ -71,14 +71,14 @@ class MockRelay(Relay):
 
                 condition.notify()
 
-    async def get_result(self, task_id: int, image_num: int, dst: BinaryIO):
+    async def get_result(self, task_id: int, index: int, dst: BinaryIO):
         with self.wrap_error("getResult"):
             condition = self.get_condition(task_id=task_id)
             async with condition:
                 while task_id not in self.task_results:
                     await condition.wait()
 
-            src_file = self.task_results[task_id][image_num]
+            src_file = self.task_results[task_id][index]
 
             def _copy_file_obj():
                 with open(src_file, mode="rb") as src:

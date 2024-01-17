@@ -41,26 +41,31 @@ FROM base as builder2
 WORKDIR /app
 
 COPY stable-diffusion-task stable-diffusion-task
-
-WORKDIR /app/stable-diffusion-task
+COPY gpt-task gpt-task
+COPY requirements_worker.txt requirements.txt
 
 RUN python3 -m venv venv
-ENV PATH="/app/stable-diffusion-task/venv/bin:${PATH}"
+ENV PATH="/app/venv/bin:${PATH}"
 
-RUN pip install -r requirements.txt && pip install .
+RUN pip install -r requirements.txt
+
+WORKDIR /app/stable-diffusion-task
+RUN pip install .
+WORKDIR /app/gpt-task
+RUN pip install .
 
 FROM base as final
 
 COPY --from=builder1 /app/venv /app/venv
-COPY --from=builder2 /app/stable-diffusion-task /app/stable-diffusion-task
-COPY src/prefetch.py /app/stable-diffusion-task/prefetch.py
-COPY src/inference.py /app/stable-diffusion-task/inference.py
+COPY --from=builder2 /app/venv /app/worker/venv
+COPY src/prefetch.py /app/worker/prefetch.py
+COPY src/inference.py /app/worker/inference.py
 
 ENV PATH="/app/venv/bin:${PATH}"
 
 WORKDIR /app
 
-RUN mkdir data && mkdir data/external && mkdir data/huggingface && mkdir data/images && mkdir data/inference-logs
+RUN mkdir data && mkdir data/external && mkdir data/huggingface && mkdir data/results && mkdir data/inference-logs
 COPY config/config.yml.example config.yml.example
 COPY start.sh start.sh
 COPY --from=web-builder /app/dist/ dist/

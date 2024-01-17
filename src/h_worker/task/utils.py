@@ -1,5 +1,7 @@
+import json
 import hashlib
 import os.path
+from contextlib import ExitStack
 from mimetypes import guess_extension, guess_type
 from typing import List
 from urllib.parse import urlparse
@@ -15,6 +17,11 @@ http_client = httpx.Client()
 
 def get_image_hash(filename: str) -> str:
     return imhash.getPHash(filename)  # type: ignore
+
+
+def get_gpt_resp_hash(filename: str) -> str:
+    with open(filename, mode="rb") as f:    
+        return "0x" + hashlib.sha256(f.read()).hexdigest()
 
 
 def is_valid_url(url: str) -> bool:
@@ -74,17 +81,29 @@ def get_pose_file(data_dir: str, task_id: int, pose_url: str) -> str:
     return pose_file
 
 
-def upload_result(result_url: str, images: List[str]):
-    hashes = []
-    files = []
-    for image in images:
-        image_name = os.path.basename(image)
-        hashes.append(get_image_hash(image))
-        files.append(("files", (image_name, open(image, "rb"), "image/png")))
+def upload_result(task_type: int, result_url: str, files: List[str]):
+    assert task_type == 0 or task_type == 1, f"Invalid task type: {task_type}"
+    with ExitStack() as stack:
+        hashes = []
+        upload_files = []
+        if task_type == 0:
+            # sd task
+            for file in files:
+                hashes.append(get_image_hash(file))
+                filename = os.path.basename(file)
+                file_obj = stack.enter_context(open(file, "rb"))
+                upload_files.append(("files", (filename, file_obj)))
+        else:
+            # llm task
+            for file in files:
+                hashes.append(get_gpt_resp_hash(file))
+                filename = os.path.basename(file)
+                file_obj = stack.enter_context(open(file, "rb"))
+                upload_files.append(("files", (filename, file_obj)))
 
-    resp = http_client.post(
-        result_url,
-        files=files,
-        data={"hashes": hashes},
-    )
-    resp.raise_for_status()
+        resp = http_client.post(
+            result_url,
+            files=upload_files,
+            data={"hashes": hashes},
+        )
+        resp.raise_for_status()

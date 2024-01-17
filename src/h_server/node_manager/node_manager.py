@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-import time
 from typing import List, Optional, Type, cast
 
 from anyio import (Event, create_task_group, fail_after,
@@ -113,6 +112,8 @@ class NodeManager(object):
     def __init__(
         self,
         config: Config,
+        gpu_name: str,
+        gpu_vram: int,
         event_queue_cls: Type[EventQueue] = DbEventQueue,
         block_number_cache_cls: Type[BlockNumberCache] = DbBlockNumberCache,
         task_state_cache_cls: Type[TaskStateCache] = DbTaskStateCache,
@@ -130,6 +131,8 @@ class NodeManager(object):
         retry_delay: float = 30,
     ) -> None:
         self.config = config
+        self.gpu_name = gpu_name
+        self.gpu_vram = gpu_vram
 
         self.event_queue_cls = event_queue_cls
         self.block_number_cache_cls = block_number_cache_cls
@@ -287,6 +290,7 @@ class NodeManager(object):
         # task created
         event = models.TaskCreated(
             task_id=task_id,
+            task_type=task.task_type,
             creator=Web3.to_checksum_address(task.creator),
             selected_node=self._contracts.account,
             task_hash=Web3.to_hex(task.task_hash),
@@ -414,7 +418,7 @@ class NodeManager(object):
 
                 if self.config.headless:
                     assert self._node_state_manager is not None
-                    tg.start_soon(self._node_state_manager.try_start)
+                    tg.start_soon(self._node_state_manager.try_start, self.gpu_name, self.gpu_vram)
                 else:
                     tg.start_soon(self._sync_state)
                 tg.start_soon(self._watch_events)

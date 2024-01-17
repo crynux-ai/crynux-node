@@ -18,7 +18,7 @@ class Relay(ABC):
         ...
 
     @abstractmethod
-    async def get_result(self, task_id: int, image_num: int, dst: BinaryIO):
+    async def get_result(self, task_id: int, index: int, dst: BinaryIO):
         ...
 
     @abstractmethod
