@@ -46,5 +46,5 @@ def test_gpu_resp_hash():
             json.dump(resp, f, ensure_ascii=False)
         
         h = get_gpt_resp_hash(resp_file)
-        assert h == "0xd5188d83d2abbd4322fdd950b02c39b6bdbbe2cb5a160233607336db41bd262f"
+        assert h == "0xe0329fdf227326f345630a5397f3eb01a9759c27af5df0d279b8dceedfda40c8"
 

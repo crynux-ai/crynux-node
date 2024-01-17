@@ -20,14 +20,8 @@ def get_image_hash(filename: str) -> str:
 
 
 def get_gpt_resp_hash(filename: str) -> str:
-    with open(filename, mode="r", encoding="utf-8") as f:
-        resp = json.load(f)
-    
-    content = ""
-    for choice in resp["choices"]:
-        content += choice["message"]["content"]
-    
-    return "0x" + hashlib.sha256(content.encode("utf-8")).hexdigest()
+    with open(filename, mode="rb") as f:    
+        return "0x" + hashlib.sha256(f.read()).hexdigest()
 
 
 def is_valid_url(url: str) -> bool:
