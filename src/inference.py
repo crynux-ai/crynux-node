@@ -48,7 +48,7 @@ def main():
         if task_type == 0:
             # sd task
             sd_inference(output_dir, task_args_str)
-        elif task_type == 0:
+        elif task_type == 1:
             # gpt task
             gpt_inference(output_dir, task_args_str)
         else:
