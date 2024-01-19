@@ -25,8 +25,8 @@ ethereum:
   # The deployed addresses of the smart contracts
   contract:
     token: "0x95E7e7Ed5463Ff482f61585605a0ff278e0E1FFb"
-    node: "0x719f8f1e106BeF85f2ffC1D23e86C9cbCb7ddB67"
-    task: "0xd14f963B54Deff1993FF7987954602c9593d36A4"
+    node: "0xb6dEcFd5D51A1157f7D6B7668274c6580A128601"
+    task: "0xe625d0edC6a79cD23Ef4EbB91bE7574bf2451146"
 
 # The directory to store the temp files related to the running task
 task_dir: tasks
