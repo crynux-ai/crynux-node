@@ -4,12 +4,12 @@ from typing import List
 from anyio import create_task_group, sleep
 from fastapi.testclient import TestClient
 
-from h_server import models
-from h_server.contracts import Contracts
-from h_server.models.task import PoseConfig, TaskConfig
-from h_server.node_manager import NodeManager
-from h_server.relay import Relay
-from h_server.utils import get_task_hash
+from crynux_server import models
+from crynux_server.contracts import Contracts
+from crynux_server.models.task import PoseConfig, TaskConfig
+from crynux_server.node_manager import NodeManager
+from crynux_server.relay import Relay
+from crynux_server.utils import get_task_hash
 
 
 async def test_get_task_stats_empty(client: TestClient):

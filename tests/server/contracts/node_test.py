@@ -2,8 +2,8 @@ from typing import Tuple
 
 from web3 import Web3
 
-from h_server.contracts import Contracts
-from h_server.models import GpuInfo, ChainNodeStatus
+from crynux_server.contracts import Contracts
+from crynux_server.models import GpuInfo, ChainNodeStatus
 
 
 async def test_node(contracts_with_tokens: Tuple[Contracts, Contracts, Contracts], tx_option):

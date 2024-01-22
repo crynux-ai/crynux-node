@@ -11,24 +11,24 @@ from eth_account import Account
 from PIL import Image
 from web3 import Web3
 
-from h_server import models
-from h_server.config import Config, TxOption, set_config
-from h_server.contracts import Contracts
-from h_server.event_queue import EventQueue, MemoryEventQueue
-from h_server.node_manager import (
+from crynux_server import models
+from crynux_server.config import Config, TxOption, set_config
+from crynux_server.contracts import Contracts
+from crynux_server.event_queue import EventQueue, MemoryEventQueue
+from crynux_server.node_manager import (
     NodeManager,
     NodeStateManager,
 )
-from h_server.node_manager.state_cache import (
+from crynux_server.node_manager.state_cache import (
     MemoryNodeStateCache,
     MemoryTxStateCache,
     ManagerStateCache,
 )
-from h_server.relay import MockRelay, Relay
-from h_server.task import InferenceTaskRunner, MemoryTaskStateCache, TaskSystem
-from h_server.task.state_cache import TaskStateCache
-from h_server.utils import get_task_hash
-from h_server.watcher import EventWatcher, MemoryBlockNumberCache
+from crynux_server.relay import MockRelay, Relay
+from crynux_server.task import InferenceTaskRunner, MemoryTaskStateCache, TaskSystem
+from crynux_server.task.state_cache import TaskStateCache
+from crynux_server.utils import get_task_hash
+from crynux_server.watcher import EventWatcher, MemoryBlockNumberCache
 
 
 @pytest.fixture

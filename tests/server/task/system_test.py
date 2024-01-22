@@ -4,11 +4,11 @@ from typing import Optional
 from anyio import Condition, create_task_group, fail_after, sleep
 from web3 import Web3
 
-from h_server import models
-from h_server.event_queue import EventQueue, MemoryEventQueue
-from h_server.task import MemoryTaskStateCache, TaskSystem
-from h_server.task.state_cache import TaskStateCache
-from h_server.task.task_runner import MockTaskRunner
+from crynux_server import models
+from crynux_server.event_queue import EventQueue, MemoryEventQueue
+from crynux_server.task import MemoryTaskStateCache, TaskSystem
+from crynux_server.task.state_cache import TaskStateCache
+from crynux_server.task.task_runner import MockTaskRunner
 
 
 class AckMemoryEventQueue(MemoryEventQueue):

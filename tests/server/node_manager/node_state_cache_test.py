@@ -1,13 +1,13 @@
 import pytest
 
-from h_server import db, models
-from h_server.node_manager.state_cache import (
+from crynux_server import db, models
+from crynux_server.node_manager.state_cache import (
     MemoryNodeStateCache,
     DbNodeStateCache,
     MemoryTxStateCache,
     DbTxStateCache,
 )
-from h_server.node_manager import ManagerStateCache
+from crynux_server.node_manager import ManagerStateCache
 
 
 @pytest.fixture

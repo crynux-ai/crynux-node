@@ -1,4 +1,4 @@
-from h_server.relay.sign import Signer
+from crynux_server.relay.sign import Signer
 
 
 def test_sign():

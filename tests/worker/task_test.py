@@ -2,7 +2,7 @@ import os.path
 import json
 import tempfile
 
-from h_worker.task.utils import get_image_hash, get_gpt_resp_hash
+from crynux_worker.task.utils import get_image_hash, get_gpt_resp_hash
 
 import concurrent.futures
 

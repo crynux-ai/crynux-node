@@ -1,4 +1,4 @@
-from h_worker.prefetch import prefetch
+from crynux_worker.prefetch import prefetch
 
 
 def test_prefetch():

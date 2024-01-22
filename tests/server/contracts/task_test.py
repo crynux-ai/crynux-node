@@ -6,9 +6,9 @@ from anyio import create_task_group, create_memory_object_stream
 import pytest
 from web3 import Web3
 
-from h_server.models import ChainNodeStatus, TaskType
-from h_server.contracts import Contracts, TxRevertedError
-from h_server.watcher import EventWatcher
+from crynux_server.models import ChainNodeStatus, TaskType
+from crynux_server.contracts import Contracts, TxRevertedError
+from crynux_server.watcher import EventWatcher
 
 
 @pytest.fixture(scope="module")

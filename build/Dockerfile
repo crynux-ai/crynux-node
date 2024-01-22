@@ -25,7 +25,7 @@ WORKDIR /app
 RUN python3 -m venv venv
 ENV PATH="/app/venv/bin:${PATH}"
 
-WORKDIR /app/h-node
+WORKDIR /app/crynux-node
 
 COPY src src
 COPY pyproject.toml pyproject.toml
@@ -70,7 +70,7 @@ COPY config/config.yml.example config.yml.example
 COPY start.sh start.sh
 COPY --from=web-builder /app/dist/ dist/
 
-ENV H_SERVER_CONFIG="/app/config/config.yml"
+ENV CRYNUX_SERVER_CONFIG="/app/config/config.yml"
 
 ENTRYPOINT ["bash", "start.sh"]
 CMD [ "run" ]
