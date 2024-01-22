@@ -2,7 +2,7 @@ import pytest
 from eth_account import Account
 from web3 import Web3
 
-from h_server.contracts import Contracts
+from crynux_server.contracts import Contracts
 
 
 @pytest.fixture(scope="module")

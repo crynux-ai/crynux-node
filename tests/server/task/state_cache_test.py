@@ -2,9 +2,9 @@ import pytest
 
 from datetime import datetime
 
-from h_server import db
-from h_server.models import TaskState, TaskStatus
-from h_server.task.state_cache import DbTaskStateCache, MemoryTaskStateCache
+from crynux_server import db
+from crynux_server.models import TaskState, TaskStatus
+from crynux_server.task.state_cache import DbTaskStateCache, MemoryTaskStateCache
 
 
 async def test_memory_state_cache():

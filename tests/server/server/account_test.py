@@ -6,7 +6,7 @@ from eth_account import Account
 from fastapi.testclient import TestClient
 from httpx import HTTPStatusError
 
-from h_server.config import wait_privkey
+from crynux_server.config import wait_privkey
 
 
 async def test_get_account_empty(client: TestClient):

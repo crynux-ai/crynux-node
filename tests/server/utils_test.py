@@ -1,4 +1,4 @@
-from h_server import utils
+from crynux_server import utils
 
 
 async def test_gpu_info(enable_gpu):

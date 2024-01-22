@@ -15,7 +15,7 @@ A complete getting started guide to start a node is provided in the document:
 1. Pull the Docker image from GitHub
 
 ```shell
-# docker pull ghcr.io/crynux-ai/h-node:latest
+# docker pull ghcr.io/crynux-ai/crynux-node:latest
 ```
 
 2. Start the container
@@ -23,7 +23,7 @@ A complete getting started guide to start a node is provided in the document:
 The port ```7412``` is exposed for the WebUI. And GPUs must be provided to the container.
 
 ```shell
-# docker run -d -p 127.0.0.1:7412:7412 --gpus all ghcr.io/crynux-ai/h-node:latest
+# docker run -d -p 127.0.0.1:7412:7412 --gpus all ghcr.io/crynux-ai/crynux-node:latest
 ```
 
 
@@ -39,25 +39,25 @@ http://localhost:7412
 1. Clone the project
 
 ```shell
-# git clone https://github.com/crynux-ai/h-node.git
+# git clone https://github.com/crynux-ai/crynux-node.git
 ```
 
 2. Go to the root folder of the project
 
 ```shell
-# cd h-node
+# cd crynux-node
 ```
 
 3. Build the Docker image
 
 ```shell
-# docker build -t h_node:dev -f .\build\Dockerfile . 
+# docker build -t crynux-node:dev -f .\build\Dockerfile . 
 ```
 
 4. Start the container
 
 ```shell
-# docker run -d -p 127.0.0.1:7412:7412 --gpus all h_node:dev
+# docker run -d -p 127.0.0.1:7412:7412 --gpus all crynux-node:dev
 ```
 
 ## Run tests
@@ -65,13 +65,13 @@ http://localhost:7412
 1. Clone the project
 
 ```shell
-# git clone https://github.com/crynux-ai/h-node.git
+# git clone https://github.com/crynux-ai/crynux-node.git
 ```
 
 2. Go to the root folder of the project
 
 ```shell
-# cd h-node
+# cd crynux-node
 ```
 
 3. Install the dependencies and package (preferably in a virtualenv)

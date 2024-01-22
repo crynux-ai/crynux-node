@@ -3,8 +3,8 @@ import secrets
 import pytest
 from web3 import Web3
 
-from h_server import db, models
-from h_server.event_queue import DbEventQueue, MemoryEventQueue
+from crynux_server import db, models
+from crynux_server.event_queue import DbEventQueue, MemoryEventQueue
 
 
 async def test_memory_event_queue():
