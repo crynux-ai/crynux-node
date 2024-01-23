@@ -1,7 +1,6 @@
 from typing import TYPE_CHECKING, Any, Dict, Optional, Union, cast
 
 from eth_typing import ChecksumAddress
-from solcx import link_code
 from web3 import AsyncWeb3
 from web3.contract.async_contract import AsyncContractEvent
 
