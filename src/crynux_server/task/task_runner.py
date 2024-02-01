@@ -10,6 +10,7 @@ from typing import Awaitable, Callable, Deque, List, Optional, Tuple
 from anyio import (
     Condition,
     CancelScope,
+    Lock,
     create_task_group,
     fail_after,
     sleep_until,
@@ -284,6 +285,24 @@ class TaskRunner(ABC):
             self._queue_condition.notify(1)
 
 
+class OnceEventPusher(object):
+    def __init__(self, queue: EventQueue) -> None:
+        self.queue = queue
+
+        self.used = False
+        self.lock = Lock()
+
+    async def push(self, event_data: EventData):
+        async with self.lock:
+            if not self.used:
+                event = models.load_event_from_contracts(event_data)
+                await self.queue.put(event)
+                self.used = True
+                _logger.debug(f"push event {event_data} to queue successfully")
+            else:
+                _logger.debug(f"cannot push event {event_data} to queue twice")
+
+
 class InferenceTaskRunner(TaskRunner):
     def __init__(
         self,
@@ -332,28 +351,27 @@ class InferenceTaskRunner(TaskRunner):
 
         self._cleaned = False
 
-        async def _push_event(event_data: EventData):
-            event = models.load_event_from_contracts(event_data)
-            await self.queue.put(event)
-
         self._commitment_watch_id = self.watcher.watch_event(
             "task",
             "TaskResultCommitmentsReady",
-            callback=_push_event,
+            callback=OnceEventPusher(self.queue).push,
             filter_args={"taskId": self.task_id},
         )
+        _logger.debug(f"commitment watcher id {self._commitment_watch_id}")
         self._success_watch_id = self.watcher.watch_event(
             "task",
             "TaskSuccess",
-            callback=_push_event,
+            callback=OnceEventPusher(self.queue).push,
             filter_args={"taskId": self.task_id},
         )
+        _logger.debug(f"success watcher id {self._success_watch_id}")
         self._aborted_watch_id = self.watcher.watch_event(
             "task",
             "TaskAborted",
-            callback=_push_event,
+            callback=OnceEventPusher(self.queue).push,
             filter_args={"taskId": self.task_id},
         )
+        _logger.debug(f"abort watcher id {self._aborted_watch_id}")
 
     async def _call_task_contract_method(self, method: str, *args, **kwargs):
         if (
