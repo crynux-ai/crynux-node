@@ -52,6 +52,7 @@ class EventFilter(object):
         
         if start <= end:
             events = await self.event.get_logs(argument_filters=self.filter_args, fromBlock=start, toBlock=end)
+            _logger.debug(f"{len(events)} events from block {start} to block {end}")
             for event in events:
                 _logger.debug(f"Watch event: {event}")
                 tg.start_soon(wrap_callback(self.callback), event)
@@ -117,13 +118,13 @@ class EventWatcher(object):
         filter_id = self._next_filter_id
         self._event_filters[filter_id] = event_filter
         self._next_filter_id += 1
-        _logger.debug(f"Watch event {contract_name}.{event_name}, {filter_args}")
+        _logger.debug(f"Add event watcher {contract_name}.{event_name}, {filter_args}")
         return filter_id
 
     def unwatch_event(self, filter_id: int):
         if filter_id in self._event_filters:
             event_filter = self._event_filters.pop(filter_id)
-            _logger.debug(f"Unwatch event {event_filter.event.event_name}")
+            _logger.debug(f"Remove event watcher {event_filter.event.event_name}")
 
     async def start(
         self,
