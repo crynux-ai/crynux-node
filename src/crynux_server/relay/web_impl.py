@@ -37,7 +37,7 @@ def _process_resp(resp: httpx.Response, method: str):
 class WebRelay(Relay):
     def __init__(self, base_url: str, privkey: str) -> None:
         super().__init__()
-        self.client = httpx.AsyncClient(base_url=base_url)
+        self.client = httpx.AsyncClient(base_url=base_url, timeout=30)
         self.signer = Signer(privkey=privkey)
 
     async def create_task(self, task_id: int, task_args: str) -> RelayTask:
@@ -75,10 +75,12 @@ class WebRelay(Relay):
                 file_obj = stack.enter_context(open(file_path, "rb"))
                 files.append(("images", (filename, file_obj)))
 
+            # disable timeout because there may be many images or image size may be very large
             resp = await self.client.post(
                 f"/v1/inference_tasks/{task_id}/results",
                 data={"timestamp": timestamp, "signature": signature},
                 files=files,
+                timeout=None
             )
             resp = _process_resp(resp, "uploadTaskResult")
             content = resp.json()
