@@ -1,3 +1,4 @@
+import math
 import signal
 
 import anyio
@@ -21,7 +22,7 @@ async def _run():
 
     gpu_info = await utils.get_gpu_info()
     gpu_name = gpu_info.model
-    gpu_vram = gpu_info.vram_total // 1024
+    gpu_vram = math.ceil(gpu_info.vram_total / 1024)
 
     node_manager = NodeManager(config=config, gpu_name=gpu_name, gpu_vram=gpu_vram)
     set_node_manager(node_manager)
