@@ -40,18 +40,19 @@ FROM base as builder2
 
 WORKDIR /app
 
-COPY stable-diffusion-task stable-diffusion-task
-COPY gpt-task gpt-task
-COPY requirements_worker.txt requirements.txt
 
 RUN python3 -m venv venv
 ENV PATH="/app/venv/bin:${PATH}"
 
-RUN pip install -r requirements.txt
-
+COPY stable-diffusion-task stable-diffusion-task
 WORKDIR /app/stable-diffusion-task
+RUN pip install -r requirements_cuda.txt
 RUN pip install .
+
+
+COPY gpt-task gpt-task
 WORKDIR /app/gpt-task
+RUN pip install -r requirements_cuda.txt
 RUN pip install .
 
 FROM base as final
