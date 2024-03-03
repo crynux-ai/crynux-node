@@ -1,8 +1,8 @@
 from fastapi.testclient import TestClient
 
 
-async def test_system_api(client: TestClient, enable_gpu: bool):
-    if not enable_gpu:
+async def test_system_api(client: TestClient, use_cuda: bool):
+    if not use_cuda:
         return
 
     resp = client.get("/manager/v1/system")
