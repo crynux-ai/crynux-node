@@ -51,7 +51,7 @@ async def control_node(
         gpu_info = await utils.get_gpu_info()
         wait = await state_manager.start(
             gpu_name=gpu_info.model,
-            gpu_vram=math.ceil(gpu_info.vram_total / 1024)
+            gpu_vram=math.ceil(gpu_info.vram_total_mb / 1024)
         )
     elif input.action == "pause":
         wait = await state_manager.pause()

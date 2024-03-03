@@ -20,8 +20,8 @@ const systemInfo = reactive({
   gpu: {
     usage: 0,
     model: '',
-    vram_used: 0,
-    vram_total: 0
+    vram_used_mb: 0,
+    vram_total_mb: 0
   },
   cpu: {
     usage: 0,
@@ -484,7 +484,7 @@ const topRowClasses = computed(() => {
             <a-row style="margin-top: 12px">
               <a-col :span="12">
                 <a-statistic
-                  :value="systemInfo.gpu.vram_used"
+                  :value="systemInfo.gpu.vram_used_mb"
                   :value-style="{ 'font-size': '14px' }"
                 >
                   <template #title><span style="font-size: 12px">VRAM Used</span></template>
@@ -493,7 +493,7 @@ const topRowClasses = computed(() => {
               </a-col>
               <a-col :span="12">
                 <a-statistic
-                  :value="systemInfo.gpu.vram_total"
+                  :value="systemInfo.gpu.vram_total_mb"
                   :value-style="{ 'font-size': '14px' }"
                 >
                   <template #title><span style="font-size: 12px">VRAM Total</span></template>

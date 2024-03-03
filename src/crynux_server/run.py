@@ -22,9 +22,9 @@ async def _run():
 
     gpu_info = await utils.get_gpu_info()
     gpu_name = gpu_info.model
-    gpu_vram = math.ceil(gpu_info.vram_total / 1024)
+    gpu_vram_gb = math.ceil(gpu_info.vram_total_mb / 1024)
 
-    node_manager = NodeManager(config=config, gpu_name=gpu_name, gpu_vram=gpu_vram)
+    node_manager = NodeManager(config=config, gpu_name=gpu_name, gpu_vram=gpu_vram_gb)
     set_node_manager(node_manager)
 
     async def signal_handler(scope: CancelScope):

@@ -1,13 +1,11 @@
 from crynux_server import utils
 
 
-async def test_gpu_info(use_cuda):
-    if not use_cuda:
-        return
+async def test_gpu_info():
     gpu_info = await utils.get_gpu_info()
     assert len(gpu_info.model) > 0
-    assert gpu_info.vram_total > 0
-    assert gpu_info.vram_used > 0
+    assert gpu_info.vram_total_mb > 0
+    assert gpu_info.vram_used_mb > 0
 
 
 async def test_cpu_info():
