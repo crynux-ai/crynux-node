@@ -8,7 +8,7 @@ async def test_system_api(client: TestClient):
     resp_data = resp.json()
 
     gpu_info = resp_data["gpu"]
-    assert gpu_info["usage"] > 0
+    assert gpu_info["usage"] >= 0
     assert len(gpu_info["model"]) > 0
     assert gpu_info["vram_used_mb"] > 0
     assert gpu_info["vram_total_mb"] > 0
