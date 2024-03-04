@@ -1,9 +1,10 @@
 import pytest
 
 def pytest_addoption(parser):
-    parser.addoption("--gpu", action="store_true", help="run tests with gpu")
+    parser.addoption("--platform", type=str, action="store", default="cuda", help="cuda or macos")
 
 
 def pytest_generate_tests(metafunc):
-    if "enable_gpu" in metafunc.fixturenames:
-        metafunc.parametrize("enable_gpu", [metafunc.config.getoption("--gpu")])
+    platform = metafunc.config.getoption("--platform")
+    if "use_cuda" in metafunc.fixturenames:
+        metafunc.parametrize("use_cuda", [platform == "cuda"])

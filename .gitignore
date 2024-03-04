@@ -1,6 +1,7 @@
 venv
 .idea
 .vscode
+.DS_Store
 *.iml
 *.pyc
 __pycache__/
@@ -15,3 +16,4 @@ db/*
 logs/*
 config.json
 dist/*
+task/*

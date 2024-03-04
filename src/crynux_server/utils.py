@@ -46,22 +46,67 @@ def get_os():
     return platform.system()
 
 
+class MemoryInfo(BaseModel):
+    available_mb: int = 0
+    total_mb: int = 0
+
+
+async def get_linux_memory_info() -> MemoryInfo:
+    info = MemoryInfo()
+
+    res = await run_process(["cat", "/proc/meminfo"])
+    output = res.stdout.decode()
+
+    m = re.search(r"MemAvailable:\s+(\d+)", output)
+    if m is not None:
+        info.available_mb = round(int(m.group(1)) / 1024)
+
+    m = re.search(r"MemTotal:\s+(\d+)", output)
+    if m is not None:
+        info.total_mb = round(int(m.group(1)) / 1024)
+
+    return info
+
+async def get_osx_memory_info() -> MemoryInfo:
+    info = MemoryInfo()
+    res = await run_process(["sysctl", "hw.memsize"])
+    output = res.stdout.decode()
+    total_mem = re.match(r"hw.memsize: (\d+)", output)
+    if total_mem:
+        info.total_mb = round(int(total_mem.group(1)) / 1024 / 1024)
+
+    usage_cmd = ("vm_stat | perl -ne '/page size of (\\d+)/ and $size=$1; "
+        "/Pages\\s+free[^\\d]+(\\d+)/ and printf(\"%.2f\",  $1 * $size / 1048576);'")
+    res = await run_process(usage_cmd)
+    output = res.stdout.decode()
+    info.available_mb = int(float(output))
+
+    return info
+
+async def get_memory_info() -> MemoryInfo:
+    memory_info_fn = {
+        "Darwin": get_osx_memory_info,
+        "Linux": get_linux_memory_info,
+    }
+    return await memory_info_fn[get_os()]()
+
+
 class GpuInfo(BaseModel):
     usage: int = 0
     model: str = ""
-    vram_used: int = 0
-    vram_total: int = 0
+    vram_used_mb: int = 0
+    vram_total_mb: int = 0
 
 
-async def get_gpu_info() -> GpuInfo:
+async def get_linux_gpu_info() -> GpuInfo:
     res = await run_process(["nvidia-smi"])
     output = res.stdout.decode()
 
     info = GpuInfo()
     m = re.search(r"(\d+)MiB\s+/\s+(\d+)MiB", output)
     if m is not None:
-        info.vram_used = int(m.group(1))
-        info.vram_total = int(m.group(2))
+        info.vram_used_mb = int(m.group(1))
+        info.vram_total_mb = int(m.group(2))
     nums = re.findall(r"(\d+)%", output)
     if len(nums) >= 2:
         info.usage = int(nums[1])
@@ -70,6 +115,30 @@ async def get_gpu_info() -> GpuInfo:
     if m is not None:
         info.model = m.group(1)
     return info
+
+
+async def get_osx_gpu_info() -> GpuInfo:
+
+    mem_info = await get_osx_memory_info()
+    info = GpuInfo(
+        vram_used_mb=mem_info.total_mb - mem_info.available_mb,
+        vram_total_mb=mem_info.total_mb
+    )
+
+    res = await run_process("system_profiler SPDisplaysDataType")
+    output = res.stdout.decode()
+    m = re.search(r"Chipset Model:([\w\s]+)", output)
+    if m is not None:
+        info.model = m.group(1)
+    return info
+
+
+async def get_gpu_info() -> GpuInfo:
+    gpu_info_fn = {
+        "Darwin": get_osx_gpu_info,
+        "Linux": get_linux_gpu_info,
+    }
+    return await gpu_info_fn[get_os()]()
 
 
 class CpuInfo(BaseModel):
@@ -125,54 +194,6 @@ async def get_cpu_info() -> CpuInfo:
     }
     return await cpu_info_fn[get_os()]()
 
-
-
-class MemoryInfo(BaseModel):
-    available_mb: int = 0
-    total_mb: int = 0
-
-
-async def get_linux_memory_info() -> MemoryInfo:
-    info = MemoryInfo()
-
-    res = await run_process(["cat", "/proc/meminfo"])
-    output = res.stdout.decode()
-
-    m = re.search(r"MemAvailable:\s+(\d+)", output)
-    if m is not None:
-        info.available_mb = round(int(m.group(1)) / 1024)
-
-    m = re.search(r"MemTotal:\s+(\d+)", output)
-    if m is not None:
-        info.total_mb = round(int(m.group(1)) / 1024)
-
-    return info
-
-
-async def get_osx_memory_info() -> MemoryInfo:
-    info = MemoryInfo()
-    res = await run_process(["sysctl", "hw.memsize"])
-    output = res.stdout.decode()
-    total_mem = re.match(r"hw.memsize: (\d+)", output)
-    if total_mem:
-        info.total_mb = round(int(total_mem.group(1)) / 1024 / 1024)
-
-    usage_cmd = ("vm_stat | perl -ne '/page size of (\\d+)/ and $size=$1; "
-        "/Pages\\s+free[^\\d]+(\\d+)/ and printf(\"%.2f\",  $1 * $size / 1048576);'")
-    res = await run_process(usage_cmd)
-    output = res.stdout.decode()
-    info.available_mb = int(float(output))
-
-    return info
-
-
-
-async def get_memory_info() -> MemoryInfo:
-    memory_info_fn = {
-        "Darwin": get_osx_memory_info,
-        "Linux": get_linux_memory_info,
-    }
-    return await memory_info_fn[get_os()]()
 
 
 class DiskInfo(BaseModel):
