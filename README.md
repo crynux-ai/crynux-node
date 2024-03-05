@@ -12,6 +12,7 @@ A complete getting started guide to start a node is provided in the document:
 
 ## Run the node
 
+### Docker + Nvidia
 1. Pull the Docker image from GitHub
 
 ```shell
@@ -34,8 +35,35 @@ http://localhost:7412
 
 4. Follow the instructions in the WebUI to join the network.
 
+### MacOS + Metal
+1. Download package
+```shell
+#TODO: host package on server
+```
+
+2. Unpack the package
+```shell
+WORKDIR=~/crynux_app && mkdir $WORKDIR && tar -xvzf crynux.tar.gz -C $WORKDIR && cd $WORKDIR
+```
+
+3. Start the node
+```shell
+# if you've loaded the model before:
+bash start.sh run ~/crynux_data
+# if you are brand new:
+bash start.sh run
+```
+
+4. Visit the WebUI in the browser
+```
+http://localhost:7412
+```
+
+5. Follow the instructions in the WebUI to join the network.
+
 ## Build the Docker image from the source code
 
+### Docker + NVidia
 1. Clone the project
 
 ```shell
@@ -59,6 +87,33 @@ http://localhost:7412
 ```shell
 # docker run -d -p 127.0.0.1:7412:7412 --gpus all crynux-node:dev
 ```
+
+### MacOS + Metal
+
+1. Clone the project
+
+```shell
+# git clone https://github.com/crynux-ai/crynux-node.git
+```
+
+2. Go to the root folder of the project
+
+```shell
+# cd crynux-node
+```
+
+3. Generate runner environment and package the code
+
+```shell
+# bash build/macos/build.sh ~/crynux_app ~/crynux.tar.gz
+```
+
+4. Start the node
+
+```shell
+# bash start.sh run
+```
+
 
 ## Run tests
 

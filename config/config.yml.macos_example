@@ -1,0 +1,91 @@
+log:
+  # The directory to save the log files
+  dir: "logs"
+  
+  # Log level could be "DEBUG", "INFO", "WARNING", "ERROR"
+  level: "INFO"
+
+ethereum:
+  # The private key of the wallet
+  # Must be filled if headless mode is enabled
+  # If headless mode is not enabled,
+  # the private key can also be filled using the WebUI.
+  privkey: ""
+  
+  # The JSON RPC endpoint of the Blockchain node
+  # Here we use the private chain for the Hydrogen Network
+  provider: "https://block-node.crynux.ai/rpc"
+  
+  # The Blockchain params
+  # Leave it as is for the private chain used in the Hydrogen Network
+  chain_id: 42
+  gas: 42949670
+  gas_price: 1
+
+  # The deployed addresses of the smart contracts
+  contract:
+    token: "0x95E7e7Ed5463Ff482f61585605a0ff278e0E1FFb"
+    node: "0xb6dEcFd5D51A1157f7D6B7668274c6580A128601"
+    task: "0xe625d0edC6a79cD23Ef4EbB91bE7574bf2451146"
+
+# The directory to store the temp files related to the running task
+task_dir: tasks
+
+# The database used to store the local state data
+# The data will not be large. A sqlite file is more than enough
+# There is no need to mount this file to the host machine to persist it
+db: sqlite+aiosqlite:///db/server.db
+
+# The URL of the Relay
+relay_url: "https://relay.h.crynux.ai"
+
+# The directory that stores the distribution files of the WebUI
+web_dist: webui/dist
+
+# Whether to enable the headless mode
+headless: false
+
+task_config:
+  # The directory to store the temp images for a task.
+  output_dir: "data/results"
+  
+  # The directory to cache the huggingface model files
+  hf_cache_dir: "data/huggingface"
+  
+  # The directory to cache the external model files
+  # Such as the LoRA models from Civitai
+  external_cache_dir: "data/external"
+  
+  # The directory to store the temp logs generated
+  # by the task execution engine
+  inference_logs_dir: "inference-logs"
+  
+  # The directory that stores the source code of the task execution engine
+  script_dir: "worker"
+
+  # Models that will be preloaded before any task execution
+  # Other models specified by the task
+  # will be downloaded during the task execution
+  preloaded_models:
+    base:
+      - id: "runwayml/stable-diffusion-v1-5"
+      - id: "emilianJR/chilloutmix_NiPrunedFp32Fix"
+      - id: "stabilityai/stable-diffusion-xl-base-1.0"
+    controlnet:
+      - id: "lllyasviel/control_v11p_sd15_openpose"
+      - id: "thibaud/controlnet-openpose-sdxl-1.0"
+    vae: []
+    
+  # The proxy server used when downloading models.
+  proxy:
+    host: ""
+    port: 33210
+
+# If the node dies right after submitting the commitments,
+# and before disclosing the result on-chain. 
+# And if the data is corrupted inside the container,
+# which prevents the node from starting again.
+# The result from the previous task execution must be fetched from
+# the logs of the dead container and filled here.
+# So the node could continue with the unfinished task correctly.
+last_result: ""
