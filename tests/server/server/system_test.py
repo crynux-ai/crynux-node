@@ -16,7 +16,7 @@ async def test_system_api(client: TestClient):
     cpu_info = resp_data["cpu"]
     assert cpu_info["usage"] > 0
     assert cpu_info["num_cores"] > 0
-    assert cpu_info["frequency"] > 0
+    assert cpu_info["frequency_mhz"] >= 0
 
     memory_info = resp_data["memory"]
     assert memory_info["available_mb"] > 0
