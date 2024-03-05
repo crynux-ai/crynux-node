@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 from typing import Any, Dict, List, Literal, Optional, Tuple, Type
 
@@ -153,3 +154,24 @@ def get_config():
 def set_config(config: Config):
     global _config
     _config = config
+
+def set_env(
+    hf_cache_dir: str,
+    external_cache_dir: str,
+    base_models: List[ModelConfig] | None = None,
+    controlnet_models: List[ModelConfig] | None = None,
+    vae_models: List[ModelConfig] | None = None,
+    proxy: ProxyConfig | None = None
+):
+    envs = os.environ.copy()
+    envs["data_dir__models__huggingface"] = os.path.abspath(hf_cache_dir)
+    envs["data_dir__models__external"] = os.path.abspath(external_cache_dir)
+    if base_models is not None:
+        envs["preloaded_models__base"] = json.dumps(base_models)
+    if controlnet_models is not None:
+        envs["preloaded_models__controlnet"] = json.dumps(controlnet_models)
+    if vae_models is not None:
+        envs["preloaded_models__vae"] = json.dumps(vae_models)
+    if proxy is not None:
+        envs["proxy"] = json.dumps(proxy)
+    return envs
