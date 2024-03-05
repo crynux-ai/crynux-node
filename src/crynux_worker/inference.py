@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 import json
 import logging
 import os
@@ -13,7 +14,9 @@ from crynux_worker.models import ModelConfig, ProxyConfig
 _logger = logging.getLogger(__name__)
 
 
-def call_prefetch_script(
+def call_inference_script(
+    task_args_str: str,
+    output_dir: str,
     hf_cache_dir: str,
     external_cache_dir: str,
     script_dir: str,
@@ -26,17 +29,22 @@ def call_prefetch_script(
     worker_venv = os.path.abspath(os.path.join(script_dir, "venv"))
     if os.path.exists(worker_venv):
         exe = os.path.join(worker_venv, "bin", "python")
-
-    script_file = os.path.abspath(os.path.join(script_dir, "prefetch.py"))
-
-    args = [exe, script_file]
     envs = config.set_env(hf_cache_dir, external_cache_dir, base_models, controlnet_models, vae_models, proxy)
-    _logger.info("Start prefetching models")
+
+    script_file = os.path.abspath(os.path.join(script_dir, "inference.py"))
+    start_ts = datetime.now()
+    args = [exe, script_file, "0", output_dir, task_args_str]
+    
+    _logger.info(f"Start inference models, save in {output_dir}")
     subprocess.check_call(args, env=envs)
-    _logger.info("Prefetching models complete")
+    complete_ts = datetime.now()
+    _logger.info(f"Inference models complete: {str(complete_ts - start_ts)}")
 
 
-def prefetch(
+
+def inference(
+    task_args_str: str,
+    output_dir: str,
     hf_cache_dir: str,
     external_cache_dir: str,
     script_dir: str,
@@ -51,8 +59,13 @@ def prefetch(
     if not os.path.exists(external_cache_dir):
         os.makedirs(external_cache_dir, exist_ok=True)
 
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir, exist_ok=True)
+
     try:
-        call_prefetch_script(
+        call_inference_script(
+            task_args_str=task_args_str,
+            output_dir=output_dir,
             hf_cache_dir=hf_cache_dir,
             external_cache_dir=external_cache_dir,
             script_dir=script_dir,
@@ -63,5 +76,5 @@ def prefetch(
         )
     except Exception as e:
         _logger.exception(e)
-        _logger.error("Prefetch error")
+        _logger.error("Inference error")
         raise

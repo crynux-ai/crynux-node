@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+from datetime import datetime
+import json
 import logging
+import os
 from typing import List, Optional, Type, cast
 
 from anyio import (Event, create_task_group, fail_after,
@@ -219,8 +222,11 @@ class NodeManager(object):
         await self.state_cache.set_tx_state(models.TxStatus.Success)
 
         if not self.config.distributed:
+
+            ### Prefetech ###
             from crynux_worker.models import ModelConfig, ProxyConfig
             from crynux_worker.prefetch import prefetch
+            from crynux_worker.inference import inference
 
             assert (
                 self.config.task_config is not None
@@ -261,6 +267,41 @@ class NodeManager(object):
                 proxy,
                 cancellable=True,
             )
+
+
+            ### Inference ###
+            prompt = (
+                "a realistic photo of an old man sitting on a brown chair, "
+                "on the seaside, with blue sky and white clouds, a dog is lying "
+                "under his legs, masterpiece, high resolution"
+            )
+            sd_inference_args = {
+                "base_model": "runwayml/stable-diffusion-v1-5",
+                "prompt": prompt,
+                "negative_prompt": "",
+                "task_config": {
+                    "num_images": 9,
+                    "safety_checker": False,
+                    "cfg": 7,
+                    "seed": 99975892,
+                    "steps": 40
+                }
+            }
+            current_ts = int(datetime.now().timestamp())
+            await to_thread.run_sync(
+                inference,
+                json.dumps(sd_inference_args),
+                os.path.join(self.config.task_config.output_dir, f"_sd_init_{current_ts}"),
+                self.config.task_config.hf_cache_dir,
+                self.config.task_config.external_cache_dir,
+                self.config.task_config.script_dir,
+                base_models,
+                controlnet_models,
+                vae_models,
+                proxy,
+                cancellable=True,
+            )
+            # TODO: validate image similarity.
 
         _logger.info("Node manager initializing complete.")
 
