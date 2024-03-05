@@ -8,15 +8,20 @@ DATA_DIR=$2
 echo $(pwd)
 echo $DATA_DIR
 
-# In case the data has been stored elsewhere
-if [[ -z "$DATA_DIR" ]]; then
-  mkdir data
-  mkdir data/external
-  mkdir data/huggingface
-  mkdir data/results
-  mkdir data/inference-logs
+
+if [ -d data ]; then
+    echo "$(pwd)/data exist, delete if you'd like to overwrite."
 else
-  cp -R $DATA_DIR data
+  # In case the data has been stored elsewhere
+  if [[ -z "$DATA_DIR" ]]; then
+    mkdir data
+    mkdir data/external
+    mkdir data/huggingface
+    mkdir data/results
+    mkdir data/inference-logs  
+  else
+    cp -R $DATA_DIR data
+  fi
 fi
 
 
