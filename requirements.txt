@@ -1,5 +1,6 @@
 setuptools
 PyQt6-WebEngine==6.6.0
+qasync==0.27.1
 celery[redis]==5.3.1
 pyyaml==5.3.1
 web3==6.8.0

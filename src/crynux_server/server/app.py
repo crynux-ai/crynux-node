@@ -20,6 +20,7 @@ class Server(object):
         add_middleware(self._app)
 
         self._shutdown_event: Optional[Event] = None
+        self._start_event: list[Event] = []
 
     async def start(self, host: str, port: int, access_log: bool = True):
         assert self._shutdown_event is None, "Server has already been started."
@@ -31,10 +32,14 @@ class Server(object):
             config.accesslog = "-"
         config.errorlog = "-"
 
+        async def _set_start_event():
+            for e in self._start_event:
+                e.set()
         try:
             async with create_task_group() as tg:
                 serve_func = partial(serve, self._app, config, shutdown_trigger=self._shutdown_event.wait)  # type: ignore
                 tg.start_soon(serve_func)
+                tg.start_soon(_set_start_event)
         finally:
             self._shutdown_event = None
 
