@@ -11,7 +11,7 @@ from crynux_server.node_manager import NodeManager, set_node_manager
 from crynux_server.server import Server
 
 
-async def _run():
+async def _run(event=None):
     config = get_config()
 
     log.init(config)
@@ -19,6 +19,8 @@ async def _run():
     await db.init(config.db)
 
     server = Server(config.web_dist)
+    if event:
+        server._start_event = [event]
 
     gpu_info = await utils.get_gpu_info()
     gpu_name = gpu_info.model

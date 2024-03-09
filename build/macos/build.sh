@@ -1,9 +1,7 @@
 # Build package from source
-# Example call: bash build/macos/build.sh ~/crynux_app ~/crynux.tar.gz
+# Example call: bash build/macos/build.sh ~/crynux_app 
 WORK_DIR=$1
-OUTPUT_FILE=$2
 echo $WORK_DIR
-echo $OUTPUT_FILE
 
 
 if ! [ -x "$(command -v brew)" ]; then
@@ -41,6 +39,7 @@ export PATH="$WORK_DIR/venv/bin:${PATH}"
 mkdir "$WORK_DIR/crynux-node"
 cd "$WORK_DIR/crynux-node"
 cp -R $GIT_DIR/src src
+cp -R $GIT_DIR/res res
 cp $GIT_DIR/pyproject.toml pyproject.toml
 cp $GIT_DIR/setup.py setup.py
 cp $GIT_DIR/requirements.txt requirements.txt
@@ -77,4 +76,8 @@ cd $WORK_DIR
 mkdir config
 cp $GIT_DIR/config/config.yml.macos_example config/config.yml
 cp $GIT_DIR/start.sh start.sh
-tar czf $OUTPUT_FILE .
+
+# bash build/macos/build.sh ~/crynux_app ~/crynux.tar.gz
+# OUTPUT_FILE=$2
+# echo $OUTPUT_FILE
+# tar czf $OUTPUT_FILE .
