@@ -146,9 +146,9 @@ class TaskRunner(ABC):
         self, event: models.TaskEvent, finish_callback: Callable[[], Awaitable[None]]
     ):
         _logger.debug(f"Process event {event}")
-        if event.kind == "TaskCreated":
-            assert isinstance(event, models.TaskCreated)
-            return await self.task_created(event, finish_callback)
+        if event.kind == "TaskStarted":
+            assert isinstance(event, models.TaskStarted)
+            return await self.task_started(event, finish_callback)
         elif event.kind == "TaskResultReady":
             assert isinstance(event, models.TaskResultReady)
             return await self.result_ready(event, finish_callback)
@@ -165,8 +165,8 @@ class TaskRunner(ABC):
             raise ValueError(f"Unknown event kind {event.kind}")
 
     @abstractmethod
-    async def task_created(
-        self, event: models.TaskCreated, finish_callback: Callable[[], Awaitable[None]]
+    async def task_started(
+        self, event: models.TaskStarted, finish_callback: Callable[[], Awaitable[None]]
     ):
         ...
 
@@ -440,8 +440,8 @@ class InferenceTaskRunner(TaskRunner):
         except Exception as e:
             _logger.debug(f"Cancel task {self.task_id} failed")
 
-    async def task_created(
-        self, event: models.TaskCreated, finish_callback: Callable[[], Awaitable[None]]
+    async def task_started(
+        self, event: models.TaskStarted, finish_callback: Callable[[], Awaitable[None]]
     ):
         await self.wait_for_status(models.TaskStatus.Pending)
 
@@ -698,8 +698,8 @@ class MockTaskRunner(TaskRunner):
     async def cancel_task(self):
         pass
 
-    async def task_created(
-        self, event: models.TaskCreated, finish_callback: Callable[[], Awaitable[None]]
+    async def task_started(
+        self, event: models.TaskStarted, finish_callback: Callable[[], Awaitable[None]]
     ):
         await self.wait_for_status(models.TaskStatus.Pending)
 

@@ -189,7 +189,7 @@ async def create_node_managers(
 
             watcher.watch_event(
                 "task",
-                "TaskCreated",
+                "TaskStarted",
                 callback=make_callback(queue),
                 filter_args={"selectedNode": contracts.account},
             )
@@ -234,11 +234,11 @@ async def create_node_managers(
                         )
                         self._fail_count = 0
 
-                    async def task_created(self, event, finish_callback):
+                    async def task_started(self, event, finish_callback):
                         if self._fail_count == 0 and fail_step == 1:
                             self._fail_count += 1
                             raise ValueError("mock fail")
-                        return await super().task_created(event, finish_callback)
+                        return await super().task_started(event, finish_callback)
 
                     async def result_ready(self, event, finish_callback):
                         if self._fail_count == 0 and fail_step == 2:
@@ -352,17 +352,22 @@ async def create_task(
         task_hash = get_task_hash(task_args)
         data_hash = bytes([0] * 32)
 
+    task_fee = Web3.to_wei(30, "ether")
+    cap = 1
+
     waiter = await contracts.task_contract.create_task(
         task_type=task_type,
         task_hash=task_hash,
         data_hash=data_hash,
         vram_limit=8,
+        task_fee=task_fee,
+        cap=cap,
         option=tx_option,
     )
     receipt = await waiter.wait()
 
     events = await contracts.task_contract.get_events(
-        "TaskCreated",
+        "TaskStarted",
         from_block=receipt["blockNumber"],
     )
     event = events[0]

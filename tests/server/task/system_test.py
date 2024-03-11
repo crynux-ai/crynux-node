@@ -55,7 +55,7 @@ async def test_task_system():
     files = ["test.png"]
 
     events = [
-        models.TaskCreated(
+        models.TaskStarted(
             task_id=task_id,
             task_type=models.TaskType.SD,
             creator=creator,
@@ -123,7 +123,7 @@ async def test_task_system_cancel():
     round = 1
 
     events = [
-        models.TaskCreated(
+        models.TaskStarted(
             task_id=task_id,
             task_type=models.TaskType.SD,
             creator=creator,
@@ -186,7 +186,7 @@ async def test_task_system_auto_cancel():
     round = 1
 
     events = [
-        models.TaskCreated(
+        models.TaskStarted(
             task_id=task_id,
             task_type=models.TaskType.SD,
             creator=creator,

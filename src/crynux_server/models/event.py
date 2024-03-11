@@ -8,7 +8,7 @@ from web3 import Web3
 from .task import TaskType
 
 TaskKind = Literal[
-    "TaskCreated",
+    "TaskStarted",
     "TaskResultReady",
     "TaskResultCommitmentsReady",
     "TaskSuccess",
@@ -21,8 +21,8 @@ class TaskEvent(BaseModel):
     task_id: int
 
 
-class TaskCreated(TaskEvent):
-    kind: TaskKind = Field(default="TaskCreated", init_var=False, frozen=True)
+class TaskStarted(TaskEvent):
+    kind: TaskKind = Field(default="TaskStarted", init_var=False, frozen=True)
     task_type: TaskType
     creator: ChecksumAddress
     selected_node: ChecksumAddress
@@ -54,8 +54,8 @@ class TaskAborted(TaskEvent):
 
 
 def load_event_from_json(kind: TaskKind, event_json: str) -> TaskEvent:
-    if kind == "TaskCreated":
-        return TaskCreated.model_validate_json(event_json)
+    if kind == "TaskStarted":
+        return TaskStarted.model_validate_json(event_json)
     elif kind == "TaskResultReady":
         return TaskResultReady.model_validate_json(event_json)
     elif kind == "TaskResultCommitmentsReady":
@@ -70,8 +70,8 @@ def load_event_from_json(kind: TaskKind, event_json: str) -> TaskEvent:
 
 def load_event_from_contracts(event_data: EventData) -> TaskEvent:
     name = event_data["event"]
-    if name == "TaskCreated":
-        return TaskCreated(
+    if name == "TaskStarted":
+        return TaskStarted(
             task_id=event_data["args"]["taskId"],
             task_type=event_data["args"]["taskType"],
             creator=Web3.to_checksum_address(event_data["args"]["creator"]),

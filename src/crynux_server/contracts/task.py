@@ -27,6 +27,8 @@ class TaskContract(ContractWrapperBase):
         task_hash: Union[str, bytes],
         data_hash: Union[str, bytes],
         vram_limit: int,
+        task_fee: int,
+        cap: int,
         *,
         option: "Optional[TxOption]" = None,
     ) -> TxWaiter:
@@ -37,6 +39,8 @@ class TaskContract(ContractWrapperBase):
             taskHash=task_hash,
             dataHash=data_hash,
             vramLimit=vram_limit,
+            taskFee=task_fee,
+            cap=cap,
         )
 
     async def get_selected_node(

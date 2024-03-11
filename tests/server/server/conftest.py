@@ -201,7 +201,7 @@ async def managers(
 
         watcher.watch_event(
             "task",
-            "TaskCreated",
+            "TaskStarted",
             callback=make_callback(queue),
             filter_args={"selectedNode": contracts.account},
         )

@@ -78,7 +78,7 @@ def _make_watcher(
 
     watcher.watch_event(
         "task",
-        "TaskCreated",
+        "TaskStarted",
         callback=_push_event,
         filter_args={"selectedNode": contracts.account},
     )
@@ -329,7 +329,7 @@ class NodeManager(object):
 
         events = []
         # task created
-        event = models.TaskCreated(
+        event = models.TaskStarted(
             task_id=task_id,
             task_type=task.task_type,
             creator=Web3.to_checksum_address(task.creator),
