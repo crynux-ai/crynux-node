@@ -74,7 +74,7 @@ pip install .
 cd $WORK_DIR
 
 mkdir config
-cp $GIT_DIR/config/config.yml.macos_example config/config.yml
+cp $GIT_DIR/config/config.yml.shell_example config/config.yml
 cp $GIT_DIR/start.sh start.sh
 
 # bash build/macos/build.sh ~/crynux_app ~/crynux.tar.gz

@@ -10,6 +10,7 @@ from crynux_server.config import get_config
 from crynux_server.node_manager import NodeManager, set_node_manager
 from crynux_server.server import Server
 
+server = None
 
 async def _run(event=None):
     config = get_config()
@@ -18,6 +19,7 @@ async def _run(event=None):
 
     await db.init(config.db)
 
+    global server
     server = Server(config.web_dist)
     if event:
         server._start_event = [event]
