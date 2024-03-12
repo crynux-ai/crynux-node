@@ -28,6 +28,7 @@ def call_prefetch_script(
         exe = os.path.join(worker_venv, "bin", "python")
 
     script_file = os.path.abspath(os.path.join(script_dir, "prefetch.py"))
+    _logger.info(f"Start worker process: {script_dir}, {hf_cache_dir}, {external_cache_dir}")
 
     args = [exe, script_file]
     envs = config.set_env(hf_cache_dir, external_cache_dir, base_models, controlnet_models, vae_models, proxy)

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import functools
 import os
 from typing import Any, Dict, List, Literal, Tuple, Type, TypedDict, Optional
 
@@ -16,6 +17,7 @@ __all__ = [
     "Config",
     "get_config",
     "set_config",
+    "dump_config",
     "wait_privkey",
     "set_privkey",
     "TxOption",
@@ -199,6 +201,13 @@ def set_config(config: Config):
     _config = config
 
 
+def dump_config(config: Config):
+    config_file: Optional[str] = config.model_config.get("yaml_file")
+    assert config_file is not None
+    with open(config_file, mode="w", encoding="utf-8") as f:
+        yaml.safe_dump(config.model_dump(), f)
+
+
 _condition: Optional[Condition] = None
 
 
@@ -227,13 +236,7 @@ async def set_privkey(privkey: str):
         config.ethereum.privkey = privkey
         condition.notify(1)
 
-    def dump_config():
-        config_file: Optional[str] = config.model_config.get("yaml_file")
-        assert config_file is not None
-        with open(config_file, mode="w", encoding="utf-8") as f:
-            yaml.safe_dump(config.model_dump(), f)
-
-    await to_thread.run_sync(dump_config)
+    await to_thread.run_sync(functools.partial(dump_config, config=config))
 
 
 class TxOption(TypedDict, total=False):

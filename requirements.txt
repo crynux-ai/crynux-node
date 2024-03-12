@@ -1,4 +1,5 @@
 setuptools
+pyinstaller==6.5.0
 PyQt6-WebEngine==6.6.0
 qasync==0.27.1
 celery[redis]==5.3.1
@@ -10,6 +11,7 @@ aiosqlite==0.19.0
 fastapi==0.101.1
 hypercorn==0.14.4
 httpx==0.24.1
+psutil==5.9.8
 pydantic==2.2.1
 pydantic-settings==2.0.3
 importlib-resources==6.0.1
