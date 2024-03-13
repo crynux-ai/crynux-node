@@ -73,6 +73,9 @@ pip install -r requirements_macos.txt
 pip install .
 cd $WORK_DIR
 
+rm "$WORK_DIR/worker/venv/pyvenv.cfg"
+echo "include-system-site-packages = false" > "$WORK_DIR/worker/venv/pyvenv.cfg"
+
 mkdir config
 cp $GIT_DIR/config/config.yml.shell_example config/config.yml
 cp $GIT_DIR/start.sh start.sh
