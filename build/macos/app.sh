@@ -20,3 +20,12 @@ else
   mkdir "$RES_DIR/data/results"
   mkdir "$RES_DIR/data/inference-logs"
 fi
+
+cd dist
+[ -e crynux.dmg ] && rm crynux.dmg
+create-dmg \
+    --volname "crynux" --volicon "../res/icon.icns" \
+    --window-pos 200 120 --window-size 800 400 --icon-size 100 \
+    --icon "crynux.app" 200 190 --hide-extension "crynux.app" \
+    --app-drop-link 600 185 \
+    "crynux.dmg" "crynux.app"

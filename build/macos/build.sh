@@ -76,6 +76,7 @@ cd $WORK_DIR
 mkdir config
 cp $GIT_DIR/config/config.yml.shell_example config/config.yml
 cp $GIT_DIR/start.sh start.sh
+cp $GIT_DIR/build/macos/app.sh app.sh
 
 # bash build/macos/build.sh ~/crynux_app ~/crynux.tar.gz
 # OUTPUT_FILE=$2
