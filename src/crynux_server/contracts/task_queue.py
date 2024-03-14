@@ -31,3 +31,9 @@ class TaskQueueContract(ContractWrapperBase):
 
     async def size(self) -> int:
         return await self._function_call("size")
+
+    async def get_size_limit(self) -> int:
+        return await self._function_call("getSizeLimit")
+
+    async def include(self, task_id: int) -> bool:
+        return await self._function_call("include", taskId=task_id)
