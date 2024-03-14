@@ -280,7 +280,7 @@ class NodeManager(object):
                 "prompt": prompt,
                 "negative_prompt": "",
                 "task_config": {
-                    "num_images": 9,
+                    "num_images": 3,
                     "safety_checker": False,
                     "cfg": 7,
                     "seed": 99975892,
