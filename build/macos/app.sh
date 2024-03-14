@@ -3,7 +3,7 @@ source venv/bin/activate
 pyinstaller crynux.spec
 
 DATA_DIR=$1
-RES_DIR=dist/Crynux.app/Contents/Resources
+RES_DIR=dist/crynux.app/Contents/Resources
 
 cp -R worker "$RES_DIR/"
 cp -R webui "$RES_DIR/"
