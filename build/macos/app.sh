@@ -1,6 +1,6 @@
 # Example call: bash app.sh ~/crynux_data
-source ~/crynux_app/venv/bin/activate
-pyinstaller "$(pwd)/crynux.spec"
+source /venv/bin/activate
+pyinstaller crynux.spec
 
 DATA_DIR=$1
 RES_DIR=dist/Crynux.app/Contents/Resources
