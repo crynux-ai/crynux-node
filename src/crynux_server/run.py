@@ -11,6 +11,7 @@ from crynux_server.node_manager import NodeManager, set_node_manager
 from crynux_server.server import Server
 
 server = None
+node_manager = None
 
 async def _run(event=None):
     config = get_config()
@@ -28,6 +29,7 @@ async def _run(event=None):
     gpu_name = gpu_info.model
     gpu_vram_gb = math.ceil(gpu_info.vram_total_mb / 1024)
 
+    global node_manager
     node_manager = NodeManager(config=config, gpu_name=gpu_name, gpu_vram=gpu_vram_gb)
     set_node_manager(node_manager)
 
