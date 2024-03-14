@@ -94,17 +94,22 @@ async def test_task(
     task_hash = Web3.keccak(text="task_hash")
     data_hash = Web3.keccak(text="data_hash")
 
+    task_fee = Web3.to_wei(30, "ether")
+    cap = 1
+
     waiter = await c1.task_contract.create_task(
         task_type=TaskType.SD,
         task_hash=task_hash,
         data_hash=data_hash,
         vram_limit=8,
+        task_fee=task_fee,
+        cap=cap,
         option=tx_option,
     )
     receipt = await waiter.wait()
 
     events = await c1.task_contract.get_events(
-        "TaskCreated",
+        "TaskStarted",
         from_block=receipt["blockNumber"],
     )
     assert len(events) == 3
@@ -189,14 +194,19 @@ async def test_task_with_event_watcher(
         task_hash = Web3.keccak(text="task_hash")
         data_hash = Web3.keccak(text="data_hash")
 
+        task_fee = Web3.to_wei(30, "ether")
+        cap = 1
+
         watcher.watch_event(
-            "task", "TaskCreated", _push_event, filter_args={"creator": c1.account}
+            "task", "TaskStarted", _push_event, filter_args={"creator": c1.account}
         )
         waiter = await c1.task_contract.create_task(
             task_type=TaskType.SD,
             task_hash=task_hash,
             data_hash=data_hash,
             vram_limit=8,
+            task_fee=task_fee,
+            cap=cap,
             option=tx_option,
         )
         await waiter.wait()
@@ -279,39 +289,6 @@ async def test_task_with_event_watcher(
         watcher.stop()
 
 
-async def test_fail_task_creation(
-    contracts_for_task: Tuple[Contracts, Contracts, Contracts], tx_option
-):
-    c1, c2, c3 = contracts_for_task
-
-    task_hash = Web3.keccak(text="task_hash")
-    data_hash = Web3.keccak(text="data_hash")
-
-    with pytest.raises(Exception) as e:
-        waiter = await c1.task_contract.create_task(
-            task_type=TaskType.SD,
-            task_hash=task_hash,
-            data_hash=data_hash,
-            vram_limit=16,
-            option=tx_option,
-        )
-        await waiter.wait()
-
-    assert "No kind of gpu vram meets condition" in str(e.value)
-
-    with pytest.raises(Exception) as e:
-        waiter = await c1.task_contract.create_task(
-            task_type=TaskType.LLM,
-            task_hash=task_hash,
-            data_hash=data_hash,
-            vram_limit=8,
-            option=tx_option,
-        )
-        await waiter.wait()
-
-    assert "No kind of gpu id meets condition" in str(e.value)
-
-
 async def test_get_task(
     contracts_for_task: Tuple[Contracts, Contracts, Contracts], tx_option
 ):
@@ -322,17 +299,22 @@ async def test_get_task(
     task_hash = Web3.keccak(text="task_hash")
     data_hash = Web3.keccak(text="data_hash")
 
+    task_fee = Web3.to_wei(30, "ether")
+    cap = 1
+
     waiter = await c1.task_contract.create_task(
         task_type=TaskType.SD,
         task_hash=task_hash,
         data_hash=data_hash,
         vram_limit=8,
+        task_fee=task_fee,
+        cap=cap,
         option=tx_option,
     )
     receipt = await waiter.wait()
 
     events = await c1.task_contract.get_events(
-        "TaskCreated",
+        "TaskStarted",
         from_block=receipt["blockNumber"],
     )
     assert len(events) == 3

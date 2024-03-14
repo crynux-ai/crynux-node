@@ -117,6 +117,9 @@ async def node_contracts(
     token_contract_address = root_contracts.token_contract.address
     node_contract_address = root_contracts.node_contract.address
     task_contract_address = root_contracts.task_contract.address
+    qos_contract_address = root_contracts.task_contract.address
+    task_queue_contract_address = root_contracts.task_queue_contract.address
+    netstats_contract_address = root_contracts.netstats_contract.address
 
     cs = []
     for privkey in privkeys:
@@ -125,6 +128,9 @@ async def node_contracts(
             token_contract_address=token_contract_address,
             node_contract_address=node_contract_address,
             task_contract_address=task_contract_address,
+            qos_contract_address=qos_contract_address,
+            task_queue_contract_address=task_queue_contract_address,
+            netstats_contract_address=netstats_contract_address,
             option=tx_option,
         )
         amount = Web3.to_wei(1000, "ether")
@@ -189,7 +195,7 @@ async def create_node_managers(
 
             watcher.watch_event(
                 "task",
-                "TaskCreated",
+                "TaskStarted",
                 callback=make_callback(queue),
                 filter_args={"selectedNode": contracts.account},
             )
@@ -234,11 +240,11 @@ async def create_node_managers(
                         )
                         self._fail_count = 0
 
-                    async def task_created(self, event, finish_callback):
+                    async def task_started(self, event, finish_callback):
                         if self._fail_count == 0 and fail_step == 1:
                             self._fail_count += 1
                             raise ValueError("mock fail")
-                        return await super().task_created(event, finish_callback)
+                        return await super().task_started(event, finish_callback)
 
                     async def result_ready(self, event, finish_callback):
                         if self._fail_count == 0 and fail_step == 2:
@@ -352,17 +358,22 @@ async def create_task(
         task_hash = get_task_hash(task_args)
         data_hash = bytes([0] * 32)
 
+    task_fee = Web3.to_wei(30, "ether")
+    cap = 1
+
     waiter = await contracts.task_contract.create_task(
         task_type=task_type,
         task_hash=task_hash,
         data_hash=data_hash,
         vram_limit=8,
+        task_fee=task_fee,
+        cap=cap,
         option=tx_option,
     )
     receipt = await waiter.wait()
 
     events = await contracts.task_contract.get_events(
-        "TaskCreated",
+        "TaskStarted",
         from_block=receipt["blockNumber"],
     )
     event = events[0]

@@ -8,7 +8,7 @@ import subprocess
 from typing import List
 
 from crynux_worker import config
-from crynux_worker.models import ModelConfig, ProxyConfig
+from crynux_worker.config import ModelConfig, ProxyConfig
 
 
 _logger = logging.getLogger(__name__)
@@ -29,17 +29,23 @@ def call_inference_script(
     worker_venv = os.path.abspath(os.path.join(script_dir, "venv"))
     if os.path.exists(worker_venv):
         exe = os.path.join(worker_venv, "bin", "python")
-    envs = config.set_env(hf_cache_dir, external_cache_dir, base_models, controlnet_models, vae_models, proxy)
+    envs = config.set_env(
+        hf_cache_dir=hf_cache_dir,
+        external_cache_dir=external_cache_dir,
+        base_models=base_models,
+        controlnet_models=controlnet_models,
+        vae_models=vae_models,
+        proxy=proxy,
+    )
 
     script_file = os.path.abspath(os.path.join(script_dir, "inference.py"))
     start_ts = datetime.now()
     args = [exe, script_file, "0", output_dir, task_args_str]
-    
+
     _logger.info(f"Start inference models, save in {output_dir}")
     subprocess.check_call(args, env=envs)
     complete_ts = datetime.now()
     _logger.info(f"Inference models complete: {str(complete_ts - start_ts)}")
-
 
 
 def inference(

@@ -30,10 +30,10 @@ async def test_node(contracts_with_tokens: Tuple[Contracts, Contracts, Contracts
     waiter = await c3.node_contract.join(gpu_name=gpus[2].name, gpu_vram=gpus[2].vram, option=tx_option)
     await waiter.wait()
 
-    assert (await c1.node_contract.total_nodes()) == 3
-    assert (await c1.node_contract.available_nodes()) == 3
+    assert (await c1.netstats_contract.total_nodes()) == 3
 
-    node_addresses = await c1.node_contract.get_all_node_addresses()
+    node_infos = await c1.netstats_contract.get_all_node_info(0, 3)
+    node_addresses = [info.node_address for info in node_infos]
     assert len(node_addresses) == 3
     assert all(c.account in node_addresses for c in contracts_with_tokens)
 
@@ -54,8 +54,7 @@ async def test_node(contracts_with_tokens: Tuple[Contracts, Contracts, Contracts
     waiter = await c2.node_contract.pause(option=tx_option)
     await waiter.wait()
 
-    assert (await c1.node_contract.available_nodes()) == 2
-    assert (await c1.node_contract.total_nodes()) == 3
+    assert (await c1.netstats_contract.total_nodes()) == 3
 
     available_nodes = await c1.node_contract.get_available_nodes()
     assert len(available_nodes) == 2
@@ -70,8 +69,7 @@ async def test_node(contracts_with_tokens: Tuple[Contracts, Contracts, Contracts
     waiter = await c2.node_contract.resume(option=tx_option)
     await waiter.wait()
 
-    assert (await c1.node_contract.available_nodes()) == 3
-    assert (await c1.node_contract.total_nodes()) == 3
+    assert (await c1.netstats_contract.total_nodes()) == 3
 
     waiter = await c3.node_contract.quit(option=tx_option)
     await waiter.wait()
@@ -80,5 +78,4 @@ async def test_node(contracts_with_tokens: Tuple[Contracts, Contracts, Contracts
     waiter = await c1.node_contract.quit(option=tx_option)
     await waiter.wait()
 
-    assert (await c1.node_contract.available_nodes()) == 0
-    assert (await c1.node_contract.total_nodes()) == 0
+    assert (await c1.netstats_contract.active_nodes()) == 0

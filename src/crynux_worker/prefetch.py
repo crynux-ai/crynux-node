@@ -7,7 +7,7 @@ import subprocess
 from typing import List
 
 from crynux_worker import config
-from crynux_worker.models import ModelConfig, ProxyConfig
+from crynux_worker.config import ModelConfig, ProxyConfig
 
 
 _logger = logging.getLogger(__name__)
@@ -30,7 +30,14 @@ def call_prefetch_script(
     script_file = os.path.abspath(os.path.join(script_dir, "prefetch.py"))
 
     args = [exe, script_file]
-    envs = config.set_env(hf_cache_dir, external_cache_dir, base_models, controlnet_models, vae_models, proxy)
+    envs = config.set_env(
+        hf_cache_dir,
+        external_cache_dir,
+        base_models,
+        controlnet_models,
+        vae_models,
+        proxy,
+    )
     _logger.info("Start prefetching models")
     subprocess.check_call(args, env=envs)
     _logger.info("Prefetching models complete")

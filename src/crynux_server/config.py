@@ -89,6 +89,9 @@ class Contract(BaseModel):
     token: str
     node: str
     task: str
+    qos: Optional[str] = None
+    task_queue: Optional[str] = None
+    netstats: Optional[str] = None
 
 
 class Ethereum(BaseModel):

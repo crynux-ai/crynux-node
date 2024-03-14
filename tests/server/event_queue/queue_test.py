@@ -19,7 +19,7 @@ async def test_memory_event_queue():
     files = ["test.png"]
 
     events = [
-        models.TaskCreated(
+        models.TaskStarted(
             task_id=task_id,
             task_type=models.TaskType.SD,
             creator=creator,
@@ -72,7 +72,7 @@ async def test_db_event_queue(init_db):
     files = ["test.png"]
 
     events = [
-        models.TaskCreated(
+        models.TaskStarted(
             task_id=task_id,
             task_type=models.TaskType.SD,
             creator=creator,

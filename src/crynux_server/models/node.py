@@ -23,6 +23,12 @@ class ChainNodeInfo(BaseModel):
     gpu: GpuInfo
 
 
+class ChainNetworkNodeInfo(BaseModel):
+    node_address: str
+    gpu_model: str
+    vram: int
+
+
 class NodeStatus(Enum):
     Init = "initializing"
     Running = "running"
