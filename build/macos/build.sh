@@ -80,6 +80,7 @@ mkdir config
 cp $GIT_DIR/config/config.yml.shell_example config/config.yml
 cp $GIT_DIR/start.sh start.sh
 cp $GIT_DIR/build/macos/app.sh app.sh
+cp $GIT_DIR/build/macos/crynux.spec crynux.spec
 
 # bash build/macos/build.sh ~/crynux_app ~/crynux.tar.gz
 # OUTPUT_FILE=$2
