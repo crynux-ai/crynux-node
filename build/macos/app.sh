@@ -1,5 +1,5 @@
 # Example call: bash app.sh ~/crynux_data
-source /venv/bin/activate
+source venv/bin/activate
 pyinstaller crynux.spec
 
 DATA_DIR=$1

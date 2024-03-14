@@ -39,7 +39,7 @@ export PATH="$WORK_DIR/venv/bin:${PATH}"
 mkdir "$WORK_DIR/crynux-node"
 cd "$WORK_DIR/crynux-node"
 cp -R $GIT_DIR/src src
-cp -R $GIT_DIR/res res
+cp -R $GIT_DIR/res ../res
 cp $GIT_DIR/pyproject.toml pyproject.toml
 cp $GIT_DIR/setup.py setup.py
 cp $GIT_DIR/requirements.txt requirements.txt
