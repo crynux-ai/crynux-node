@@ -13,6 +13,7 @@ a = Analysis(
     collect_data=["crynux_server.contracts.abi"],
     module_collection_mode={
         'crynux_server': 'py',
+        'crynux_worker': 'py',
     },
     hookspath=[],
     hooksconfig={},
