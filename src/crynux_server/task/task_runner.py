@@ -688,6 +688,7 @@ class MockTaskRunner(TaskRunner):
             selected_nodes=[],
             commitments=[],
             nonces=[],
+            commitment_submit_rounds=[],
             results=[],
             result_disclosed_rounds=[],
             result_node="",

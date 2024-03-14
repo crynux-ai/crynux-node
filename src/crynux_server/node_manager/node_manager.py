@@ -37,12 +37,18 @@ async def _make_contracts(
     token_contract_address: str,
     node_contract_address: str,
     task_contract_address: str,
+    qos_contract_address: Optional[str],
+    task_queue_contract_address: Optional[str],
+    netstats_contract_address: Optional[str],
 ) -> Contracts:
     contracts = Contracts(provider_path=provider, privkey=privkey)
     await contracts.init(
         token_contract_address=token_contract_address,
         node_contract_address=node_contract_address,
         task_contract_address=task_contract_address,
+        qos_contract_address=qos_contract_address,
+        task_queue_contract_address=task_queue_contract_address,
+        netstats_contract_address=netstats_contract_address
     )
     set_contracts(contracts)
     return contracts
@@ -187,6 +193,9 @@ class NodeManager(object):
                     token_contract_address=self.config.ethereum.contract.token,
                     node_contract_address=self.config.ethereum.contract.node,
                     task_contract_address=self.config.ethereum.contract.task,
+                    qos_contract_address=self.config.ethereum.contract.qos,
+                    task_queue_contract_address=self.config.ethereum.contract.task_queue,
+                    netstats_contract_address=self.config.ethereum.contract.netstats,
                 )
             if self._relay is None:
                 self._relay = _make_relay(self._privkey, self.config.relay_url)

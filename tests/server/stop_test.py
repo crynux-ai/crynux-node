@@ -74,12 +74,18 @@ async def node_contracts(privkey, tx_option):
     token_contract_address = root_contracts.token_contract.address
     node_contract_address = root_contracts.node_contract.address
     task_contract_address = root_contracts.task_contract.address
+    qos_contract_address = root_contracts.task_contract.address
+    task_queue_contract_address = root_contracts.task_queue_contract.address
+    netstats_contract_address = root_contracts.netstats_contract.address
 
     contracts = Contracts(provider=root_contracts.provider, privkey=privkey)
     await contracts.init(
         token_contract_address=token_contract_address,
         node_contract_address=node_contract_address,
         task_contract_address=task_contract_address,
+        qos_contract_address=qos_contract_address,
+        task_queue_contract_address=task_queue_contract_address,
+        netstats_contract_address=netstats_contract_address,
         option=tx_option,
     )
     amount = Web3.to_wei(1000, "ether")

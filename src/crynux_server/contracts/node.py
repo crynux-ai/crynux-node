@@ -36,12 +36,6 @@ class NodeContract(ContractWrapperBase):
     async def resume(self, *, option: "Optional[TxOption]" = None) -> TxWaiter:
         return await self._transaction_call("resume", option=option)
 
-    async def total_nodes(self) -> int:
-        return await self._function_call("totalNodes")
-
-    async def available_nodes(self) -> int:
-        return await self._function_call("availableNodes")
-
     async def update_task_contract_address(
         self, address: str, *, option: "Optional[TxOption]" = None
     ) -> TxWaiter:
@@ -61,10 +55,6 @@ class NodeContract(ContractWrapperBase):
             gpu=GpuInfo(name=res[2][0], vram=res[2][1]),
         )
         return info
-
-    async def get_all_node_addresses(self) -> List[str]:
-        res = await self._function_call("getAllNodeAddresses")
-        return res
 
     async def get_available_nodes(self) -> List[str]:
         res = await self._function_call("getAvailableNodes")

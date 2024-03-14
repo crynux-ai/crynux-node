@@ -19,6 +19,7 @@ class ChainTask(BaseModel):
     selected_nodes: List[str]
     commitments: List[bytes]
     nonces: List[bytes]
+    commitment_submit_rounds: List[int]
     results: List[bytes]
     result_disclosed_rounds: List[int]
     result_node: str

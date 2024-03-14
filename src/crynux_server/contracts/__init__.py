@@ -8,7 +8,7 @@ from web3.types import TxParams
 from web3.middleware.signing import async_construct_sign_and_send_raw_middleware
 from web3.providers.async_base import AsyncBaseProvider
 
-from . import crynux_token, node, task, qos, task_queue
+from . import crynux_token, node, task, qos, task_queue, network_stats
 from .exceptions import TxRevertedError
 from .utils import TxWaiter
 
@@ -26,6 +26,7 @@ class Contracts(object):
     token_contract: crynux_token.TokenContract
     qos_contract: qos.QOSContract
     task_queue_contract: task_queue.TaskQueueContract
+    netstats_contract: network_stats.NetworkStatsContract
 
     def __init__(
         self,
@@ -65,6 +66,7 @@ class Contracts(object):
         task_contract_address: Optional[str] = None,
         qos_contract_address: Optional[str] = None,
         task_queue_contract_address: Optional[str] = None,
+        netstats_contract_address: Optional[str] = None,
         *,
         option: "Optional[TxOption]" = None,
     ):
@@ -95,7 +97,8 @@ class Contracts(object):
             self.qos_contract = qos.QOSContract(
                 self.w3, self.w3.to_checksum_address(qos_contract_address)
             )
-        else:
+        elif task_contract_address is None:
+            # task contract has not been deployed, need deploy qos contract
             self.qos_contract = qos.QOSContract(self.w3)
             await self.qos_contract.deploy(option=option)
             qos_contract_address = self.qos_contract.address
@@ -104,22 +107,41 @@ class Contracts(object):
             self.task_queue_contract = task_queue.TaskQueueContract(
                 self.w3, self.w3.to_checksum_address(task_queue_contract_address)
             )
-        else:
+        elif task_contract_address is None:
+            # task contract has not been deployed, need deploy qos contract
             self.task_queue_contract = task_queue.TaskQueueContract(self.w3)
             await self.task_queue_contract.deploy(option=option)
             task_queue_contract_address = self.task_queue_contract.address
+
+        if netstats_contract_address is not None:
+            self.netstats_contract = network_stats.NetworkStatsContract(
+                self.w3, self.w3.to_checksum_address(netstats_contract_address)
+            )
+        elif task_contract_address is None:
+            # task contract has not been deployed, need deploy qos contract
+            self.netstats_contract = network_stats.NetworkStatsContract(self.w3)
+            await self.netstats_contract.deploy(option=option)
+            netstats_contract_address = self.netstats_contract.address
 
         if node_contract_address is not None:
             self.node_contract = node.NodeContract(
                 self.w3, self.w3.to_checksum_address(node_contract_address)
             )
         else:
+            assert qos_contract_address is not None, "QOS contract address is None"
+            assert netstats_contract_address is not None, "NetworkStats contract address is None"
             self.node_contract = node.NodeContract(self.w3)
             await self.node_contract.deploy(
-                token_contract_address, qos_contract_address, option=option
+                token_contract_address,
+                qos_contract_address,
+                netstats_contract_address,
+                option=option,
             )
             node_contract_address = self.node_contract.address
             await self.qos_contract.update_node_contract_address(
+                node_contract_address, option=option
+            )
+            await self.netstats_contract.update_node_contract_address(
                 node_contract_address, option=option
             )
 
@@ -128,12 +150,17 @@ class Contracts(object):
                 self.w3, self.w3.to_checksum_address(task_contract_address)
             )
         else:
+            assert qos_contract_address is not None, "QOS contract address is None"
+            assert task_queue_contract_address is not None, "Task queue contract address is None"
+            assert netstats_contract_address is not None, "NetworkStats contract address is None"
+
             self.task_contract = task.TaskContract(self.w3)
             await self.task_contract.deploy(
                 node_contract_address,
                 token_contract_address,
                 qos_contract_address,
                 task_queue_contract_address,
+                netstats_contract_address,
                 option=option,
             )
             task_contract_address = self.task_contract.address
@@ -145,6 +172,9 @@ class Contracts(object):
                 task_contract_address, option=option
             )
             await self.task_queue_contract.update_task_contract_address(
+                task_contract_address, option=option
+            )
+            await self.netstats_contract.update_task_contract_address(
                 task_contract_address, option=option
             )
 
