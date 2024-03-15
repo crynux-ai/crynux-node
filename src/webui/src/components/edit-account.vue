@@ -1,6 +1,7 @@
 <script setup>
 import { computed, ref } from 'vue'
 import accountAPI from '../api/v1/account'
+import createAccount from './create-account.vue';
 
 const modalVisible = ref(false)
 const activeImportType = ref('private-key')
@@ -22,6 +23,12 @@ const hideModal = () => {
   keystoreInput.value = ''
   keystorePassphraseInput.value = ''
 }
+
+const onCloseCreateWallet = () => {
+  if (props.accountStatus.address === '') {
+    showModal();
+  }
+};
 
 const readyToSubmit = computed(() => {
   if (activeImportType.value === 'private-key') {
@@ -55,14 +62,14 @@ defineExpose({ showModal })
 </script>
 
 <template>
-  <a href="javascript:void(0)" @click="showModal">Edit</a>
+  <a href="javascript:void(0)" @click="showModal" v-show="false">Edit</a>
   <a-modal
     :visible="modalVisible"
     title="Node Wallet"
     @ok="hideModal"
     @cancel="hideModal"
     width="700px"
-    :destroy-on-close="true"
+    :destroy-on-close="false"
     :mask-closable="false"
     :closable="props.accountStatus.address !== ''"
   >
@@ -102,6 +109,12 @@ defineExpose({ showModal })
       </a-tab-pane>
     </a-tabs>
     <template #footer>
+      <create-account
+       v-if="!isLoading"
+       :old-wallet-exists="props.accountStatus.address !== ''"
+       @start-create-wallet="hideModal"
+       @close-create-wallet="onCloseCreateWallet"
+       ></create-account>
       <a-button
         key="submit"
         type="primary"

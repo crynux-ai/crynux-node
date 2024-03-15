@@ -7,18 +7,22 @@ class AccountAPI extends BaseAPI {
   }
 
   updatePrivateKey(privateKey) {
-    return v1.post('/account', {
+    return v1.put('/account', {
       type: 'private_key',
       private_key: privateKey
     })
   }
 
   updateKeystore(keystore, passphrase) {
-    return v1.post('/account', {
+    return v1.put('/account', {
       type: 'keystore',
       keystore: keystore,
       passphrase: passphrase
     })
+  }
+
+  createAccount() {
+    return v1.post('/account', {})
   }
 }
 
