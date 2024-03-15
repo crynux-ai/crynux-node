@@ -1,4 +1,4 @@
-# Crynux Node for the Hydrogen(H) Network
+# Crynux Node for the Helium(He) Network
 
 Start a Crynux Node to share the spared local GPU to others in exchange for tokens. Crynux Node will join the Crynux Network, receive the AI inference/training/fine-tuning tasks from the network, and execute them locally.
 
@@ -10,9 +10,9 @@ A complete getting started guide to start a node is provided in the document:
 
 [Join the Network](https://docs.crynux.ai/node-hosting/join-the-network)
 
-## Run the node
+## Start the node
 
-### Docker + Nvidia
+### Start the node using Docker image
 1. Pull the Docker image from GitHub
 
 ```shell
@@ -35,7 +35,7 @@ http://localhost:7412
 
 4. Follow the instructions in the WebUI to join the network.
 
-### MacOS + Metal
+### Start the node on Mac
 1. Download package
 ```shell
 #TODO: host package on server
@@ -63,7 +63,6 @@ http://localhost:7412
 
 ## Build the Docker image from the source code
 
-### Docker + NVidia
 1. Clone the project
 
 ```shell
@@ -88,7 +87,7 @@ http://localhost:7412
 # docker run -d -p 127.0.0.1:7412:7412 --gpus all crynux-node:dev
 ```
 
-### MacOS + Metal
+## Build the package on Mac
 
 1. Clone the project
 
