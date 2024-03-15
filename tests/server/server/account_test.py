@@ -22,9 +22,21 @@ async def test_create_account(running_client: TestClient):
     resp = running_client.post("/manager/v1/account")
     resp.raise_for_status()
 
-    privkey = resp.json()["key"]
+    address1 = resp.json()["address"]
+    privkey1 = resp.json()["key"]
 
-    assert (await wait_privkey()) == privkey
+    assert (await wait_privkey()) == privkey1
+
+    resp = running_client.post("/manager/v1/account")
+    resp.raise_for_status()
+
+    address2 = resp.json()["address"]
+    privkey2 = resp.json()["key"]
+
+    assert (await wait_privkey()) == privkey2
+    assert address1 != address2
+    assert privkey1 != privkey2
+
 
 async def test_set_account(running_client: TestClient, privkeys):
     body = {"type": "keystore", "keystore": "123", "passphrase": "possward"}

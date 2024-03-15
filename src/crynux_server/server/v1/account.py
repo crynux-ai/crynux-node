@@ -74,14 +74,16 @@ async def set_account(input: Annotated[PrivkeyInput, Body()]):
     return CommonResponse()
 
 
-class AccountKey(BaseModel):
+class AccountWithKey(BaseModel):
+    address: str
     key: str
 
 
-@router.post("", response_model=AccountKey)
+@router.post("", response_model=AccountWithKey)
 async def create_account():
     acct = Account.create()
+    address: str = acct.address
     privkey: str = acct.key.hex()
     await set_privkey(privkey=privkey)
 
-    return AccountKey(key=privkey)
+    return AccountWithKey(address=address, key=privkey)
