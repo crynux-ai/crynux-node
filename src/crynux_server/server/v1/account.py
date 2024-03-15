@@ -1,16 +1,15 @@
-from fastapi import APIRouter, Body, HTTPException
-from typing import Literal, Dict
+from typing import Dict, Literal
 
-from anyio import get_cancelled_exc_class, create_task_group
+from anyio import create_task_group, get_cancelled_exc_class, to_thread
 from eth_account import Account
+from fastapi import APIRouter, Body, HTTPException
+from pydantic import BaseModel, Field, Json, SecretStr
 from typing_extensions import Annotated
-from pydantic import BaseModel, Field, SecretStr, Json
 
-from anyio import to_thread
 from crynux_server.config import set_privkey
 
-from .utils import CommonResponse
 from ..depends import ContractsDep
+from .utils import CommonResponse
 
 router = APIRouter(prefix="/account")
 
@@ -57,7 +56,7 @@ class PrivkeyInput(BaseModel):
     passphrase: SecretStr = SecretStr("")
 
 
-@router.post("", response_model=CommonResponse)
+@router.put("", response_model=CommonResponse)
 async def set_account(input: Annotated[PrivkeyInput, Body()]):
     if input.type == "private_key":
         await set_privkey(input.private_key)
@@ -73,3 +72,16 @@ async def set_account(input: Annotated[PrivkeyInput, Body()]):
         await set_privkey(privkey.hex())
 
     return CommonResponse()
+
+
+class AccountKey(BaseModel):
+    key: str
+
+
+@router.post("", response_model=AccountKey)
+async def create_account():
+    acct = Account.create()
+    privkey: str = acct.key.hex()
+    await set_privkey(privkey=privkey)
+
+    return AccountKey(key=privkey)

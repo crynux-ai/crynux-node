@@ -18,10 +18,18 @@ async def test_get_account_empty(client: TestClient):
     assert resp_data["cnx_balance"] == 0
 
 
+async def test_create_account(running_client: TestClient):
+    resp = running_client.post("/manager/v1/account")
+    resp.raise_for_status()
+
+    privkey = resp.json()["key"]
+
+    assert (await wait_privkey()) == privkey
+
 async def test_set_account(running_client: TestClient, privkeys):
     body = {"type": "keystore", "keystore": "123", "passphrase": "possward"}
     with pytest.raises(HTTPStatusError) as e:
-        resp = running_client.post("/manager/v1/account", json=body)
+        resp = running_client.put("/manager/v1/account", json=body)
         assert resp.status_code == 422
         resp.raise_for_status()
 
@@ -31,7 +39,7 @@ async def test_set_account(running_client: TestClient, privkeys):
     keystore = Account.encrypt(privkey, password)
     keystore_str = json.dumps(keystore)
     body = {"type": "keystore", "keystore": keystore_str, "passphrase": password}
-    resp = running_client.post("/manager/v1/account", json=body)
+    resp = running_client.put("/manager/v1/account", json=body)
     resp.raise_for_status()
     resp_data = resp.json()
     assert resp_data["success"]
@@ -39,7 +47,7 @@ async def test_set_account(running_client: TestClient, privkeys):
     # test wrong keystore file
     body = {"type": "keystore", "keystore": keystore_str, "passphrase": "possward"}
     with pytest.raises(HTTPStatusError) as e:
-        resp = running_client.post("/manager/v1/account", json=body)
+        resp = running_client.put("/manager/v1/account", json=body)
         assert resp.status_code == 400
         resp.raise_for_status()
 
@@ -50,7 +58,7 @@ async def test_set_account(running_client: TestClient, privkeys):
         "private_key": privkey,
     }
 
-    resp = running_client.post("/manager/v1/account", json=body)
+    resp = running_client.put("/manager/v1/account", json=body)
     resp.raise_for_status()
     resp_data = resp.json()
     assert resp_data["success"]
