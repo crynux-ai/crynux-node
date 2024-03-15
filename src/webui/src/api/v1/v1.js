@@ -75,6 +75,10 @@ class V1Client {
     return this.httpClient.post(url, data, config)
   }
 
+  put(url, data, config) {
+    return this.httpClient.put(url, data, config)
+  }
+
   get(url, config) {
     return this.httpClient.get(url, config)
   }
