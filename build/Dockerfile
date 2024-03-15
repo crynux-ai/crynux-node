@@ -45,12 +45,12 @@ RUN python3 -m venv venv
 ENV PATH="/app/venv/bin:${PATH}"
 
 COPY stable-diffusion-task stable-diffusion-task
+COPY gpt-task gpt-task
+
 WORKDIR /app/stable-diffusion-task
 RUN pip install -r requirements_cuda.txt
 RUN pip install .
 
-
-COPY gpt-task gpt-task
 WORKDIR /app/gpt-task
 RUN pip install -r requirements_cuda.txt
 RUN pip install .
