@@ -10,7 +10,7 @@ class WalletResponse(BaseModel):
     privkey: str
 
 
-@router.get("", response_model=WalletResponse)
+@router.post("", response_model=WalletResponse)
 async def create_wallet():
     acct = Account.create()
     return WalletResponse(address=acct.address, privkey=acct.key.hex())

@@ -5,7 +5,7 @@ async def test_get_wallet(running_client: TestClient):
     privkeys = []
     
     for _ in range(3):
-        resp = running_client.get("/manager/v1/wallet")
+        resp = running_client.post("/manager/v1/wallet")
         resp.raise_for_status()
         resp_data = resp.json()
 
