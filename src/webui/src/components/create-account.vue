@@ -2,6 +2,7 @@
 import { ref } from 'vue'
 import accountAPI from '../api/v1/account'
 import { CopyOutlined, SmileTwoTone } from '@ant-design/icons-vue'
+import config from '../config.json'
 
 const props = defineProps(['oldWalletExists']);
 const emits = defineEmits(['startCreateWallet', 'closeCreateWallet', 'privateKeyUpdated']);
@@ -104,7 +105,7 @@ const copyText = async (text) => {
         <a-space direction="vertical" size="large" :style="{'width': '100%'}">
             <a-button
                 type="primary"
-                href="https://discord.gg/Ug2AHUbrrm"
+                :href="config.discord_link"
                 target="_blank"
             >Go to the Crynux Discord server</a-button>
 

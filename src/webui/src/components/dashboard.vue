@@ -13,6 +13,7 @@ import systemAPI from '../api/v1/system'
 import nodeAPI from '../api/v1/node'
 import taskAPI from '../api/v1/task'
 import accountAPI from '../api/v1/account'
+import config from "../config.json"
 
 const accountEditor = ref(null)
 
@@ -629,7 +630,7 @@ const topRowClasses = computed(() => {
         >Twitter</a-typography-link
       >
       &nbsp;|&nbsp;
-      <a-typography-link href="https://discord.gg/Ug2AHUbrrm" target="_blank"
+      <a-typography-link :href="config.discord_link" target="_blank"
         >Discord</a-typography-link
       >
     </a-space>
