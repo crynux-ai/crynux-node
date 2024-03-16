@@ -1,9 +1,7 @@
 # Build package from source
-# Example call: bash build/macos/build.sh ~/crynux_app ~/crynux.tar.gz
+# Example call: bash build/macos/build.sh ~/crynux_app 
 WORK_DIR=$1
-OUTPUT_FILE=$2
 echo $WORK_DIR
-echo $OUTPUT_FILE
 
 
 if ! [ -x "$(command -v brew)" ]; then
@@ -41,6 +39,7 @@ export PATH="$WORK_DIR/venv/bin:${PATH}"
 mkdir "$WORK_DIR/crynux-node"
 cd "$WORK_DIR/crynux-node"
 cp -R $GIT_DIR/src src
+cp -R $GIT_DIR/res ../res
 cp $GIT_DIR/pyproject.toml pyproject.toml
 cp $GIT_DIR/setup.py setup.py
 cp $GIT_DIR/requirements.txt requirements.txt
@@ -74,7 +73,19 @@ pip install -r requirements_macos.txt
 pip install .
 cd $WORK_DIR
 
+PYBIN=$(realpath $(which python3.10))
+rm "$WORK_DIR/worker/venv/bin/python3.10"
+rm "$WORK_DIR/worker/venv/pyvenv.cfg"
+cp -f $PYBIN "$WORK_DIR/worker/venv/bin/python3.10"
+echo "include-system-site-packages = false" > "$WORK_DIR/worker/venv/pyvenv.cfg"
+
 mkdir config
-cp $GIT_DIR/config/config.yml.macos_example config/config.yml
+cp $GIT_DIR/config/config.yml.shell_example config/config.yml
 cp $GIT_DIR/start.sh start.sh
-tar czf $OUTPUT_FILE .
+cp $GIT_DIR/build/macos/app.sh app.sh
+cp $GIT_DIR/build/macos/crynux.spec crynux.spec
+
+# bash build/macos/build.sh ~/crynux_app ~/crynux.tar.gz
+# OUTPUT_FILE=$2
+# echo $OUTPUT_FILE
+# tar czf $OUTPUT_FILE .
