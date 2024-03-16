@@ -73,7 +73,8 @@ pip install -r requirements_macos.txt
 pip install .
 cd $WORK_DIR
 
-PYBIN = $(realpath $(which python3.10))
+PYBIN=$(realpath $(which python3.10))
+rm "$WORK_DIR/worker/venv/bin/python3.10"
 rm "$WORK_DIR/worker/venv/pyvenv.cfg"
 cp -f $PYBIN "$WORK_DIR/worker/venv/bin/python3.10"
 echo "include-system-site-packages = false" > "$WORK_DIR/worker/venv/pyvenv.cfg"
