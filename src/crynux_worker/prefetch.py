@@ -6,7 +6,7 @@ import os
 import subprocess
 from typing import List
 
-from crynux_worker import config
+from crynux_worker import config, utils
 from crynux_worker.config import ModelConfig, ProxyConfig
 
 
@@ -22,15 +22,9 @@ def call_prefetch_script(
     vae_models: List[ModelConfig] | None = None,
     proxy: ProxyConfig | None = None,
 ):
-    exe = "python"
-    worker_venv = os.path.abspath(os.path.join(script_dir, "venv"))
-    if os.path.exists(worker_venv):
-        exe = os.path.join(worker_venv, "bin", "python")
-
-    script_file = os.path.abspath(os.path.join(script_dir, "prefetch.py"))
     _logger.info(f"Start worker process: {script_dir}, {hf_cache_dir}, {external_cache_dir}")
 
-    args = [exe, script_file]
+    args = utils.get_exe_head("prefetch", script_dir)
     envs = config.set_env(
         hf_cache_dir,
         external_cache_dir,

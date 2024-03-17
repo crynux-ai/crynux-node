@@ -10,6 +10,7 @@ from typing import cast
 
 from crynux_worker.config import get_config
 from crynux_worker.models import ProxyConfig
+from crynux_worker.utils import get_exe_head
 
 from . import utils
 from .error import TaskError, TaskInvalid
@@ -78,12 +79,6 @@ def inference(
         f"result_url: {result_url},"
     )
 
-    # Check if venv exists. If it exits, use the venv interpreter; else use the current interpreter
-    exe = "python"
-    worker_venv = os.path.abspath(os.path.join(script_dir, "venv"))
-    if os.path.exists(worker_venv):
-        exe = os.path.join(worker_venv, "bin", "python")
-
     result_dir = os.path.abspath(os.path.join(output_dir, str(task_id)))
     if not os.path.exists(result_dir):
         os.makedirs(result_dir, exist_ok=True)
@@ -92,13 +87,12 @@ def inference(
         os.makedirs(inference_logs_dir, exist_ok=True)
     log_file = os.path.join(inference_logs_dir, f"{task_id}.log")
 
-    args = [
-        exe,
-        os.path.abspath(os.path.join(script_dir, "inference.py")),
+    args = get_exe_head("infernce", script_dir)
+    args.extend([
         str(task_type),
         result_dir,
         f"{task_args}",
-    ]
+    ])
 
     envs = os.environ.copy()
     envs.update(

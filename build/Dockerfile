@@ -59,8 +59,7 @@ FROM base as final
 
 COPY --from=builder1 /app/venv /app/venv
 COPY --from=builder2 /app/venv /app/worker/venv
-COPY src/prefetch.py /app/worker/prefetch.py
-COPY src/inference.py /app/worker/inference.py
+COPY src/worker_proc_main.py /app/worker/worker_proc_main.py
 
 ENV PATH="/app/venv/bin:${PATH}"
 

@@ -1,6 +1,7 @@
 import argparse
 import json
 import os
+import sys
 from datetime import datetime
 
 import pydantic
@@ -8,6 +9,7 @@ from gpt_task.inference import run_task as gpt_run_task
 from gpt_task.models import GPTTaskArgs
 from sd_task.inference_task_args.task_args import InferenceTaskArgs
 from sd_task.inference_task_runner.inference_task import run_task as sd_run_task
+from sd_task.prefetch import prefetch_models
 
 
 def sd_inference(output_dir: str, task_args_str: str):
@@ -29,12 +31,12 @@ def gpt_inference(output_dir: str, task_args_str: str):
         json.dump(resp, f, ensure_ascii=False)
 
 
-def main():
+def _inference(argv):
     parser = argparse.ArgumentParser()
     parser.add_argument("task_type", type=int, choices=[0, 1])
     parser.add_argument("output_dir", type=str)
     parser.add_argument("task_args", type=str)
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     task_type: int = args.task_type
     output_dir: str = args.output_dir
@@ -61,6 +63,15 @@ def main():
         print("Task args invalid")
         raise
 
+
+def main(argv=None):
+    if argv is None:
+        argv = sys.argv
+    job = argv[1]
+    if job == "prefetch":
+        prefetch_models()
+    else:
+        _inference(argv[2:])
 
 if __name__ == "__main__":
     main()
