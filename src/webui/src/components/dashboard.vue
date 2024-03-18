@@ -226,20 +226,28 @@ const topRowClasses = computed(() => {
       ></a-alert>
       <a-alert
         type="error"
-        message="Not enough ETH in the wallet. Please transfer at least 0.01 ETH to the wallet for the gas fee."
+        message="Not enough ETH in the wallet. At least 0.01 ETH is required. Go to Crynux Discord to get test tokens for free."
         class="top-alert"
         v-if="accountStatus.address !== '' && !ethEnough()"
-      ></a-alert>
+      >
+        <template #action>
+          <a-button size="small" type="primary" :href="config.discord_link" target="_blank">Crynux Discord</a-button>
+        </template>
+      </a-alert>
       <a-alert
         type="error"
-        message="Not enough CNX in the wallet. Please transfer at least 400 CNX to the wallet for the staking."
+        message="Not enough CNX in the wallet. At least 400 CNX is required. Go to Crynux Discord to get test tokens for free."
         class="top-alert"
         v-if="
           nodeStatus.status === nodeAPI.NODE_STATUS_STOPPED &&
           accountStatus.address !== '' &&
           !cnxEnough()
         "
-      ></a-alert>
+      >
+        <template #action>
+          <a-button size="small" type="primary" :href="config.discord_link" target="_blank">Crynux Discord</a-button>
+        </template>
+      </a-alert>
     </a-col>
   </a-row>
   <a-row :gutter="[16, 16]">
