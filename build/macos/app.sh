@@ -2,11 +2,17 @@
 source venv/bin/activate
 pyinstaller crynux.spec
 
+source worker/venv/bin/activate
+# change in controlnet_aux/zoe/zoedepth/models/layers/attractor.py
+TAR_FILE=worker/venv/lib/python3.10/site-packages/controlnet_aux/zoe/zoedepth/models/layers/attractor.py
+sed -i.bak "s/@torch.jit.script/#@torch.jit.script/g" $TAR_FILE
+pyinstaller worker_proc_main.spec
+
 DATA_DIR=$1
 RES_DIR=dist/crynux.app/Contents/Resources
 
-cp -R worker "$RES_DIR/"
 cp -R webui "$RES_DIR/"
+mv dist/worker_proc_main dist/crynux.app/Contents/MacOS/
 
 if [ $DATA_DIR ] && [ -d $DATA_DIR ]; then
     echo "$DATA_DIR exist, copy it to macapp"

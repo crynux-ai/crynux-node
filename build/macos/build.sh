@@ -54,12 +54,11 @@ cd $GIT_DIR
 git submodule update --init --recursive
 cd $WORK_DIR
 mkdir "$WORK_DIR/worker"
-cp $GIT_DIR/src/prefetch.py worker/prefetch.py
-cp $GIT_DIR/src/inference.py worker/inference.py
-
+cp $GIT_DIR/src/*.py worker/
 
 python3.10 -m venv worker/venv
 source "$WORK_DIR/worker/venv/bin/activate"
+pip install pyinstaller==6.5.0
 
 cp -R $GIT_DIR/stable-diffusion-task stable-diffusion-task
 cd stable-diffusion-task
@@ -73,17 +72,10 @@ pip install -r requirements_macos.txt
 pip install .
 cd $WORK_DIR
 
-PYBIN=$(realpath $(which python3.10))
-rm "$WORK_DIR/worker/venv/bin/python3.10"
-rm "$WORK_DIR/worker/venv/pyvenv.cfg"
-cp -f $PYBIN "$WORK_DIR/worker/venv/bin/python3.10"
-echo "include-system-site-packages = false" > "$WORK_DIR/worker/venv/pyvenv.cfg"
-
 mkdir config
 cp $GIT_DIR/config/config.yml.shell_example config/config.yml
 cp $GIT_DIR/start.sh start.sh
-cp $GIT_DIR/build/macos/app.sh app.sh
-cp $GIT_DIR/build/macos/crynux.spec crynux.spec
+cp $GIT_DIR/build/macos/* .
 
 # bash build/macos/build.sh ~/crynux_app ~/crynux.tar.gz
 # OUTPUT_FILE=$2

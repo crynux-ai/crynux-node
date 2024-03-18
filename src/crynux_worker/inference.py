@@ -7,7 +7,7 @@ import os
 import subprocess
 from typing import List
 
-from crynux_worker import config
+from crynux_worker import config, utils
 from crynux_worker.config import ModelConfig, ProxyConfig
 
 
@@ -25,10 +25,6 @@ def call_inference_script(
     vae_models: List[ModelConfig] | None = None,
     proxy: ProxyConfig | None = None,
 ):
-    exe = "python"
-    worker_venv = os.path.abspath(os.path.join(script_dir, "venv"))
-    if os.path.exists(worker_venv):
-        exe = os.path.join(worker_venv, "bin", "python")
     envs = config.set_env(
         hf_cache_dir=hf_cache_dir,
         external_cache_dir=external_cache_dir,
@@ -38,9 +34,9 @@ def call_inference_script(
         proxy=proxy,
     )
 
-    script_file = os.path.abspath(os.path.join(script_dir, "inference.py"))
     start_ts = datetime.now()
-    args = [exe, script_file, "0", output_dir, task_args_str]
+    args = utils.get_exe_head("inference", script_dir)
+    args.extend(["0", output_dir, task_args_str])
 
     _logger.info(f"Start inference models, save in {output_dir}")
     subprocess.check_call(args, env=envs)
