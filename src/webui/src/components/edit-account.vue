@@ -2,6 +2,7 @@
 import { computed, ref } from 'vue'
 import accountAPI from '../api/v1/account'
 import createAccount from './create-account.vue';
+import config from '../config.json';
 
 const modalVisible = ref(false)
 const activeImportType = ref('private-key')
@@ -74,11 +75,15 @@ defineExpose({ showModal })
     :closable="props.accountStatus.address !== ''"
   >
     <a-alert
-      message="A wallet with enough ETH(>0.01) and CNX(>400) must be provided to the node"
+      message="A wallet with enough ETH(>0.01) and CNX(>400) must be provided to the node. Get the test tokens from the Crynux Discord for free."
       type="info"
       style="margin-top: 16px"
       v-if="props.accountStatus.address === '' && apiError === null"
-    />
+    >
+      <template #action>
+        <a-button size="small" type="primary" :href="config.discord_link" target="_blank">Crynux Discord</a-button>
+      </template>
+    </a-alert>
 
     <a-alert
       :message="apiError.data"
