@@ -6,9 +6,9 @@ import logging
 import os
 from typing import List, Optional, Type, cast
 
-from anyio import (Event, create_task_group, fail_after,
+from anyio import (Event, TASK_STATUS_IGNORED, create_task_group, fail_after,
                    get_cancelled_exc_class, move_on_after, to_thread)
-from anyio.abc import TaskGroup
+from anyio.abc import TaskGroup, TaskStatus
 from web3 import Web3
 from web3.types import EventData
 from tenacity import AsyncRetrying, before_sleep_log, wait_fixed
@@ -411,12 +411,12 @@ class NodeManager(object):
         else:
             await _inner()
 
-    async def _watch_events(self):
+    async def _watch_events(self, *, task_status: TaskStatus[None] = TASK_STATUS_IGNORED):
 
-        async def _inner():
+        async def _inner() -> None:
             assert self._watcher is not None
             try:
-                await self._watcher.start()
+                await self._watcher.start(task_status=task_status)
             except Exception as e:
                 _logger.exception(e)
                 _logger.error("Cannot watch events from chain")
@@ -465,14 +465,18 @@ class NodeManager(object):
                 await self._recover()
 
                 assert self._task_system is not None
-
-                if self.config.headless:
-                    assert self._node_state_manager is not None
-                    tg.start_soon(self._node_state_manager.try_start, self.gpu_name, self.gpu_vram)
-                else:
-                    tg.start_soon(self._sync_state)
-                tg.start_soon(self._watch_events)
                 tg.start_soon(self._task_system.start)
+
+                if not self.config.headless:
+                    tg.start_soon(self._sync_state)
+
+                # wait the event watcher to start first and then join the network sequentially
+                # because the node may be selected to execute one task in the same tx of join,
+                # start watcher after the joining operation will cause missing the TaskStarted event.
+                await tg.start(self._watch_events)
+
+                assert self._node_state_manager is not None
+                await self._node_state_manager.try_start(self.gpu_name, self.gpu_vram)
         finally:
             self._tg = None
 
@@ -505,10 +509,10 @@ class NodeManager(object):
             self._task_system.stop()
             self._task_system = None
         if self._node_state_manager is not None:
-            if self.config.headless:
-                with move_on_after(10, shield=True):
-                    await self._node_state_manager.try_stop()
-            self._node_state_manager.stop_sync()
+            with move_on_after(10, shield=True):
+                await self._node_state_manager.try_stop()
+            if not self.config.headless:
+                self._node_state_manager.stop_sync()
             self._node_state_manager = None
         if self._contracts is not None:
             self._contracts = None
