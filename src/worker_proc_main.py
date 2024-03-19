@@ -60,7 +60,7 @@ def _inference(args):
 
 def main(argv=None):
     if argv is None:
-        argv = sys.argv
+        argv = sys.argv[1:]
 
     parser = argparse.ArgumentParser()
     subparsers = parser.add_subparsers(dest="job")
