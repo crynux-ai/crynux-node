@@ -31,13 +31,7 @@ def gpt_inference(output_dir: str, task_args_str: str):
         json.dump(resp, f, ensure_ascii=False)
 
 
-def _inference(argv):
-    parser = argparse.ArgumentParser()
-    parser.add_argument("task_type", type=int, choices=[0, 1])
-    parser.add_argument("output_dir", type=str)
-    parser.add_argument("task_args", type=str)
-    args = parser.parse_args(argv)
-
+def _inference(args):
     task_type: int = args.task_type
     output_dir: str = args.output_dir
     task_args_str: str = args.task_args
@@ -67,11 +61,24 @@ def _inference(argv):
 def main(argv=None):
     if argv is None:
         argv = sys.argv
-    job = argv[1]
+
+    parser = argparse.ArgumentParser()
+    subparsers = parser.add_subparsers(dest="job")
+
+    subparsers.add_parser("prefetch")
+
+    inference_parser = subparsers.add_parser("inference")
+    inference_parser.add_argument("task_type", type=int, choices=[0, 1])
+    inference_parser.add_argument("output_dir", type=str)
+    inference_parser.add_argument("task_args", type=str)
+
+    args = parser.parse_args(argv)
+    job = args.job
+
     if job == "prefetch":
         prefetch_models()
     else:
-        _inference(argv[2:])
+        _inference(args)
 
 if __name__ == "__main__":
     main()
