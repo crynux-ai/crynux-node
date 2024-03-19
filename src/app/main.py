@@ -20,6 +20,7 @@ if getattr(sys, "frozen", False):
         cfg.web_dist = os.path.join(resdir, "webui/dist")
         cfg.log.dir = os.path.join(resdir, "logs")
         cfg.db = f"sqlite+aiosqlite://{os.path.join(resdir, 'db/server.db')}"
+        assert cfg.task_config is not None
         cfg.task_config.output_dir = os.path.join(resdir, "data/results")
         cfg.task_config.hf_cache_dir = os.path.join(resdir, "data/huggingface")
         cfg.task_config.external_cache_dir = os.path.join(resdir, "data/external")
@@ -45,16 +46,15 @@ from PyQt6.QtWidgets import QWidget, QApplication, QVBoxLayout
 from PyQt6.QtWebEngineWidgets import QWebEngineView
 import qasync
 
-from crynux_server import run
-from crynux_server import stop
-import threading
-
+from anyio import run as anyio_run, create_task_group
+from crynux_server.run import CrynuxRunner
 
 class CrynuxApp(QWidget):
 
-    def __init__(self):
+    def __init__(self, runner: CrynuxRunner):
         super().__init__()
         self.initUI()
+        self.runner = runner
 
     def initUI(self):
         vbox = QVBoxLayout(self)
@@ -64,45 +64,46 @@ class CrynuxApp(QWidget):
         self.setGeometry(300, 300, 1300, 700)
         self.setWindowTitle('Crynux Node')
 
-    async def delayed_show(self, event):
-        await event.wait()
-        await asyncio.sleep(2)
+    def delayed_show(self):
         self.webview.load(QUrl("http://localhost:7412"))
         self.show()
 
     def closeEvent(self, event):
         loop = asyncio.get_running_loop()
-        async def _close():
-            run.server.stop()
-            await run.node_manager.finish()
-            stop.stop()
+        async def _close() -> None:
+            await self.runner.stop()
 
         task = loop.create_task(_close())
         task.add_done_callback(lambda t: event.accept())
 
 
 def main():
-    app = QApplication(sys.argv)
-    loop = qasync.QEventLoop(app)
-    asyncio.set_event_loop(loop)
 
-    crynux_app = CrynuxApp()
-    event = asyncio.Event()
-    loop.create_task(run._run(event))
-    loop.create_task(crynux_app.delayed_show(event))
+    async def _main():
+        app = QApplication(sys.argv)
+        loop = qasync.QEventLoop(app)
+        asyncio.set_event_loop(loop)
+
+        runner = CrynuxRunner()
+        crynux_app = CrynuxApp(runner=runner)
+
+        try:
+            async with create_task_group() as tg:
+                await tg.start(runner.run)
+
+                crynux_app.delayed_show()
+
+        finally:
+            loop.run_until_complete(loop.shutdown_default_executor())
 
     try:
-        loop.run_forever()
+        anyio_run(_main)
     finally:
-        loop.stop()
-        loop.run_until_complete(loop.shutdown_default_executor())
-        loop.close()
-
-    proc = psutil.Process(os.getpid())
-    for p in proc.children(recursive=True):
-      _logger.info(f"Kill process: {p.ppid()}, {p.cmdline()}")
-      p.kill()
-    proc.kill()
+        proc = psutil.Process(os.getpid())
+        for p in proc.children(recursive=True):
+            _logger.info(f"Kill process: {p.ppid()}, {p.cmdline()}")
+            p.kill()
+        proc.kill()
 
 
 if __name__ == '__main__':

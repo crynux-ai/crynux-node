@@ -87,7 +87,7 @@ def inference(
         os.makedirs(inference_logs_dir, exist_ok=True)
     log_file = os.path.join(inference_logs_dir, f"{task_id}.log")
 
-    args = get_exe_head("infernce", script_dir)
+    args = get_exe_head("inference", script_dir)
     args.extend([
         str(task_type),
         result_dir,

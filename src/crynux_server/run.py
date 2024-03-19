@@ -1,68 +1,87 @@
 import math
 import signal
+from typing import Optional
 
 import anyio
-from anyio import create_task_group, move_on_after, open_signal_receiver
-from anyio.abc import CancelScope
+from anyio import (
+    TASK_STATUS_IGNORED,
+    create_task_group,
+    move_on_after,
+    open_signal_receiver,
+)
+from anyio.abc import TaskStatus, TaskGroup
 
 from crynux_server import db, log, utils
 from crynux_server.config import get_config
 from crynux_server.node_manager import NodeManager, set_node_manager
-from crynux_server.server import Server
+from crynux_server.server import Server, set_server
 
-server = None
-node_manager = None
 
-async def _run(event=None):
-    config = get_config()
+class CrynuxRunner(object):
+    def __init__(self) -> None:
+        self.config = get_config()
 
-    log.init(config)
+        self._server: Optional[Server] = None
+        self._node_manager: Optional[NodeManager] = None
+        self._tg: Optional[TaskGroup] = None
 
-    await db.init(config.db)
+    async def run(self, task_status: TaskStatus[None] = TASK_STATUS_IGNORED):
+        assert self._tg is None, "Crynux Server is running"
+        log.init(self.config)
 
-    global server
-    server = Server(config.web_dist)
-    if event:
-        server._start_event = [event]
+        await db.init(self.config.db)
 
-    gpu_info = await utils.get_gpu_info()
-    gpu_name = gpu_info.model
-    gpu_vram_gb = math.ceil(gpu_info.vram_total_mb / 1024)
+        self._server = Server(self.config.web_dist)
+        set_server(self._server)
 
-    global node_manager
-    node_manager = NodeManager(config=config, gpu_name=gpu_name, gpu_vram=gpu_vram_gb)
-    set_node_manager(node_manager)
+        gpu_info = await utils.get_gpu_info()
+        gpu_name = gpu_info.model
+        gpu_vram_gb = math.ceil(gpu_info.vram_total_mb / 1024)
 
-    async def signal_handler(scope: CancelScope):
-        with open_signal_receiver(signal.SIGINT, signal.SIGTERM) as signals:
-            async for _ in signals:
-                if not config.headless:
-                    server.stop()
-                with move_on_after(10, shield=True):
-                    await node_manager.finish()
-                scope.cancel()
-                return
+        self._node_manager = NodeManager(
+            config=self.config, gpu_name=gpu_name, gpu_vram=gpu_vram_gb
+        )
+        set_node_manager(self._node_manager)
 
-    try:
-        async with create_task_group() as tg:
-            tg.start_soon(signal_handler, tg.cancel_scope)
+        async def signal_handler():
+            with open_signal_receiver(signal.SIGINT, signal.SIGTERM) as signals:
+                async for _ in signals:
+                    await self.stop()
+                    return
 
-            tg.start_soon(node_manager.run)
+        try:
+            async with create_task_group() as tg:
+                self._tg = tg
 
-            if not config.headless:
-                tg.start_soon(
-                    server.start,
-                    config.server_host,
-                    config.server_port,
-                    config.log.level == "DEBUG",
-                )
-    finally:
-        with move_on_after(2, shield=True):
-            await db.close()
+                tg.start_soon(signal_handler)
+                tg.start_soon(self._node_manager.run)
+                if not self.config.headless:
+                    await tg.start(
+                        self._server.start,
+                        self.config.server_host,
+                        self.config.server_port,
+                        self.config.log.level == "DEBUG",
+                    )
+                task_status.started()
+        finally:
+            with move_on_after(2, shield=True):
+                await db.close()
+
+    async def stop(self):
+        if self._tg is None:
+            return
+
+        if self._server is not None and not self.config.headless:
+            self._server.stop()
+        if self._node_manager is not None:
+            with move_on_after(10, shield=True):
+                await self._node_manager.finish()
+        self._tg.cancel_scope.cancel()
 
 
 def run():
     try:
-        anyio.run(_run)
+        runner = CrynuxRunner()
+        anyio.run(runner.run)
     except KeyboardInterrupt:
         pass
