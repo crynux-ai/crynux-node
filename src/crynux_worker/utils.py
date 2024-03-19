@@ -1,13 +1,14 @@
 import os
 import sys
 
+from typing import List
 
-def _osx_bundle_exe_head(job: str) -> list[str]:
+def _osx_bundle_exe_head(job: str) -> List[str]:
     exe = os.path.abspath(os.path.join(os.path.dirname(sys.executable), "worker_proc_main"))
     return [exe, job]
 
 
-def _script_cmd_head(job: str, script_dir: str="") -> list[str]:
+def _script_cmd_head(job: str, script_dir: str="") -> List[str]:
     exe = "python"
     worker_venv = os.path.abspath(os.path.join(script_dir, "venv"))
     if os.path.exists(worker_venv):
@@ -17,7 +18,7 @@ def _script_cmd_head(job: str, script_dir: str="") -> list[str]:
     return [exe, script_file, job]
     
 
-def get_exe_head(job: str, script_dir: str="") -> list[str]:
+def get_exe_head(job: str, script_dir: str="") -> List[str]:
     if getattr(sys, "frozen", False):
         return _osx_bundle_exe_head(job)
     else:

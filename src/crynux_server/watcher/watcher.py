@@ -1,10 +1,8 @@
 import logging
 from typing import Any, Awaitable, Callable, Dict, Optional, cast
 
-from anyio import CancelScope, Event, create_task_group, fail_after, sleep
-from anyio.abc import TaskGroup
-from tenacity import (AsyncRetrying, before_sleep_log, stop_after_attempt,
-                      wait_fixed)
+from anyio import CancelScope, TASK_STATUS_IGNORED, create_task_group, fail_after, sleep
+from anyio.abc import TaskGroup, TaskStatus
 from web3 import AsyncWeb3
 from web3.contract.async_contract import AsyncContract, AsyncContractEvent
 from web3.types import EventData
@@ -134,6 +132,8 @@ class EventWatcher(object):
         from_block: int = 0,
         to_block: int = 0,
         interval: float = 1,
+        *,
+        task_status: TaskStatus[None] = TASK_STATUS_IGNORED,
     ):
         """
         watch events from block
@@ -161,6 +161,8 @@ class EventWatcher(object):
                 else:
                     if self._cache is not None:
                         await self._cache.set(from_block - 1)
+                # signal the event watcher is started
+                task_status.started()
 
                 while to_block <= 0 or from_block <= to_block:
                     latest_blocknum = await self.w3.eth.get_block_number()

@@ -46,7 +46,7 @@ cp $GIT_DIR/requirements.txt requirements.txt
 cp $GIT_DIR/MANIFEST.in MANIFEST.in
 cp $GIT_DIR/go.mod go.mod
 cp $GIT_DIR/go.sum go.sum
-pip install -r requirements.txt && pip install .
+pip install -r requirements.txt && pip install .[app]
 
 
 ### worker ###

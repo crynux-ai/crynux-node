@@ -1,14 +1,15 @@
 from functools import partial
 from typing import Optional
 
-from anyio import Event, create_task_group
+from anyio import TASK_STATUS_IGNORED, Event, create_task_group
+from anyio.abc import TaskStatus
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from hypercorn.asyncio import serve
 from hypercorn.config import Config
 
-from .v1 import router as v1_router
 from .middleware import add_middleware
+from .v1 import router as v1_router
 
 
 class Server(object):
@@ -20,9 +21,15 @@ class Server(object):
         add_middleware(self._app)
 
         self._shutdown_event: Optional[Event] = None
-        self._start_event: list[Event] = []
 
-    async def start(self, host: str, port: int, access_log: bool = True):
+    async def start(
+        self,
+        host: str,
+        port: int,
+        access_log: bool = True,
+        *,
+        task_status: TaskStatus[None] = TASK_STATUS_IGNORED,
+    ):
         assert self._shutdown_event is None, "Server has already been started."
 
         self._shutdown_event = Event()
@@ -32,18 +39,15 @@ class Server(object):
             config.accesslog = "-"
         config.errorlog = "-"
 
-        async def _set_start_event():
-            for e in self._start_event:
-                e.set()
         try:
             async with create_task_group() as tg:
                 serve_func = partial(serve, self._app, config, shutdown_trigger=self._shutdown_event.wait)  # type: ignore
                 tg.start_soon(serve_func)
-                tg.start_soon(_set_start_event)
+                task_status.started()
         finally:
             self._shutdown_event = None
 
-    def stop(self):
+    def stop(self) -> None:
         assert self._shutdown_event is not None, "Server has not been started."
         self._shutdown_event.set()
 
