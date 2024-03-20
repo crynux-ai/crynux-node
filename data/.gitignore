@@ -1,2 +1,2 @@
-config.yml
-gunicorn.conf.py
+*
+!.gitignore
