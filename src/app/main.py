@@ -24,7 +24,7 @@ if getattr(sys, "frozen", False):
         cfg.task_config.output_dir = os.path.join(resdir, "data/results")
         cfg.task_config.hf_cache_dir = os.path.join(resdir, "data/huggingface")
         cfg.task_config.external_cache_dir = os.path.join(resdir, "data/external")
-        cfg.task_config.inference_logs_dir = os.path.join(resdir, "inference-logs")
+        cfg.task_config.inference_logs_dir = os.path.join(resdir, "data/inference-logs")
         cfg.task_config.script_dir = os.path.join(resdir, "worker")
         crynux_config.set_config(cfg)
         crynux_config.dump_config(cfg)
@@ -78,27 +78,22 @@ class CrynuxApp(QWidget):
 
 
 def main():
+    app = QApplication(sys.argv)
+    loop = qasync.QEventLoop(app)
+    asyncio.set_event_loop(loop)
 
     async def _main():
-        app = QApplication(sys.argv)
-        loop = qasync.QEventLoop(app)
-        asyncio.set_event_loop(loop)
-
         runner = CrynuxRunner()
         crynux_app = CrynuxApp(runner=runner)
-
-        try:
-            async with create_task_group() as tg:
-                await tg.start(runner.run)
-
-                crynux_app.delayed_show()
-
-        finally:
-            loop.run_until_complete(loop.shutdown_default_executor())
-
+        async with create_task_group() as tg:
+            await tg.start(runner.run)
+            await asyncio.sleep(delay=3.5)
+            crynux_app.delayed_show()
     try:
-        anyio_run(_main)
+        loop.create_task(_main())
+        loop.run_forever()
     finally:
+        loop.run_until_complete(loop.shutdown_default_executor())
         proc = psutil.Process(os.getpid())
         for p in proc.children(recursive=True):
             _logger.info(f"Kill process: {p.ppid()}, {p.cmdline()}")
