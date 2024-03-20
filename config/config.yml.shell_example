@@ -61,7 +61,7 @@ task_config:
   
   # The directory to store the temp logs generated
   # by the task execution engine
-  inference_logs_dir: "inference-logs"
+  inference_logs_dir: "data/inference-logs"
   
   # The directory that stores the source code of the task execution engine
   script_dir: "worker"
