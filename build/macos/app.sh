@@ -9,10 +9,10 @@ sed -i.bak "s/@torch.jit.script/#@torch.jit.script/g" $TAR_FILE
 pyinstaller worker_proc_main.spec
 
 DATA_DIR=$1
-RES_DIR=dist/crynux.app/Contents/Resources
+RES_DIR=dist/Crynux.app/Contents/Resources
 
 cp -R webui "$RES_DIR/"
-mv dist/worker_proc_main dist/crynux.app/Contents/MacOS/
+mv dist/worker_proc_main dist/Crynux.app/Contents/MacOS/
 
 if [ $DATA_DIR ] && [ -d $DATA_DIR ]; then
     echo "$DATA_DIR exist, copy it to macapp"
@@ -28,10 +28,10 @@ else
 fi
 
 cd dist
-[ -e crynux.dmg ] && rm crynux.dmg
+[ -e Crynux.dmg ] && rm Crynux.dmg
 create-dmg \
-    --volname "crynux" --volicon "../res/icon.icns" \
+    --volname "Crynux" --volicon "../res/icon.icns" \
     --window-pos 200 120 --window-size 800 400 --icon-size 100 \
-    --icon "crynux.app" 200 190 --hide-extension "crynux.app" \
+    --icon "Crynux.app" 200 190 --hide-extension "Crynux.app" \
     --app-drop-link 600 185 \
-    "crynux.dmg" "crynux.app"
+    "Crynux.dmg" "Crynux.app"

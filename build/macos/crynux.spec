@@ -53,7 +53,7 @@ coll = COLLECT(
 )
 app = BUNDLE(
     coll,
-    name='crynux.app',
+    name='Crynux.app',
     icon='res/icon.icns',
     bundle_identifier=None,
     info_plist={

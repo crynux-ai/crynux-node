@@ -1,5 +1,10 @@
 # Build package from source
 # Example call: bash build/macos/build.sh ~/crynux_app 
+
+if [[ -z $1  ]]; then
+  exit 1
+fi
+
 WORK_DIR=$1
 echo $WORK_DIR
 
