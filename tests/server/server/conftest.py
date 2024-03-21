@@ -77,7 +77,10 @@ async def root_contracts(tx_option, privkeys):
         amount = Web3.to_wei(1000, "ether")
         await c0.transfer(account.address, amount, option=tx_option)
 
-    return c0
+    try:
+        yield c0
+    finally:
+        await c0.close()
 
 
 @pytest.fixture
@@ -159,7 +162,11 @@ async def node_contracts(
             await waiter.wait()
 
         cs.append(contracts)
-    return cs
+    try:
+        yield cs
+    finally:
+        for c in cs:
+            await c.close()
 
 
 @pytest.fixture
