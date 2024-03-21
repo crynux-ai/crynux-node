@@ -413,10 +413,13 @@ class NodeManager(object):
 
     async def _watch_events(self, *, task_status: TaskStatus[None] = TASK_STATUS_IGNORED):
 
-        async def _inner() -> None:
+        async def _inner(first_call) -> None:
             assert self._watcher is not None
             try:
-                await self._watcher.start(task_status=task_status)
+                if first_call:
+                    await self._watcher.start(task_status=task_status)
+                else:
+                    await self._watcher.start()
             except Exception as e:
                 _logger.exception(e)
                 _logger.error("Cannot watch events from chain")
@@ -427,6 +430,8 @@ class NodeManager(object):
                     )
                 raise
 
+        first_call = True
+
         if self._retry:
             async for attemp in AsyncRetrying(
                 wait=wait_fixed(self._retry_delay),
@@ -434,9 +439,12 @@ class NodeManager(object):
                 reraise=True,
             ):
                 with attemp:
-                    await _inner()
+                    try:
+                        await _inner(first_call)
+                    finally:
+                        first_call = False
         else:
-            await _inner()
+            await _inner(first_call)
 
     async def _run(self, prefetch: bool = True):
         assert self._tg is None, "Node manager is running."
@@ -515,6 +523,7 @@ class NodeManager(object):
                 self._node_state_manager.stop_sync()
             self._node_state_manager = None
         if self._contracts is not None:
+            await self._contracts.close()
             self._contracts = None
         if self._tg is not None and not self._tg.cancel_scope.cancel_called:
             self._tg.cancel_scope.cancel()

@@ -30,7 +30,7 @@ WORKDIR /app/crynux-node
 COPY src src
 COPY pyproject.toml pyproject.toml
 COPY setup.py setup.py
-COPY requirements.txt requirements.txt
+COPY requirements_docker.txt requirements.txt
 COPY MANIFEST.in MANIFEST.in
 COPY go.mod go.mod
 COPY go.sum go.sum

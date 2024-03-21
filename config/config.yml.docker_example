@@ -25,11 +25,11 @@ ethereum:
   # The deployed addresses of the smart contracts
   contract:
     token: "0x95E7e7Ed5463Ff482f61585605a0ff278e0E1FFb"
-    node: "0x8421a11dA15EDE70498fb815b61dA998D80d39eA"
-    task: "0xEF3F80ad4f1219F11A973d8625e66d884E96A51D"
-    qos: "0x7d977cc5B51ac3843cbe8e88397669fc9E4111f2"
-    task_queue: "0x2509Be919d814fa11330b652862B7c184337F9b7"
-    netstats: "0x5727598F5ba7DDa159fCCDe146982bA07F933007"
+    node: "0x0214c1AEEf237Fa620D2a8fD79426ED63Fd7E6BE"
+    task: "0x7f3C2d706980Fda3dc7A7b09b5D23CAF73DCe0d1"
+    qos: "0x0481581c03687935C6E3bdbb440b084B3FC23B3A"
+    task_queue: "0x529F04fC5aEBdB0275299CFC63574C1473f19D5d"
+    netstats: "0x5157D548408a4B26b8bcA03916f3d912929B76aD"
 
 # The directory to store the temp files related to the running task
 task_dir: tasks

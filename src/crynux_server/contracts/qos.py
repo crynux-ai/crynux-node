@@ -36,11 +36,17 @@ class QOSContract(ContractWrapperBase):
             "updateKickoutThreshold", option=option, threshold=threshold
         )
 
+    async def get_task_count(self, address: str) -> int:
+        return await self._function_call("getTaskCount", nodeAddress=address)
+
     async def get_task_score(self, address: str) -> int:
         return await self._function_call("getTaskScore", nodeAddress=address)
 
     async def get_recent_task_score(self, address: str) -> int:
         return await self._function_call("getRecentTaskScore", nodeAddress=address)
+
+    async def get_recent_task_count(self, address: str) -> int:
+        return await self._function_call("getRecentTaskCount", nodeAddress=address)
 
     async def get_current_task_score(self, address: str) -> int:
         return await self._function_call("getCurrentTaskScore", nodeAddress=address)
