@@ -1,23 +1,23 @@
 import logging
-from enum import IntEnum
-from typing import cast, Optional
-
 import ssl
+from enum import IntEnum
+from typing import Optional, cast
+
 import certifi
-from aiohttp import ClientSession, TCPConnector
+from aiohttp import ClientSession, ClientTimeout, TCPConnector
 from eth_account.signers.local import LocalAccount
 from eth_typing import ChecksumAddress
-from web3 import AsyncWeb3, AsyncHTTPProvider, WebsocketProviderV2
-from web3.types import TxParams
-from web3.middleware.signing import async_construct_sign_and_send_raw_middleware
+from web3 import AsyncHTTPProvider, AsyncWeb3, WebsocketProviderV2
+from web3.middleware.signing import \
+    async_construct_sign_and_send_raw_middleware
 from web3.providers.async_base import AsyncBaseProvider
+from web3.types import TxParams
 
-from . import crynux_token, node, task, qos, task_queue, network_stats
+from crynux_server.config import TxOption, get_default_tx_option
+
+from . import crynux_token, network_stats, node, qos, task, task_queue
 from .exceptions import TxRevertedError
 from .utils import TxWaiter
-
-from crynux_server.config import get_default_tx_option, TxOption
-
 
 __all__ = ["TxRevertedError", "Contracts", "TxWaiter", "get_contracts", "set_contracts"]
 
@@ -55,7 +55,7 @@ class Contracts(object):
                 self.provider_type = ProviderType.HTTP
                 self.provider = AsyncHTTPProvider(provider_path)
                 ssl_context = ssl.create_default_context(cafile=certifi.where())
-                session = ClientSession(timeout=timeout, connector=TCPConnector(ssl=ssl_context))
+                session = ClientSession(timeout=ClientTimeout(timeout), connector=TCPConnector(ssl=ssl_context))
                 self._session = session
             elif provider_path.startswith("ws"):
                 self.provider_type = ProviderType.WS
