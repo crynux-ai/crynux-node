@@ -131,7 +131,7 @@ http://localhost:7412
 3. Install the dependencies and package (preferably in a virtualenv)
 
 ```shell
-# pip install -r requirements.txt && pip install .[test]
+# pip install -r requirements_docker.txt && pip install .[test]
 ```
 
 4. Run tests 
