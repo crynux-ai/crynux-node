@@ -62,6 +62,8 @@ async def _stop(
     except Exception:
         _logger.error("Cannot stop the node")
         raise
+    finally:
+        await state_manager.contracts.close()
 
 
 def stop(

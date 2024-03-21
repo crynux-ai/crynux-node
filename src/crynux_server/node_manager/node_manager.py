@@ -523,6 +523,7 @@ class NodeManager(object):
                 self._node_state_manager.stop_sync()
             self._node_state_manager = None
         if self._contracts is not None:
+            await self._contracts.close()
             self._contracts = None
         if self._tg is not None and not self._tg.cancel_scope.cancel_called:
             self._tg.cancel_scope.cancel()

@@ -110,8 +110,10 @@ async def node_contracts(privkey, tx_option):
             node_contract_address, node_amount, option=tx_option
         )
         await waiter.wait()
-
-    return contracts
+    try:
+        yield contracts
+    finally:
+        await contracts.close()
 
 
 
