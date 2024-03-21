@@ -33,7 +33,10 @@ if getattr(sys, "frozen", False):
         _logger.error(error)
         raise error
 else:
-    app_path = os.path.dirname(__file__)
+    app_path = __file__
+    for i in range(4):
+        app_path = os.path.dirname(app_path)
+    os.environ["CRYNUX_SERVER_CONFIG"] = os.path.join(app_path, "config/config.yml")
 
 assert os.environ["CRYNUX_SERVER_CONFIG"]
 _logger.info("Start Crynux Node from: ", app_path, os.environ["CRYNUX_SERVER_CONFIG"])
