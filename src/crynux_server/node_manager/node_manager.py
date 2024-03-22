@@ -484,7 +484,14 @@ class NodeManager(object):
                 await tg.start(self._watch_events)
 
                 assert self._node_state_manager is not None
-                await self._node_state_manager.try_start(self.gpu_name, self.gpu_vram)
+                try:
+                    await self._node_state_manager.try_start(self.gpu_name, self.gpu_vram)
+                except Exception as e:
+                    if self.config.headless:
+                        raise e
+                    else:
+                        _logger.warn(e)
+                        _logger.info("Cannot auto join the network")
         finally:
             self._tg = None
 
