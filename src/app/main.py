@@ -49,17 +49,21 @@ from PyQt6.QtWebEngineWidgets import QWebEngineView
 from PyQt6.QtWebEngineCore import QWebEnginePage, QWebEngineSettings
 import qasync
 
-from anyio import run as anyio_run, create_task_group
+from anyio import create_task_group
 from crynux_server.run import CrynuxRunner
 
 
 class CustomWebEnginePage(QWebEnginePage):
 
-    def acceptNavigationRequest(self, url, _type, isMainFrame):
-        if _type == QWebEnginePage.NavigationType.NavigationTypeLinkClicked:
-            QDesktopServices.openUrl(url)
-            return False
-        return super().acceptNavigationRequest(url,  _type, isMainFrame)
+    def createWindow(self, _type):
+        page = CustomWebEnginePage(self)
+        page.urlChanged.connect(self.openBrowser)
+        return page
+
+    def openBrowser(self, url):
+        page = self.sender()
+        QDesktopServices.openUrl(url)
+        page.deleteLater()
 
 
 class CrynuxApp(QWidget):
@@ -76,7 +80,11 @@ class CrynuxApp(QWidget):
         self.webpage = CustomWebEnginePage()
         self.webview.setPage(self.webpage)
 
-        self.webpage.settings.setAttribute(QWebEngineSettings.WebAttribute.JavascriptCanAccessClipboard, True)
+        settings = self.webpage.settings()
+        settings.setAttribute(
+            QWebEngineSettings.WebAttribute.JavascriptCanAccessClipboard,
+            True
+        )
 
         vbox.addWidget(self.webview)
         self.setLayout(vbox)
