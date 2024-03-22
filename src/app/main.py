@@ -33,6 +33,7 @@ if getattr(sys, "frozen", False):
         _logger.error(error)
         raise error
 else:
+    os.environ["CRYNUX_SERVER_CONFIG"] = "config/config.yml"
     app_path = os.path.dirname(__file__)
 
 assert os.environ["CRYNUX_SERVER_CONFIG"]
@@ -41,13 +42,25 @@ _logger.info("Start Crynux Node from: ", app_path, os.environ["CRYNUX_SERVER_CON
 
 import asyncio
 import sys
+from PyQt6.QtGui import QDesktopServices
 from PyQt6.QtCore import QUrl
 from PyQt6.QtWidgets import QWidget, QApplication, QVBoxLayout
 from PyQt6.QtWebEngineWidgets import QWebEngineView
+from PyQt6.QtWebEngineCore import QWebEnginePage, QWebEngineSettings
 import qasync
 
 from anyio import run as anyio_run, create_task_group
 from crynux_server.run import CrynuxRunner
+
+
+class CustomWebEnginePage(QWebEnginePage):
+
+    def acceptNavigationRequest(self, url, _type, isMainFrame):
+        if _type == QWebEnginePage.NavigationType.NavigationTypeLinkClicked:
+            QDesktopServices.openUrl(url)
+            return False
+        return super().acceptNavigationRequest(url,  _type, isMainFrame)
+
 
 class CrynuxApp(QWidget):
 
@@ -57,8 +70,14 @@ class CrynuxApp(QWidget):
         self.runner = runner
 
     def initUI(self):
+
         vbox = QVBoxLayout(self)
         self.webview = QWebEngineView()
+        self.webpage = CustomWebEnginePage()
+        self.webview.setPage(self.webpage)
+
+        self.webpage.settings.setAttribute(QWebEngineSettings.WebAttribute.JavascriptCanAccessClipboard, True)
+
         vbox.addWidget(self.webview)
         self.setLayout(vbox)
         self.setGeometry(300, 300, 1300, 700)
