@@ -26,7 +26,7 @@ dependencies = [
     "python-multipart==0.0.6",
     "tenacity~=8.2.3",
 ]
-version = "0.6.2"
+version = "0.6.3"
 
 [tool.setuptools.packages.find]
 where = ["src"]

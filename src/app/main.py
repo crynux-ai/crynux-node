@@ -44,13 +44,29 @@ _logger.info("Start Crynux Node from: ", app_path, os.environ["CRYNUX_SERVER_CON
 
 import asyncio
 import sys
+from PyQt6.QtGui import QDesktopServices
 from PyQt6.QtCore import QUrl
 from PyQt6.QtWidgets import QWidget, QApplication, QVBoxLayout
 from PyQt6.QtWebEngineWidgets import QWebEngineView
+from PyQt6.QtWebEngineCore import QWebEnginePage, QWebEngineSettings
 import qasync
 
-from anyio import run as anyio_run, create_task_group
+from anyio import create_task_group
 from crynux_server.run import CrynuxRunner
+
+
+class CustomWebEnginePage(QWebEnginePage):
+
+    def createWindow(self, _type):
+        page = CustomWebEnginePage(self)
+        page.urlChanged.connect(self.openBrowser)
+        return page
+
+    def openBrowser(self, url):
+        page = self.sender()
+        QDesktopServices.openUrl(url)
+        page.deleteLater()
+
 
 class CrynuxApp(QWidget):
 
@@ -60,8 +76,18 @@ class CrynuxApp(QWidget):
         self.runner = runner
 
     def initUI(self):
+
         vbox = QVBoxLayout(self)
         self.webview = QWebEngineView()
+        self.webpage = CustomWebEnginePage()
+        self.webview.setPage(self.webpage)
+
+        settings = self.webpage.settings()
+        settings.setAttribute(
+            QWebEngineSettings.WebAttribute.JavascriptCanAccessClipboard,
+            True
+        )
+
         vbox.addWidget(self.webview)
         self.setLayout(vbox)
         self.setGeometry(300, 300, 1300, 700)
