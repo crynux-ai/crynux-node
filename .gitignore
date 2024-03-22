@@ -12,6 +12,7 @@ __pycache__/
 nodes
 *.so
 config/*.yaml
+config/*.yml
 db/*
 logs/*
 config.json
