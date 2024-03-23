@@ -101,6 +101,7 @@ def config():
             "relay_url": "",
             "celery": {"broker": "", "backend": ""},
             "distributed": False,
+            "headless": True,
             "task_config": {
                 "output_dir": "build/data/images",
                 "hf_cache_dir": "build/data/huggingface",
@@ -259,6 +260,7 @@ async def managers(
             watcher=watcher,
             task_system=system,
             node_state_manager=state_manager,
+            retry=False
         )
         if i == 0:
             set_node_manager(manager)
