@@ -23,6 +23,53 @@ class NodeStateManager(object):
         self.contracts = contracts
         self._cancel_scope: Optional[CancelScope] = None
 
+    async def _get_node_status(self):
+        remote_status = await self.contracts.node_contract.get_node_status(
+            self.contracts.account
+        )
+        local_status = models.convert_node_status(remote_status)
+        return local_status
+
+    async def _wait_for_running(self):
+        local_status = await self._get_node_status()
+        assert (
+            local_status == models.NodeStatus.Running
+        ), "Node status on chain is not running."
+        await self.state_cache.set_node_state(local_status)
+        await self.state_cache.set_tx_state(models.TxStatus.Success)
+
+    async def _wait_for_stop(self):
+        pending = True
+
+        while True:
+            local_status = await self._get_node_status()
+            assert local_status in [
+                models.NodeStatus.Stopped,
+                models.NodeStatus.PendingStop,
+            ], "Node status on chain is not stopped or pending."
+            await self.state_cache.set_node_state(local_status)
+            if pending:
+                await self.state_cache.set_tx_state(models.TxStatus.Success)
+                pending = False
+            if local_status == models.NodeStatus.Stopped:
+                break
+
+    async def _wait_for_pause(self):
+        pending = True
+
+        while True:
+            local_status = await self._get_node_status()
+            assert local_status in [
+                models.NodeStatus.Paused,
+                models.NodeStatus.PendingPause,
+            ], "Node status on chain is not paused or pending"
+            await self.state_cache.set_node_state(local_status)
+            if pending:
+                await self.state_cache.set_tx_state(models.TxStatus.Success)
+                pending = False
+            if local_status == models.NodeStatus.Paused:
+                break
+
     async def start_sync(self, interval: float = 5):
         assert self._cancel_scope is None, "NodeStateManager has started synchronizing."
 
@@ -31,10 +78,7 @@ class NodeStateManager(object):
                 self._cancel_scope = scope
 
                 while True:
-                    remote_status = await self.contracts.node_contract.get_node_status(
-                        self.contracts.account
-                    )
-                    local_status = models.convert_node_status(remote_status)
+                    local_status = await self._get_node_status()
                     await self.state_cache.set_node_state(local_status)
                     await sleep(interval)
         finally:
@@ -65,56 +109,7 @@ class NodeStateManager(object):
     async def try_start(
         self, gpu_name: str, gpu_vram: int, interval: float = 5, *, option: "Optional[TxOption]" = None
     ):
-        async with self._wrap_tx_error():
-            while True:
-                status = await self.contracts.node_contract.get_node_status(
-                    self.contracts.account
-                )
-                if status in [
-                    models.ChainNodeStatus.AVAILABLE,
-                    models.ChainNodeStatus.BUSY,
-                ]:
-                    _logger.info("Node has joined in the network.")
-                    break
-                elif status in [
-                    models.ChainNodeStatus.PENDING_PAUSE,
-                    models.ChainNodeStatus.PENDING_QUIT,
-                ]:
-                    await sleep(interval)
-                    continue
-
-                elif status == models.ChainNodeStatus.QUIT:
-                    node_amount = Web3.to_wei(400, "ether")
-                    balance = await self.contracts.token_contract.balance_of(
-                        self.contracts.account
-                    )
-                    if balance < node_amount:
-                        raise ValueError("Node token balance is not enough to join.")
-                    allowance = await self.contracts.token_contract.allowance(
-                        self.contracts.node_contract.address
-                    )
-                    if allowance < node_amount:
-                        waiter = await self.contracts.token_contract.approve(
-                            self.contracts.node_contract.address,
-                            node_amount,
-                            option=option,
-                        )
-                        await waiter.wait()
-                    waiter = await self.contracts.node_contract.join(
-                        gpu_name=gpu_name,
-                        gpu_vram=gpu_vram,
-                        option=option,
-                    )
-                    await waiter.wait()
-                elif status == models.ChainNodeStatus.PAUSED:
-                    waiter = await self.contracts.node_contract.pause(option=option)
-                    await waiter.wait()
-
-                _logger.info("Node joins in the network successfully.")
-                break
-
-    async def try_stop(self, *, option: "Optional[TxOption]" = None):
-        async with self._wrap_tx_error():
+        while True:
             status = await self.contracts.node_contract.get_node_status(
                 self.contracts.account
             )
@@ -122,13 +117,68 @@ class NodeStateManager(object):
                 models.ChainNodeStatus.AVAILABLE,
                 models.ChainNodeStatus.BUSY,
             ]:
-                waiter = await self.contracts.node_contract.quit(option=option)
-                await waiter.wait()
-                _logger.info("Node leaves the network successfully.")
-            else:
-                _logger.info(
-                    f"Node status is {models.convert_node_status(status)}, cannot leave the network"
+                _logger.info("Node has joined in the network.")
+                break
+            elif status in [
+                models.ChainNodeStatus.PENDING_PAUSE,
+                models.ChainNodeStatus.PENDING_QUIT,
+            ]:
+                await sleep(interval)
+                continue
+
+            elif status == models.ChainNodeStatus.QUIT:
+                node_amount = Web3.to_wei(400, "ether")
+                balance = await self.contracts.token_contract.balance_of(
+                    self.contracts.account
                 )
+                if balance < node_amount:
+                    raise ValueError("Node token balance is not enough to join.")
+                allowance = await self.contracts.token_contract.allowance(
+                    self.contracts.node_contract.address
+                )
+                if allowance < node_amount:
+                    waiter = await self.contracts.token_contract.approve(
+                        self.contracts.node_contract.address,
+                        node_amount,
+                        option=option,
+                    )
+                    await waiter.wait()
+                waiter = await self.contracts.node_contract.join(
+                    gpu_name=gpu_name,
+                    gpu_vram=gpu_vram,
+                    option=option,
+                )
+                # update tx state to avoid the web user controlling node status by api
+                # it's the same in try_stop method
+                await self.state_cache.set_tx_state(models.TxStatus.Pending)
+                await waiter.wait()
+                # dont need to update node status because in non-headless mode the sync-state method will update it,
+                # and in headless mode the node status is useless
+                # it's the same in try_stop method
+            elif status == models.ChainNodeStatus.PAUSED:
+                waiter = await self.contracts.node_contract.resume(option=option)
+                await self.state_cache.set_tx_state(models.TxStatus.Pending)
+                await waiter.wait()
+
+            _logger.info("Node joins in the network successfully.")
+            break
+
+    async def try_stop(self, *, option: "Optional[TxOption]" = None):
+        status = await self.contracts.node_contract.get_node_status(
+            self.contracts.account
+        )
+        if status in [
+            models.ChainNodeStatus.AVAILABLE,
+            models.ChainNodeStatus.BUSY,
+        ]:
+            waiter = await self.contracts.node_contract.quit(option=option)
+            await self.state_cache.set_tx_state(models.TxStatus.Pending)
+            await waiter.wait()
+            _logger.info("Node leaves the network successfully.")
+        else:
+            _logger.info(
+                f"Node status is {models.convert_node_status(status)}, cannot leave the network"
+            )
 
     async def start(
         self,
@@ -173,15 +223,7 @@ class NodeStateManager(object):
             async with self._wrap_tx_error():
                 await waiter.wait()
 
-                status = await self.contracts.node_contract.get_node_status(
-                    self.contracts.account
-                )
-                local_status = models.convert_node_status(status)
-                assert (
-                    local_status == models.NodeStatus.Running
-                ), "Node status on chain is not running."
-                await self.state_cache.set_node_state(local_status)
-                await self.state_cache.set_tx_state(models.TxStatus.Success)
+                await self._wait_for_running()
 
         return wait
 
@@ -206,23 +248,8 @@ class NodeStateManager(object):
         async def wait():
             async with self._wrap_tx_error():
                 await waiter.wait()
-                pending = True
 
-                while True:
-                    status = await self.contracts.node_contract.get_node_status(
-                        self.contracts.account
-                    )
-                    local_status = models.convert_node_status(status)
-                    assert local_status in [
-                        models.NodeStatus.Stopped,
-                        models.NodeStatus.PendingStop,
-                    ], "Node status on chain is not stopped or pending."
-                    await self.state_cache.set_node_state(local_status)
-                    if pending:
-                        await self.state_cache.set_tx_state(models.TxStatus.Success)
-                        pending = False
-                    if local_status == models.NodeStatus.Stopped:
-                        break
+                await self._wait_for_stop()
 
         return wait
 
@@ -247,23 +274,8 @@ class NodeStateManager(object):
         async def wait():
             async with self._wrap_tx_error():
                 await waiter.wait()
-                pending = True
 
-                while True:
-                    status = await self.contracts.node_contract.get_node_status(
-                        self.contracts.account
-                    )
-                    local_status = models.convert_node_status(status)
-                    assert local_status in [
-                        models.NodeStatus.Paused,
-                        models.NodeStatus.PendingPause,
-                    ], "Node status on chain is not paused or pending"
-                    await self.state_cache.set_node_state(local_status)
-                    if pending:
-                        await self.state_cache.set_tx_state(models.TxStatus.Success)
-                        pending = False
-                    if local_status == models.NodeStatus.Paused:
-                        break
+                await self._wait_for_pause()
 
         return wait
 
@@ -289,15 +301,7 @@ class NodeStateManager(object):
             async with self._wrap_tx_error():
                 await waiter.wait()
 
-                status = await self.contracts.node_contract.get_node_status(
-                    self.contracts.account
-                )
-                local_status = models.convert_node_status(status)
-                assert (
-                    local_status == models.NodeStatus.Running
-                ), "Node status on chain is not running"
-                await self.state_cache.set_node_state(local_status)
-                await self.state_cache.set_tx_state(models.TxStatus.Success)
+                await self._wait_for_running()
 
         return wait
 
