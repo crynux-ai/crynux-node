@@ -75,13 +75,16 @@ defineExpose({ showModal })
     :closable="props.accountStatus.address !== ''"
   >
     <a-alert
-      message="A wallet with enough ETH(>0.01) and CNX(>400) must be provided to the node. Get the test tokens from the Crynux Discord for free."
+      message="A wallet with enough ETH(>0.01) and CNX(>400) is required."
       type="info"
       style="margin-top: 16px"
       v-if="props.accountStatus.address === '' && apiError === null"
     >
       <template #action>
         <a-button size="small" type="primary" :href="config.discord_link" target="_blank">Crynux Discord</a-button>
+      </template>
+      <template #description>
+        Get the test tokens for free from: <a-typography-link :href="config.discord_link" target="_blank">{{ config.discord_link }}</a-typography-link>
       </template>
     </a-alert>
 

@@ -226,27 +226,46 @@ const topRowClasses = computed(() => {
       ></a-alert>
       <a-alert
         type="error"
-        message="Not enough ETH in the wallet. At least 0.01 ETH is required. Go to Crynux Discord to get test tokens for free."
+        message="Not enough ETH in the wallet. At least 0.01 ETH is required."
         class="top-alert"
-        v-if="accountStatus.address !== '' && !ethEnough()"
+        v-if="accountStatus.address !== '' && !ethEnough() && cnxEnough()"
       >
         <template #action>
           <a-button size="small" type="primary" :href="config.discord_link" target="_blank">Crynux Discord</a-button>
         </template>
+        <template #description>
+        Get the test tokens for free from: <a-typography-link :href="config.discord_link" target="_blank">{{ config.discord_link }}</a-typography-link>
+      </template>
       </a-alert>
       <a-alert
         type="error"
-        message="Not enough CNX in the wallet. At least 400 CNX is required. Go to Crynux Discord to get test tokens for free."
+        message="Not enough CNX in the wallet. At least 400 CNX is required."
         class="top-alert"
         v-if="
           nodeStatus.status === nodeAPI.NODE_STATUS_STOPPED &&
           accountStatus.address !== '' &&
-          !cnxEnough()
+          !cnxEnough() && ethEnough()
         "
       >
         <template #action>
           <a-button size="small" type="primary" :href="config.discord_link" target="_blank">Crynux Discord</a-button>
         </template>
+        <template #description>
+        Get the test tokens for free from: <a-typography-link :href="config.discord_link" target="_blank">{{ config.discord_link }}</a-typography-link>
+      </template>
+      </a-alert>
+      <a-alert
+        type="error"
+        message="Not enough token in the wallet. At least 0.01 ETH and 400 CNX is required."
+        class="top-alert"
+        v-if="accountStatus.address !== '' && !ethEnough() && !cnxEnough()"
+      >
+        <template #action>
+          <a-button size="small" type="primary" :href="config.discord_link" target="_blank">Crynux Discord</a-button>
+        </template>
+        <template #description>
+        Get the test tokens for free from: <a-typography-link :href="config.discord_link" target="_blank">{{ config.discord_link }}</a-typography-link>
+      </template>
       </a-alert>
     </a-col>
   </a-row>
@@ -653,7 +672,6 @@ const topRowClasses = computed(() => {
 </style>
 <style scoped lang="stylus">
 .top-alert
-    text-align center
     margin-bottom 16px
 .bottom-bar
     position fixed
