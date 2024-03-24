@@ -2,7 +2,7 @@
 
 
 a = Analysis(
-    ['worker/worker_proc_main.py'],
+    ['worker/crynux_worker_proc_main.py'],
     pathex=[],
     binaries=[],
     datas=[],
@@ -30,7 +30,7 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name='worker_proc_main',
+    name='crynux_worker_proc_main',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
