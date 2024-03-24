@@ -110,8 +110,17 @@ const copyText = async (text) => {
             >Go to the Crynux Discord server</a-button>
 
             <a-input-group compact>
+                <a-input v-model:value="config.discord_link" style="width: calc(100% - 200px)" readonly addon-before="Crynux Discord"/>
+                <a-tooltip title="Copy Discord link">
+                    <a-button @click="copyText(config.discord_link)">
+                    <template #icon><CopyOutlined /></template>
+                    </a-button>
+                </a-tooltip>
+            </a-input-group>
+
+            <a-input-group compact>
                 <a-input v-model:value="address" style="width: calc(100% - 200px)" readonly addon-before="Wallet Address"/>
-                <a-tooltip title="copy wallet address">
+                <a-tooltip title="Copy wallet address">
                     <a-button @click="copyText(address)">
                     <template #icon><CopyOutlined /></template>
                     </a-button>
