@@ -1,13 +1,12 @@
 import json
+import platform
 import re
 from collections import OrderedDict
-import platform
 from typing import Any, Dict, Optional
 
-from anyio import run_process, Path
+from anyio import Path, run_process
 from pydantic import BaseModel
 from web3 import Web3
-
 
 __all__ = [
     "sort_dict",
@@ -67,6 +66,7 @@ async def get_linux_memory_info() -> MemoryInfo:
 
     return info
 
+
 async def get_osx_memory_info() -> MemoryInfo:
     info = MemoryInfo()
     res = await run_process(["sysctl", "hw.memsize"])
@@ -75,13 +75,16 @@ async def get_osx_memory_info() -> MemoryInfo:
     if total_mem:
         info.total_mb = round(int(total_mem.group(1)) / 1024 / 1024)
 
-    usage_cmd = ("vm_stat | perl -ne '/page size of (\\d+)/ and $size=$1; "
-        "/Pages\\s+free[^\\d]+(\\d+)/ and printf(\"%.2f\",  $1 * $size / 1048576);'")
+    usage_cmd = (
+        "vm_stat | perl -ne '/page size of (\\d+)/ and $size=$1; "
+        '/Pages\\s+free[^\\d]+(\\d+)/ and printf("%.2f",  $1 * $size / 1048576);\''
+    )
     res = await run_process(usage_cmd)
     output = res.stdout.decode()
     info.available_mb = int(float(output))
 
     return info
+
 
 async def get_memory_info() -> MemoryInfo:
     memory_info_fn = {
@@ -99,21 +102,32 @@ class GpuInfo(BaseModel):
 
 
 async def get_linux_gpu_info() -> GpuInfo:
-    res = await run_process(["nvidia-smi"])
+    res = await run_process(
+        [
+            "nvidia-smi", "--query-gpu=name,utilization.gpu,memory.used,memory.total", "--format=csv"
+        ]
+    )
     output = res.stdout.decode()
+    result_line = output.split("\n")[1].strip()
+    results = result_line.split(",")
+    assert len(results) == 4
 
     info = GpuInfo()
-    m = re.search(r"(\d+)MiB\s+/\s+(\d+)MiB", output)
+
+    p = re.compile(r"(\d+)")
+
+    info.model = results[0].strip()
+
+    m = p.search(results[1])
+    if m is not None:
+        info.usage = int(m.group(1))
+    m = p.search(results[2])
     if m is not None:
         info.vram_used_mb = int(m.group(1))
-        info.vram_total_mb = int(m.group(2))
-    nums = re.findall(r"(\d+)%", output)
-    if len(nums) >= 2:
-        info.usage = int(nums[1])
-
-    m = re.search(r"\|\s+\d+\s+(.+?)\s+(On|Off)\s+\|", output)
+    m = p.search(results[3])
     if m is not None:
-        info.model = m.group(1)
+        info.vram_total_mb = int(m.group(1))
+
     return info
 
 
@@ -122,7 +136,7 @@ async def get_osx_gpu_info() -> GpuInfo:
     mem_info = await get_osx_memory_info()
     info = GpuInfo(
         vram_used_mb=mem_info.total_mb - mem_info.available_mb,
-        vram_total_mb=mem_info.total_mb
+        vram_total_mb=mem_info.total_mb,
     )
 
     res = await run_process("system_profiler SPDisplaysDataType")
@@ -195,7 +209,6 @@ async def get_cpu_info() -> CpuInfo:
     return await cpu_info_fn[get_os()]()
 
 
-
 class DiskInfo(BaseModel):
     base_models: int = 0
     lora_models: int = 0
@@ -214,7 +227,7 @@ async def get_disk_info(
         output = res.stdout.decode()
         m = re.search(r"(\d+)", output)
         if m is not None:
-            info.base_models = round(int(m.group(1)) / (1024 ** 2))
+            info.base_models = round(int(m.group(1)) / (1024**2))
 
     if await Path(lora_model_dir).exists():
         res = await run_process(["du", "-s", lora_model_dir])
