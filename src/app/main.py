@@ -5,6 +5,15 @@ import sys
 import psutil
 
 _logger = logging.getLogger(__name__)
+handler = logging.StreamHandler()
+dt_fmt = "%Y-%m-%d %H:%M:%S"
+formatter = logging.Formatter(
+    "[{asctime}] [{levelname:<8}] {name}: {message}", dt_fmt, style="{"
+)
+handler.setFormatter(formatter)
+_logger.addHandler(handler)
+_logger.setLevel(logging.DEBUG)
+
 
 if getattr(sys, "frozen", False):
     app_path = os.path.dirname(sys.executable)
@@ -32,14 +41,15 @@ if getattr(sys, "frozen", False):
         error = RuntimeError(f"Unsupported platform: {system_name}")
         _logger.error(error)
         raise error
-else:
-    app_path = __file__
-    for i in range(4):
-        app_path = os.path.dirname(app_path)
-    os.environ["CRYNUX_SERVER_CONFIG"] = os.path.join(app_path, "config/config.yml")
+elif os.getenv("CRYNUX_SERVER_CONFIG") is None:
+    index = __file__.rfind(os.path.sep + "src")
+    root_dir = __file__[:index]
+
+    os.environ["CRYNUX_SERVER_CONFIG"] = os.path.join(root_dir, "config", "config.yml")
 
 assert os.environ["CRYNUX_SERVER_CONFIG"]
-_logger.info("Start Crynux Node from: ", app_path, os.environ["CRYNUX_SERVER_CONFIG"])
+config_file_path = os.environ["CRYNUX_SERVER_CONFIG"]
+_logger.info(f"Start Crynux Node from: {config_file_path}")
 
 
 import asyncio
@@ -51,7 +61,7 @@ from PyQt6.QtWebEngineWidgets import QWebEngineView
 from PyQt6.QtWebEngineCore import QWebEnginePage, QWebEngineSettings
 import qasync
 
-from anyio import create_task_group
+from anyio import create_task_group, sleep
 from crynux_server.run import CrynuxRunner
 
 
@@ -116,13 +126,13 @@ def main():
         crynux_app = CrynuxApp(runner=runner)
         async with create_task_group() as tg:
             await tg.start(runner.run)
-            await asyncio.sleep(delay=3.5)
+            await sleep(3.5)
             crynux_app.delayed_show()
+
     try:
         loop.create_task(_main())
         loop.run_forever()
     finally:
-        loop.run_until_complete(loop.shutdown_default_executor())
         proc = psutil.Process(os.getpid())
         for p in proc.children(recursive=True):
             _logger.info(f"Kill process: {p.ppid()}, {p.cmdline()}")
