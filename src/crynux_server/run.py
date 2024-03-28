@@ -7,7 +7,7 @@ from anyio import (
     TASK_STATUS_IGNORED,
     create_task_group,
     move_on_after,
-    open_signal_receiver,
+    Event,
 )
 from anyio.abc import TaskStatus, TaskGroup
 
@@ -25,9 +25,24 @@ class CrynuxRunner(object):
         self._node_manager: Optional[NodeManager] = None
         self._tg: Optional[TaskGroup] = None
 
+        self._shutdown_event: Optional[Event] = None
+        signal.signal(signal.SIGINT, self._set_shutdown_event)
+        signal.signal(signal.SIGTERM, self._set_shutdown_event)
+
+    def _set_shutdown_event(self, *args):
+        if self._shutdown_event is not None:
+            self._shutdown_event.set()
+
+    async def _wait_for_shutdown(self):
+        if self._shutdown_event is not None:
+            await self._shutdown_event.wait()
+            await self.stop()
+
     async def run(self, task_status: TaskStatus[None] = TASK_STATUS_IGNORED):
         assert self._tg is None, "Crynux Server is running"
         log.init(self.config)
+
+        self._shutdown_event = Event()
 
         await db.init(self.config.db)
 
@@ -43,17 +58,12 @@ class CrynuxRunner(object):
         )
         set_node_manager(self._node_manager)
 
-        async def signal_handler():
-            with open_signal_receiver(signal.SIGINT, signal.SIGTERM) as signals:
-                async for _ in signals:
-                    await self.stop()
-                    return
-
         try:
             async with create_task_group() as tg:
                 self._tg = tg
 
-                tg.start_soon(signal_handler)
+                tg.start_soon(self._wait_for_shutdown)
+
                 tg.start_soon(self._node_manager.run)
                 if not self.config.headless:
                     await tg.start(
@@ -66,6 +76,8 @@ class CrynuxRunner(object):
         finally:
             with move_on_after(2, shield=True):
                 await db.close()
+            self._shutdown_event = None
+            self._tg = None
 
     async def stop(self):
         if self._tg is None:
