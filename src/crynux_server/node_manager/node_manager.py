@@ -297,19 +297,24 @@ class NodeManager(object):
                 }
             }
             current_ts = int(datetime.now().timestamp())
-            await to_thread.run_sync(
-                inference,
-                json.dumps(sd_inference_args),
-                os.path.join(self.config.task_config.output_dir, f"_sd_init_{current_ts}"),
-                self.config.task_config.hf_cache_dir,
-                self.config.task_config.external_cache_dir,
-                self.config.task_config.script_dir,
-                base_models,
-                controlnet_models,
-                vae_models,
-                proxy,
-                cancellable=True,
-            )
+            try:
+                with fail_after(300):
+                    await to_thread.run_sync(
+                        inference,
+                        json.dumps(sd_inference_args),
+                        os.path.join(self.config.task_config.output_dir, f"_sd_init_{current_ts}"),
+                        self.config.task_config.hf_cache_dir,
+                        self.config.task_config.external_cache_dir,
+                        self.config.task_config.script_dir,
+                        base_models,
+                        controlnet_models,
+                        vae_models,
+                        proxy,
+                        cancellable=True,
+                    )
+            except TimeoutError as e:
+                msg = "The initial inference task is timeout (5 min). Maybe your device does not meet the lowest hardware requirements"
+                raise ValueError(msg) from e
             # TODO: validate image similarity.
 
         _logger.info("Node manager initializing complete.")

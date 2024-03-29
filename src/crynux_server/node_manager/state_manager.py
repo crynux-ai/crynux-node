@@ -169,10 +169,7 @@ class NodeStateManager(object):
         status = await self.contracts.node_contract.get_node_status(
             self.contracts.account
         )
-        if status in [
-            models.ChainNodeStatus.AVAILABLE,
-            models.ChainNodeStatus.BUSY,
-        ]:
+        if status == models.ChainNodeStatus.AVAILABLE:
             waiter = await self.contracts.node_contract.quit(option=option)
             await self.state_cache.set_tx_state(models.TxStatus.Pending)
             await waiter.wait()
@@ -180,7 +177,7 @@ class NodeStateManager(object):
             _logger.info("Node leaves the network successfully.")
         else:
             _logger.info(
-                f"Node status is {models.convert_node_status(status)}, cannot leave the network"
+                f"Node status is {models.convert_node_status(status)}, cannot leave the network automatically"
             )
 
     async def start(

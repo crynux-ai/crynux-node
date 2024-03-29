@@ -1,13 +1,12 @@
-import json
+import platform
 import re
 from collections import OrderedDict
-import platform
 from typing import Any, Dict, Optional
 
-from anyio import run_process, Path
+import psutil
+from anyio import Path, run_process, to_thread
 from pydantic import BaseModel
 from web3 import Web3
-
 
 __all__ = [
     "sort_dict",
@@ -51,23 +50,18 @@ class MemoryInfo(BaseModel):
     total_mb: int = 0
 
 
-async def get_linux_memory_info() -> MemoryInfo:
+async def _get_memory_info() -> MemoryInfo:
     info = MemoryInfo()
 
-    res = await run_process(["cat", "/proc/meminfo"])
-    output = res.stdout.decode()
+    svmem = await to_thread.run_sync(psutil.virtual_memory)
 
-    m = re.search(r"MemAvailable:\s+(\d+)", output)
-    if m is not None:
-        info.available_mb = round(int(m.group(1)) / 1024)
-
-    m = re.search(r"MemTotal:\s+(\d+)", output)
-    if m is not None:
-        info.total_mb = round(int(m.group(1)) / 1024)
+    info.total_mb = svmem.total // (2 ** 20)
+    info.available_mb = svmem.available // (2 ** 20)
 
     return info
 
-async def get_osx_memory_info() -> MemoryInfo:
+
+async def _get_osx_memory_info() -> MemoryInfo:
     info = MemoryInfo()
     res = await run_process(["sysctl", "hw.memsize"])
     output = res.stdout.decode()
@@ -75,20 +69,22 @@ async def get_osx_memory_info() -> MemoryInfo:
     if total_mem:
         info.total_mb = round(int(total_mem.group(1)) / 1024 / 1024)
 
-    usage_cmd = ("vm_stat | perl -ne '/page size of (\\d+)/ and $size=$1; "
-        "/Pages\\s+free[^\\d]+(\\d+)/ and printf(\"%.2f\",  $1 * $size / 1048576);'")
+    usage_cmd = (
+        "vm_stat | perl -ne '/page size of (\\d+)/ and $size=$1; "
+        '/Pages\\s+free[^\\d]+(\\d+)/ and printf("%.2f",  $1 * $size / 1048576);\''
+    )
     res = await run_process(usage_cmd)
     output = res.stdout.decode()
     info.available_mb = int(float(output))
 
     return info
 
+
 async def get_memory_info() -> MemoryInfo:
-    memory_info_fn = {
-        "Darwin": get_osx_memory_info,
-        "Linux": get_linux_memory_info,
-    }
-    return await memory_info_fn[get_os()]()
+    if get_os() == "Darwin":
+        return await _get_osx_memory_info()
+    else:
+        return await _get_memory_info()
 
 
 class GpuInfo(BaseModel):
@@ -98,31 +94,42 @@ class GpuInfo(BaseModel):
     vram_total_mb: int = 0
 
 
-async def get_linux_gpu_info() -> GpuInfo:
-    res = await run_process(["nvidia-smi"])
+async def _get_nvidia_gpu_info() -> GpuInfo:
+    res = await run_process(
+        [
+            "nvidia-smi", "--query-gpu=name,utilization.gpu,memory.used,memory.total", "--format=csv"
+        ]
+    )
     output = res.stdout.decode()
+    result_line = output.split("\n")[1].strip()
+    results = result_line.split(",")
+    assert len(results) == 4
 
     info = GpuInfo()
-    m = re.search(r"(\d+)MiB\s+/\s+(\d+)MiB", output)
+
+    p = re.compile(r"(\d+)")
+
+    info.model = results[0].strip()
+
+    m = p.search(results[1])
+    if m is not None:
+        info.usage = int(m.group(1))
+    m = p.search(results[2])
     if m is not None:
         info.vram_used_mb = int(m.group(1))
-        info.vram_total_mb = int(m.group(2))
-    nums = re.findall(r"(\d+)%", output)
-    if len(nums) >= 2:
-        info.usage = int(nums[1])
-
-    m = re.search(r"\|\s+\d+\s+(.+?)\s+(On|Off)\s+\|", output)
+    m = p.search(results[3])
     if m is not None:
-        info.model = m.group(1)
+        info.vram_total_mb = int(m.group(1))
+
     return info
 
 
-async def get_osx_gpu_info() -> GpuInfo:
+async def _get_osx_gpu_info() -> GpuInfo:
 
-    mem_info = await get_osx_memory_info()
+    mem_info = await _get_osx_memory_info()
     info = GpuInfo(
         vram_used_mb=mem_info.total_mb - mem_info.available_mb,
-        vram_total_mb=mem_info.total_mb
+        vram_total_mb=mem_info.total_mb,
     )
 
     res = await run_process("system_profiler SPDisplaysDataType")
@@ -134,11 +141,10 @@ async def get_osx_gpu_info() -> GpuInfo:
 
 
 async def get_gpu_info() -> GpuInfo:
-    gpu_info_fn = {
-        "Darwin": get_osx_gpu_info,
-        "Linux": get_linux_gpu_info,
-    }
-    return await gpu_info_fn[get_os()]()
+    if get_os() == "Darwin":
+        return await _get_osx_gpu_info()
+    else:
+        return await _get_nvidia_gpu_info()
 
 
 class CpuInfo(BaseModel):
@@ -148,27 +154,17 @@ class CpuInfo(BaseModel):
     description: str = ""
 
 
-async def get_linux_cpu_info() -> CpuInfo:
+async def _get_cpu_info() -> CpuInfo:
     info = CpuInfo()
-    usage_cmd = "grep 'cpu ' /proc/stat | awk '{usage=($2+$4)*100/($2+$4+$5)} END {print usage}'"
-    res = await run_process(usage_cmd)
-    output = res.stdout.decode()
+    
+    info.usage = int(await to_thread.run_sync(psutil.cpu_percent))
+    info.num_cores = await to_thread.run_sync(psutil.cpu_count)
+    info.frequency_mhz = int((await to_thread.run_sync(psutil.cpu_freq)).max)
 
-    info.usage = round(float(output))
-
-    res = await run_process(["cat", "/proc/cpuinfo"])
-    output = res.stdout.decode()
-
-    m = re.search(r"cpu\s+MHz\s+:\s+(\d+\.?\d+?)\s+", output)
-    if m is not None:
-        info.frequency_mhz = round(float(m.group(1)))
-
-    ids = re.findall(r"processor\s+:\s+(\d+)\s+", output)
-    info.num_cores = len(ids)
     return info
 
 
-async def get_osx_cpu_info() -> CpuInfo:
+async def _get_osx_cpu_info() -> CpuInfo:
     info = CpuInfo()
     usage_cmd = r"ps -A -o %cpu | awk '{s+=$1} END {print s}'"
     res = await run_process(usage_cmd)
@@ -188,12 +184,10 @@ async def get_osx_cpu_info() -> CpuInfo:
 
 
 async def get_cpu_info() -> CpuInfo:
-    cpu_info_fn = {
-        "Darwin": get_osx_cpu_info,
-        "Linux": get_linux_cpu_info,
-    }
-    return await cpu_info_fn[get_os()]()
-
+    if get_os() == "Darwin":
+        return await _get_osx_cpu_info()
+    else:
+        return await _get_cpu_info()
 
 
 class DiskInfo(BaseModel):
@@ -209,32 +203,37 @@ async def get_disk_info(
     inference_log_dir: Optional[str] = None,
 ) -> DiskInfo:
     info = DiskInfo()
-    if await Path(base_model_dir).exists():
-        res = await run_process(["du", "-s", base_model_dir])
-        output = res.stdout.decode()
-        m = re.search(r"(\d+)", output)
-        if m is not None:
-            info.base_models = round(int(m.group(1)) / (1024 ** 2))
+    path = Path(base_model_dir)
+    if await path.exists():
+        size = 0
+        async for f in path.rglob("*"):
+            if await f.is_file():
+                size += (await f.stat()).st_size
+        info.base_models = size // (2 ** 30)
 
-    if await Path(lora_model_dir).exists():
-        res = await run_process(["du", "-s", lora_model_dir])
-        output = res.stdout.decode()
-        m = re.search(r"(\d+)", output)
-        if m is not None:
-            info.lora_models = round(int(m.group(1)) / 1024)
+    path = Path(lora_model_dir)
+    if await path.exists():
+        size = 0
+        async for f in path.rglob("*"):
+            if await f.is_file():
+                size += (await f.stat()).st_size
+        info.lora_models = size // (2 ** 20)
 
-    if await Path(log_dir).exists():
-        res = await run_process(["du", "-s", log_dir])
-        output = res.stdout.decode()
-        m = re.search(r"(\d+)", output)
-        if m is not None:
-            info.logs += int(m.group(1))
+    path = Path(log_dir)
+    if await path.exists():
+        size = 0
+        async for f in path.rglob("*"):
+            if await f.is_file():
+                size += (await f.stat()).st_size
+        info.logs += size // 1024
 
-    if inference_log_dir is not None and await Path(inference_log_dir).exists():
-        res = await run_process(["du", "-s", inference_log_dir])
-        output = res.stdout.decode()
-        m = re.search(r"(\d+)", output)
-        if m is not None:
-            info.logs += int(m.group(1))
+    if inference_log_dir is not None:
+        path = Path(inference_log_dir)
+        if await path.exists():
+            size = 0
+            async for f in path.rglob("*"):
+                if await f.is_file():
+                    size += (await f.stat()).st_size
+            info.logs += size // 1024
 
     return info
