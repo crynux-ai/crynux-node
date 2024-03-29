@@ -4,7 +4,7 @@ import sys
 from typing import List
 
 def _osx_bundle_exe_head(job: str) -> List[str]:
-    exe = os.path.abspath(os.path.join(os.path.dirname(sys.executable), "worker_proc_main"))
+    exe = os.path.abspath(os.path.join(os.path.dirname(sys.executable), "crynux_worker_proc_main"))
     return [exe, job]
 
 
@@ -20,7 +20,7 @@ def _script_cmd_head(job: str, script_dir: str="") -> List[str]:
         elif os.path.exists(windows_exe):
             exe = windows_exe
 
-    script_file = os.path.abspath(os.path.join(script_dir, f"worker_proc_main.py"))
+    script_file = os.path.abspath(os.path.join(script_dir, f"crynux_worker_proc_main.py"))
     return [exe, script_file, job]
 
 
