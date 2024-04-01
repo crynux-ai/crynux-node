@@ -78,7 +78,7 @@ pip install .
 cd $WORK_DIR
 
 mkdir config
-cp $GIT_DIR/config/config.yml.shell_example config/config.yml
+cp $GIT_DIR/config/config.yml.package_example config/config.yml
 cp $GIT_DIR/start.sh start.sh
 cp $GIT_DIR/build/macos/* .
 

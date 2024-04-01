@@ -18,3 +18,4 @@ logs/*
 config.json
 dist/*
 task/*
+worker/

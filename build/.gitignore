@@ -1,0 +1,5 @@
+!data/
+!macos/
+!windows/
+!Dockerfile
+*

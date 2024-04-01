@@ -43,7 +43,7 @@ db: sqlite+aiosqlite:///db/server.db
 relay_url: "https://relay.h.crynux.ai"
 
 # The directory that stores the distribution files of the WebUI
-web_dist: src/webui/dist
+web_dist: webui/dist
 
 # Whether to enable the headless mode
 headless: false
