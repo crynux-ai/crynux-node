@@ -61,6 +61,100 @@ http://localhost:7412
 
 5. Follow the instructions in the WebUI to join the network.
 
+
+### Start the node from source code
+
+#### Prepare the config file
+
+Copy ```config/config.yml.shell_example``` to ```config/config.yml```. And adjust the file content according to your need:
+```shell
+# In the root folder of the project
+$ cp config/config.yml.shell_example config/config.yml
+```
+
+#### Prepare the server venv
+
+1. Create the venv in the root folder of the project:
+
+```shell
+# In the root folder of the project
+$ python -m venv venv
+```
+
+2. Activate the venv and install the requirements:
+
+```shell
+# In the root folder of the project
+
+# Use ./venv/Scripts/Activate.ps1 on Windows
+$ ./venv/bin/activate
+
+# Use requirements_macos.txt on Mac
+(venv) $ pip install -r ./requirements_docker.txt
+```
+
+#### Prepare the worker venv
+
+1. Get the source code of stable-diffusion-task and gpt-task using Git submodule:
+
+```shell
+# In the root folder of the project
+$ git submodule update --init --recursive
+```
+
+2. Create a folder named "worker" under the root folder of the project, and copy ```src/crynux_worker_process.py``` to the folder:
+
+```shell
+# In the root folder of the project
+
+$ mkdir worker
+$ cp src/crynux_worker_process.py worker/
+```
+3. Create the venv under the worker folder:
+
+```shell
+# In the root folder of the project
+
+$ cd worker
+$ python -m venv venv
+```
+
+4. Activate the venv and install the requirements for stable-diffusion-task and gpt-task:
+
+```shell
+# In the worker folder
+
+# Use ./venv/Scripts/Activate.ps1 on Windows
+$ ./venv/bin/activate
+
+# Use requirements_macos.txt on Mac
+(venv) $ pip install -r ../stable-diffusion-task/requirements_cuda.txt
+
+# Use requirements_macos.txt on Mac
+(venv) $ pip install -r ../gpt-task/requirements_cuda.txt
+```
+
+#### Start the node
+
+Activate the server's venv, and start from the ```src/app/main.py``` script:
+
+```shell
+# In the root folder of the project
+
+# Use ./venv/Scripts/Activate.ps1 on Windows
+$ ./venv/bin/activate
+
+(venv) $ python src/app/main.py
+```
+
+
+
+
+
+
+
+
+
 ## Build the Docker image from the source code
 
 1. Clone the project
