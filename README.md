@@ -91,7 +91,9 @@ $ ./venv/bin/activate
 
 # Use requirements_macos.txt on Mac
 (venv) $ pip install -r ./requirements_docker.txt
+(venv) $ pip install .
 ```
+
 
 #### Prepare the worker venv
 
@@ -127,11 +129,19 @@ $ python -m venv venv
 # Use ./venv/Scripts/Activate.ps1 on Windows
 $ ./venv/bin/activate
 
-# Use requirements_macos.txt on Mac
-(venv) $ pip install -r ../stable-diffusion-task/requirements_cuda.txt
+# Install the stable-diffusion-task package
+(venv) $ cd ../stable-diffusion-task
+
+## Use requirements_macos.txt on Mac
+(venv) $ pip install -r requirements_cuda.txt
+(venv) $ pip install .
+
+# Install the gpt-task package
+(venv) $ cd ../gpt-task
 
 # Use requirements_macos.txt on Mac
-(venv) $ pip install -r ../gpt-task/requirements_cuda.txt
+(venv) $ pip install -r requirements_cuda.txt
+(venv) $ pip install .
 ```
 
 #### Start the node
@@ -146,13 +156,6 @@ $ ./venv/bin/activate
 
 (venv) $ python src/app/main.py
 ```
-
-
-
-
-
-
-
 
 
 ## Build the Docker image from the source code
