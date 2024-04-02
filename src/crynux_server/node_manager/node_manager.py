@@ -227,6 +227,7 @@ class NodeManager(object):
     async def _init(self):
         _logger.info("Initialize node manager")
         await self.state_cache.set_node_state(models.NodeStatus.Init)
+
         # clear tx error when restart
         await self.state_cache.set_tx_state(models.TxStatus.Success)
 
@@ -463,6 +464,7 @@ class NodeManager(object):
                         if prefetch:
                             init_tg.start_soon(self._init)
                 except get_cancelled_exc_class():
+                    _logger.exception(f"Node manager init error: init task cancelled")
                     raise
                 except Exception as e:
                     _logger.exception(e)

@@ -75,7 +75,7 @@ defineExpose({ showModal })
     :closable="props.accountStatus.address !== ''"
   >
     <a-alert
-      message="A wallet with enough ETH(>0.01) and CNX(>400) is required."
+      message="An Ethereum wallet with enough test tokens is required."
       type="info"
       style="margin-top: 16px"
       v-if="props.accountStatus.address === '' && apiError === null"

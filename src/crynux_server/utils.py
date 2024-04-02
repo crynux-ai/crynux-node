@@ -69,10 +69,8 @@ async def _get_osx_memory_info() -> MemoryInfo:
     if total_mem:
         info.total_mb = round(int(total_mem.group(1)) / 1024 / 1024)
 
-    usage_cmd = (
-        "vm_stat | perl -ne '/page size of (\\d+)/ and $size=$1; "
-        '/Pages\\s+free[^\\d]+(\\d+)/ and printf("%.2f",  $1 * $size / 1048576);\''
-    )
+    usage_cmd = ("vm_stat | perl -ne '/page size of (\\d+)/ and $size=$1; "
+                 "/Pages\\s+free[^\\d]+(\\d+)/ and printf(\"%.2f\",  $1 * $size / 1048576);'")
     res = await run_process(usage_cmd)
     output = res.stdout.decode()
     info.available_mb = int(float(output))
@@ -125,7 +123,6 @@ async def _get_nvidia_gpu_info() -> GpuInfo:
 
 
 async def _get_osx_gpu_info() -> GpuInfo:
-
     mem_info = await _get_osx_memory_info()
     info = GpuInfo(
         vram_used_mb=mem_info.total_mb - mem_info.available_mb,
@@ -156,7 +153,7 @@ class CpuInfo(BaseModel):
 
 async def _get_cpu_info() -> CpuInfo:
     info = CpuInfo()
-    
+
     info.usage = int(await to_thread.run_sync(psutil.cpu_percent))
     info.num_cores = await to_thread.run_sync(psutil.cpu_count)
     info.frequency_mhz = int((await to_thread.run_sync(psutil.cpu_freq)).max)
@@ -197,10 +194,10 @@ class DiskInfo(BaseModel):
 
 
 async def get_disk_info(
-    base_model_dir: str,
-    lora_model_dir: str,
-    log_dir: str,
-    inference_log_dir: Optional[str] = None,
+        base_model_dir: str,
+        lora_model_dir: str,
+        log_dir: str,
+        inference_log_dir: Optional[str] = None,
 ) -> DiskInfo:
     info = DiskInfo()
     path = Path(base_model_dir)

@@ -21,26 +21,28 @@ if getattr(sys, "frozen", False):
 
     if system_name == "Darwin":
         resdir = os.path.join(os.path.dirname(app_path), "Resources")
-        os.environ["CRYNUX_SERVER_CONFIG"] = os.path.join(
-            resdir, "config/config.yml")
-        from crynux_server import config as crynux_config
-        cfg = crynux_config.get_config()
-        cfg.task_dir = os.path.join(resdir, "tasks")
-        cfg.web_dist = os.path.join(resdir, "webui/dist")
-        cfg.log.dir = os.path.join(resdir, "logs")
-        cfg.db = f"sqlite+aiosqlite://{os.path.join(resdir, 'db/server.db')}"
-        assert cfg.task_config is not None
-        cfg.task_config.output_dir = os.path.join(resdir, "data/results")
-        cfg.task_config.hf_cache_dir = os.path.join(resdir, "data/huggingface")
-        cfg.task_config.external_cache_dir = os.path.join(resdir, "data/external")
-        cfg.task_config.inference_logs_dir = os.path.join(resdir, "data/inference-logs")
-        cfg.task_config.script_dir = os.path.join(resdir, "worker")
-        crynux_config.set_config(cfg)
-        crynux_config.dump_config(cfg)
+    elif system_name == "Windows":
+        resdir = os.path.dirname(app_path)
     else:
         error = RuntimeError(f"Unsupported platform: {system_name}")
         _logger.error(error)
         raise error
+
+    from crynux_server import config as crynux_config
+    cfg = crynux_config.get_config()
+    cfg.task_dir = os.path.join(resdir, "tasks")
+    cfg.web_dist = os.path.join(resdir, "webui/dist")
+    cfg.log.dir = os.path.join(resdir, "logs")
+    cfg.db = f"sqlite+aiosqlite://{os.path.join(resdir, 'db/server.db')}"
+    assert cfg.task_config is not None
+    cfg.task_config.output_dir = os.path.join(resdir, "data/results")
+    cfg.task_config.hf_cache_dir = os.path.join(resdir, "data/huggingface")
+    cfg.task_config.external_cache_dir = os.path.join(resdir, "data/external")
+    cfg.task_config.inference_logs_dir = os.path.join(resdir, "data/inference-logs")
+    cfg.task_config.script_dir = os.path.join(resdir, "worker")
+    crynux_config.set_config(cfg)
+    crynux_config.dump_config(cfg)
+
 elif os.getenv("CRYNUX_SERVER_CONFIG") is None:
     index = __file__.rfind(os.path.sep + "src")
     root_dir = __file__[:index]
@@ -109,6 +111,7 @@ class CrynuxApp(QWidget):
 
     def closeEvent(self, event):
         loop = asyncio.get_running_loop()
+
         async def _close() -> None:
             await self.runner.stop()
 

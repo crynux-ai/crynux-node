@@ -226,7 +226,7 @@ const topRowClasses = computed(() => {
       ></a-alert>
       <a-alert
         type="error"
-        message="Not enough ETH in the wallet. At least 0.01 ETH is required."
+        message="Not enough gas tokens in the wallet. At least 0.01 gas token is required."
         class="top-alert"
         v-if="accountStatus.address !== '' && !ethEnough() && cnxEnough()"
       >
@@ -239,7 +239,7 @@ const topRowClasses = computed(() => {
       </a-alert>
       <a-alert
         type="error"
-        message="Not enough CNX in the wallet. At least 400 CNX is required."
+        message="Not enough test CNX in the wallet. At least 400 test CNX is required."
         class="top-alert"
         v-if="
           nodeStatus.status === nodeAPI.NODE_STATUS_STOPPED &&
@@ -256,7 +256,7 @@ const topRowClasses = computed(() => {
       </a-alert>
       <a-alert
         type="error"
-        message="Not enough token in the wallet. At least 0.01 ETH and 400 CNX is required."
+        message="Not enough test tokens in the wallet."
         class="top-alert"
         v-if="accountStatus.address !== '' && !ethEnough() && !cnxEnough()"
       >
@@ -421,10 +421,10 @@ const topRowClasses = computed(() => {
             </a-tooltip>
           </a-col>
           <a-col :span="7">
-            <a-statistic title="ETH" :value="toEtherValue(accountStatus.eth_balance)"></a-statistic>
+            <a-statistic title="Gas token" :value="toEtherValue(accountStatus.eth_balance)"></a-statistic>
           </a-col>
           <a-col :span="7">
-            <a-statistic title="CNX" :value="toEtherValue(accountStatus.cnx_balance)"></a-statistic>
+            <a-statistic title="Test CNX" :value="toEtherValue(accountStatus.cnx_balance)"></a-statistic>
           </a-col>
         </a-row>
       </a-card>
