@@ -143,6 +143,27 @@ $ ./venv/bin/activate
 (venv) $ pip install -r requirements_cuda.txt
 (venv) $ pip install .
 ```
+#### Prepare the WebUI
+1. Prepare the config file
+```shell
+# Go to the root folder of the webui
+$ cd src/webui
+
+# Create the config file from the example
+$ cp src/config.example.json src/config.json
+```
+
+2. Build the WebUI distribution package
+
+```shell
+# In the root folder of the webui
+
+# Install the dependencies
+$ yarn
+
+# Build the package
+$ yarn build
+```
 
 #### Start the node
 
