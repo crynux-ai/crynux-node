@@ -7,12 +7,16 @@ from typing import List
 
 _logger = logging.getLogger(__name__)
 
+
 def _osx_bundle_exe_head(job: str) -> List[str]:
     exe = os.path.abspath(os.path.join(os.path.dirname(sys.executable), "crynux_worker_process"))
+    _logger.debug("Execute Crynux worker from: ", exe)
     return [exe, job]
+
 
 def _windows_bundle_exe_head(job: str) -> List[str]:
     exe = os.path.abspath(os.path.join(os.path.dirname(sys.executable), "crynux_worker_process", "crynux_worker_process.exe"))
+    _logger.debug("Execute Crynux worker from: ", exe)
     return [exe, job]
 
 

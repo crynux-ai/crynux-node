@@ -34,6 +34,7 @@ def call_prefetch_script(
         proxy,
     )
     _logger.info("Start prefetching models")
+    _logger.debug("Prefetching args: ", args)
     subprocess.check_call(args, env=envs)
     _logger.info("Prefetching models complete")
 
