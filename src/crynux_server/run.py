@@ -16,10 +16,16 @@ from crynux_server.config import get_config
 from crynux_server.node_manager import NodeManager, set_node_manager
 from crynux_server.server import Server, set_server
 
+import logging
+_logger = logging.getLogger(__name__)
+
 
 class CrynuxRunner(object):
     def __init__(self) -> None:
         self.config = get_config()
+
+        log.init(self.config)
+        _logger.debug("Logger init completed.")
 
         self._server: Optional[Server] = None
         self._node_manager: Optional[NodeManager] = None
@@ -40,23 +46,29 @@ class CrynuxRunner(object):
 
     async def run(self, task_status: TaskStatus[None] = TASK_STATUS_IGNORED):
         assert self._tg is None, "Crynux Server is running"
-        log.init(self.config)
 
         self._shutdown_event = Event()
 
         await db.init(self.config.db)
+        _logger.debug("DB init completed.")
 
+        _logger.debug("Serving WebUI from: ", self.config.web_dist)
         self._server = Server(self.config.web_dist)
         set_server(self._server)
+        _logger.debug("Server init completed.")
 
         gpu_info = await utils.get_gpu_info()
         gpu_name = gpu_info.model
         gpu_vram_gb = math.ceil(gpu_info.vram_total_mb / 1024)
 
+        _logger.debug("Starting node manager...")
+
         self._node_manager = NodeManager(
             config=self.config, gpu_name=gpu_name, gpu_vram=gpu_vram_gb
         )
         set_node_manager(self._node_manager)
+
+        _logger.debug("Node manager created.")
 
         try:
             async with create_task_group() as tg:
@@ -72,6 +84,7 @@ class CrynuxRunner(object):
                         self.config.server_port,
                         self.config.log.level == "DEBUG",
                     )
+                _logger.debug("Server started.")
                 task_status.started()
         finally:
             with move_on_after(2, shield=True):

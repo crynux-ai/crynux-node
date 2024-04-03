@@ -1,6 +1,6 @@
 # Package the app using pyinstaller
 # Generate a directory that contains the releasing app
-# Example call: ./build/windows/package.ps1
+# Example call: .\build\windows\package.ps1
 
 ./venv/Scripts/Activate.ps1
 pyinstaller crynux.spec
@@ -17,8 +17,16 @@ if(Test-Path $TAR_FILE -PathType Leaf) {
 
 pyinstaller crynux_worker_process.spec
 
-# New-Item -ItemType Directory -Path "dist/data"
-# New-Item -ItemType Directory -Path "dist/data/external"
-# New-Item -ItemType Directory -Path "dist/data/huggingface"
-# New-Item -ItemType Directory -Path "dist/data/results"
-# New-Item -ItemType Directory -Path "dist/data/inference-logs"
+Move-Item -Path "dist/crynux_worker_process" "dist/Crynux Node/crynux_worker_process"
+
+New-Item -ItemType Directory -Path "dist/Crynux Node/config"
+Copy-Item "../../config/config.yml.package_example" "dist/Crynux Node/config/config.yml"
+
+New-Item -ItemType Directory -Path "dist/Crynux Node/data"
+New-Item -ItemType Directory -Path "dist/Crynux Node/data/external"
+New-Item -ItemType Directory -Path "dist/Crynux Node/data/huggingface"
+New-Item -ItemType Directory -Path "dist/Crynux Node/data/results"
+New-Item -ItemType Directory -Path "dist/Crynux Node/data/inference-logs"
+
+New-Item -ItemType Directory -Path "dist/Crynux Node/webui"
+Copy-Item -Recurse "webui/dist" "dist/Crynux Node/webui/dist"

@@ -455,6 +455,8 @@ class NodeManager(object):
     async def _run(self, prefetch: bool = True):
         assert self._tg is None, "Node manager is running."
 
+        _logger.debug("Starting node manager...")
+
         try:
             async with create_task_group() as tg:
                 self._tg = tg
