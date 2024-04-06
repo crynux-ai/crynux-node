@@ -28,7 +28,7 @@ exe = EXE(
     a.scripts,
     [],
     exclude_binaries=True,
-    name='crynux',
+    name='crynux_node',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
@@ -49,13 +49,13 @@ coll = COLLECT(
     strip=False,
     upx=True,
     upx_exclude=[],
-    name='crynux',
+    name='crynux_node',
 )
 app = BUNDLE(
     coll,
-    name='Crynux.app',
+    name='Crynux Node.app',
     icon='res/icon.icns',
-    bundle_identifier=None,
+    bundle_identifier='ai.crynux.node',
     info_plist={
         'CFBundleShortVersionString': '0.0.1',
     },

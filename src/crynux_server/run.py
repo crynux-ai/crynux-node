@@ -1,5 +1,6 @@
 import math
 import signal
+import os.path
 from typing import Optional
 
 import anyio
@@ -47,28 +48,30 @@ class CrynuxRunner(object):
     async def run(self, task_status: TaskStatus[None] = TASK_STATUS_IGNORED):
         assert self._tg is None, "Crynux Server is running"
 
+        print("Starting Crynux server")
+
         self._shutdown_event = Event()
 
         await db.init(self.config.db)
-        _logger.debug("DB init completed.")
+        print("DB init completed.")
 
-        _logger.debug("Serving WebUI from: ", self.config.web_dist)
+        print("Serving WebUI from: ", os.path.abspath(self.config.web_dist))
         self._server = Server(self.config.web_dist)
         set_server(self._server)
-        _logger.debug("Server init completed.")
+        print("Web server init completed.")
 
         gpu_info = await utils.get_gpu_info()
         gpu_name = gpu_info.model
         gpu_vram_gb = math.ceil(gpu_info.vram_total_mb / 1024)
 
-        _logger.debug("Starting node manager...")
+        print("Starting node manager...")
 
         self._node_manager = NodeManager(
             config=self.config, gpu_name=gpu_name, gpu_vram=gpu_vram_gb
         )
         set_node_manager(self._node_manager)
 
-        _logger.debug("Node manager created.")
+        print("Node manager created.")
 
         try:
             async with create_task_group() as tg:
@@ -84,7 +87,7 @@ class CrynuxRunner(object):
                         self.config.server_port,
                         self.config.log.level == "DEBUG",
                     )
-                _logger.debug("Server started.")
+                print("Crynux server started.")
                 task_status.started()
         finally:
             with move_on_after(2, shield=True):

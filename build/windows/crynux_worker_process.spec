@@ -29,7 +29,7 @@ exe = EXE(
     a.scripts,
     [],
     name='crynux_worker_process',
-    debug=True,
+    debug=False,
     bootloader_ignore_signals=False,
     strip=False,
     upx=True,
