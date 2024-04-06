@@ -71,7 +71,7 @@ git submodule update --init --recursive
 
 Set-Location $RELEASE_DIR
 New-Item -ItemType Directory -Path "$RELEASE_DIR/worker"
-Copy-Item $WORK_DIR/src/*.py worker/
+Copy-Item $WORK_DIR/src/crynux_worker_process.py worker/
 
 Set-Location $RELEASE_DIR/worker
 python -m venv venv
