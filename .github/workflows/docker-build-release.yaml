@@ -2,7 +2,7 @@ name: Create and publish the Standalone Docker image
 
 on:
   release:
-    types: [created]
+    types: [published, edited]
 
 env:
   REGISTRY: ghcr.io
