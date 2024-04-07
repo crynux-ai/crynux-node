@@ -59,7 +59,7 @@ FROM base as final
 
 COPY --from=builder1 /app/venv /app/venv
 COPY --from=builder2 /app/venv /app/worker/venv
-COPY src/crynux_worker_proc_main.py /app/worker/crynux_worker_proc_main.py
+COPY src/crynux_worker_process.py /app/worker/crynux_worker_process.py
 
 ENV PATH="/app/venv/bin:${PATH}"
 
