@@ -152,10 +152,7 @@ class NodeStateManager(object):
                 # it's the same in try_stop method
                 await self.state_cache.set_tx_state(models.TxStatus.Pending)
                 await waiter.wait()
-                # dont need to update node status because in non-headless mode the sync-state method will update it,
-                # and in headless mode the node status is useless
-                # it's the same in try_stop method
-                await self.state_cache.set_tx_state(models.TxStatus.Success)
+                await self._wait_for_running()
             elif status == models.ChainNodeStatus.PAUSED:
                 waiter = await self.contracts.node_contract.resume(option=option)
                 await self.state_cache.set_tx_state(models.TxStatus.Pending)
@@ -173,6 +170,8 @@ class NodeStateManager(object):
             waiter = await self.contracts.node_contract.quit(option=option)
             await self.state_cache.set_tx_state(models.TxStatus.Pending)
             await waiter.wait()
+            # dont need to update node status because in non-headless mode the sync-state method will update it,
+            # and in headless mode the node status is useless
             await self.state_cache.set_tx_state(models.TxStatus.Success)
             _logger.info("Node leaves the network successfully.")
         else:
