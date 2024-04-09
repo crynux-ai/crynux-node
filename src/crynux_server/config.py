@@ -161,6 +161,8 @@ class Config(BaseSettings):
     web_dist: str = ""
     headless: bool = False
 
+    resource_dir: str = ""
+
     last_result: Optional[str] = None
 
     model_config = YamlSettingsConfigDict(

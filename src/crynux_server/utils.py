@@ -94,9 +94,7 @@ class GpuInfo(BaseModel):
 
 async def _get_nvidia_gpu_info() -> GpuInfo:
     res = await run_process(
-        [
-            "nvidia-smi", "--query-gpu=name,utilization.gpu,memory.used,memory.total", "--format=csv"
-        ]
+        "nvidia-smi --query-gpu=name,utilization.gpu,memory.used,memory.total --format=csv"
     )
     output = res.stdout.decode()
     result_line = output.split("\n")[1].strip()
