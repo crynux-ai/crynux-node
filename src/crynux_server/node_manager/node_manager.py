@@ -11,7 +11,7 @@ from anyio import (Event, TASK_STATUS_IGNORED, create_task_group, fail_after,
 from anyio.abc import TaskGroup, TaskStatus
 from web3 import Web3
 from web3.types import EventData
-from tenacity import AsyncRetrying, before_sleep_log, wait_fixed
+from tenacity import AsyncRetrying, before_sleep_log, wait_fixed, stop_after_attempt, stop_never
 
 from crynux_server import models
 from crynux_server.config import Config, wait_privkey
@@ -266,18 +266,25 @@ class NodeManager(object):
             else:
                 proxy = None
 
-            await to_thread.run_sync(
-                prefetch,
-                self.config.task_config.hf_cache_dir,
-                self.config.task_config.external_cache_dir,
-                self.config.task_config.script_dir,
-                base_models,
-                controlnet_models,
-                vae_models,
-                proxy,
-                cancellable=True,
-            )
-
+            # retry prefetch for 3 times
+            async for attemp in AsyncRetrying(
+                stop=stop_after_attempt(3) if self._retry else stop_after_attempt(1),
+                wait=wait_fixed(self._retry_delay),
+                before_sleep=before_sleep_log(_logger, logging.ERROR, exc_info=True),
+                reraise=True,
+            ):
+                with attemp:
+                    await to_thread.run_sync(
+                        prefetch,
+                        self.config.task_config.hf_cache_dir,
+                        self.config.task_config.external_cache_dir,
+                        self.config.task_config.script_dir,
+                        base_models,
+                        controlnet_models,
+                        vae_models,
+                        proxy,
+                        cancellable=True,
+                    )
 
             ### Inference ###
             prompt = (
@@ -391,66 +398,57 @@ class NodeManager(object):
         _logger.debug(f"Recover task state {state}")
 
     async def _sync_state(self):
+        assert self._node_state_manager is not None
 
-        async def _inner():
-            assert self._node_state_manager is not None
-            try:
-                await self._node_state_manager.start_sync()
-            except Exception as e:
-                _logger.exception(e)
-                _logger.error("Cannot sync node state from chain")
-                with fail_after(5, shield=True):
-                    await self.state_cache.set_node_state(
-                        status=models.NodeStatus.Error,
-                        message="Node manager running error: cannot sync node state from chain."
-                    )
-                raise
-        
-        if self._retry:
-            async for attemp in AsyncRetrying(
-                wait=wait_fixed(self._retry_delay),
-                before_sleep=before_sleep_log(_logger, logging.ERROR, exc_info=True),
-                reraise=True,
-            ):
-                with attemp:
-                    await _inner()
-        else:
-            await _inner()
+        async for attemp in AsyncRetrying(
+            stop=stop_never if self._retry else stop_after_attempt(1),
+            wait=wait_fixed(self._retry_delay),
+            before_sleep=before_sleep_log(_logger, logging.ERROR, exc_info=True),
+            reraise=True,
+        ):
+            with attemp:
+                try:
+                    await self._node_state_manager.start_sync()
+                except Exception as e:
+                    _logger.exception(e)
+                    _logger.error("Cannot sync node state from chain")
+                    with fail_after(5, shield=True):
+                        await self.state_cache.set_node_state(
+                            status=models.NodeStatus.Error,
+                            message="Node manager running error: cannot sync node state from chain."
+                        )
+                    raise
 
     async def _watch_events(self, *, task_status: TaskStatus[None] = TASK_STATUS_IGNORED):
+        assert self._watcher is not None
 
-        async def _inner(first_call) -> None:
-            assert self._watcher is not None
-            try:
-                if first_call:
-                    await self._watcher.start(task_status=task_status)
-                else:
-                    await self._watcher.start()
-            except Exception as e:
-                _logger.exception(e)
-                _logger.error("Cannot watch events from chain")
-                with fail_after(5, shield=True):
-                    await self.state_cache.set_node_state(
-                        status=models.NodeStatus.Error,
-                        message="Node manager running error: cannot watch events from chain."
-                    )
-                raise
+        # call task_status.started() only once
+        task_status_set = False
 
-        first_call = True
-
-        if self._retry:
-            async for attemp in AsyncRetrying(
-                wait=wait_fixed(self._retry_delay),
-                before_sleep=before_sleep_log(_logger, logging.ERROR, exc_info=True),
-                reraise=True,
-            ):
-                with attemp:
-                    try:
-                        await _inner(first_call)
-                    finally:
-                        first_call = False
-        else:
-            await _inner(first_call)
+        async for attemp in AsyncRetrying(
+            stop=stop_never if self._retry else stop_after_attempt(1),
+            wait=wait_fixed(self._retry_delay),
+            before_sleep=before_sleep_log(_logger, logging.ERROR, exc_info=True),
+            reraise=True,
+        ):
+            with attemp:
+                try:
+                    async with create_task_group() as tg:
+                        if not task_status_set:
+                            await tg.start(self._watcher.start)
+                            task_status.started()
+                            task_status_set = True
+                        else:
+                            await self._watcher.start()
+                except Exception as e:
+                    _logger.exception(e)
+                    _logger.error("Cannot watch events from chain")
+                    with fail_after(5, shield=True):
+                        await self.state_cache.set_node_state(
+                            status=models.NodeStatus.Error,
+                            message="Node manager running error: cannot watch events from chain."
+                        )
+                    raise
 
     async def _run(self, prefetch: bool = True):
         assert self._tg is None, "Node manager is running."
