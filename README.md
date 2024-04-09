@@ -1,7 +1,10 @@
-**NOTE: If you don't need to change the code, please use the prebuilt packages to start the node:
-[Start a node on Windows](https://docs.crynux.ai/node-hosting/start-a-node-windows),
-[Start a node on Mac](https://docs.crynux.ai/node-hosting/start-a-node-mac),
-[Start a node using Docker](https://docs.crynux.ai/node-hosting/start-a-node-docker)**
+**NOTE: If you don't need to change the code, please use the prebuilt packages to start the node:**
+
+[Start a node on Windows](https://docs.crynux.ai/node-hosting/start-a-node-windows)
+
+[Start a node on Mac](https://docs.crynux.ai/node-hosting/start-a-node-mac)
+
+[Start a node using Docker](https://docs.crynux.ai/node-hosting/start-a-node-docker)
 
 
 # Crynux Node for the Helium(He) Network
