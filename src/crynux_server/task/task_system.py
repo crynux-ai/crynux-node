@@ -3,10 +3,11 @@ from typing import Dict, Optional, Type, TypeVar
 
 from anyio import create_task_group, get_cancelled_exc_class
 from anyio.abc import TaskGroup
-from tenacity import AsyncRetrying, before_sleep_log, wait_exponential
+from tenacity import (AsyncRetrying, before_sleep_log, stop_after_attempt,
+                      stop_never, wait_exponential)
 
 from crynux_server.event_queue import EventQueue
-from crynux_server.models import TaskEvent, TaskStatus
+from crynux_server.models import TaskStatus
 
 from .state_cache import TaskStateCache
 from .task_runner import InferenceTaskRunner, TaskRunner
@@ -50,30 +51,24 @@ class TaskSystem(object):
         return self._queue
 
     async def _run_task(self, task_id: int):
-
-        async def _inner(runner: TaskRunner):
-            try:
-                await runner.run()
-            except get_cancelled_exc_class():
-                raise
-            except Exception as e:
-                _logger.exception(e)
-                _logger.error(f"Task {task_id} error: {str(e)}")
-                raise
-
         try:
             runner = self._runners[task_id]
 
-            if self._retry:
-                async for attemp in AsyncRetrying(
-                    wait=wait_exponential(multiplier=10),
-                    before_sleep=before_sleep_log(_logger, logging.ERROR, exc_info=True),
-                    reraise=True,
-                ):
-                    with attemp:
-                        await _inner(runner)
-            else:
-                await _inner(runner)
+            async for attemp in AsyncRetrying(
+                stop=stop_never if self._retry else stop_after_attempt(1),
+                wait=wait_exponential(multiplier=10),
+                before_sleep=before_sleep_log(_logger, logging.ERROR, exc_info=True),
+                reraise=True,
+            ):
+                with attemp:
+                    try:
+                        await runner.run()
+                    except get_cancelled_exc_class():
+                        raise
+                    except Exception as e:
+                        _logger.exception(e)
+                        _logger.error(f"Task {task_id} error: {str(e)}")
+                        raise
         finally:
             del self._runners[task_id]
 
