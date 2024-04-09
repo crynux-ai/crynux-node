@@ -1,3 +1,7 @@
+**NOTE**:
+  **If you don't need to change code, please follow [Start a Node](https://docs.crynux.ai/node-hosting/start-a-node-mac) to download Crynux Node app.**
+
+
 # Crynux Node for the Helium(He) Network
 
 Start a Crynux Node to share the spared local GPU to others in exchange for tokens. Crynux Node will join the Crynux Network, receive the AI inference/training/fine-tuning tasks from the network, and execute them locally.
@@ -36,9 +40,9 @@ http://localhost:7412
 4. Follow the instructions in the WebUI to join the network.
 
 ### Start the node on Mac
-1. Download package
+1. Build the package
 ```shell
-#TODO: host package on server
+bash build/macos/prepare.sh ~/crynux_app
 ```
 
 2. Unpack the package
