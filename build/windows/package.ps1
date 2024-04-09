@@ -30,3 +30,5 @@ New-Item -ItemType Directory -Path "dist/Crynux Node/data/inference-logs"
 
 New-Item -ItemType Directory -Path "dist/Crynux Node/webui"
 Copy-Item -Recurse "webui/dist" "dist/Crynux Node/webui/dist"
+
+Copy-Item -Recurse "res" "dist/Crynux Node/res"

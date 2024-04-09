@@ -48,6 +48,9 @@ web_dist: src/webui/dist
 # Whether to enable the headless mode
 headless: false
 
+# The resource dir for icons etc.
+resource_dir: res
+
 task_config:
   # The directory to store the temp images for a task.
   output_dir: "data/results"
