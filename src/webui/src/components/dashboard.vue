@@ -15,6 +15,8 @@ import taskAPI from '../api/v1/task'
 import accountAPI from '../api/v1/account'
 import config from "../config.json"
 
+const appVersion = APP_VERSION
+
 const accountEditor = ref(null)
 
 const systemInfo = reactive({
@@ -661,7 +663,7 @@ const topRowClasses = computed(() => {
         >Discord</a-typography-link
       >
       &nbsp;|&nbsp;
-      <a-typography-text :style="{'color':'white'}">v2.0.1</a-typography-text>
+      <a-typography-text :style="{'color':'white'}">v{{ appVersion }}</a-typography-text>
     </a-space>
     <img class="footer-logo" src="./logo-full-white.png" width="140" alt="Crynux logo" />
   </div>
