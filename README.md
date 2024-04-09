@@ -1,5 +1,7 @@
-**NOTE**:
-  **If you don't need to change code, please follow [Start a Node](https://docs.crynux.ai/node-hosting/start-a-node-mac) to download Crynux Node app.**
+**NOTE: If you don't need to change the code, please use the prebuilt packages to start the node:
+[Start a node on Windows](https://docs.crynux.ai/node-hosting/start-a-node-windows),
+[Start a node on Mac](https://docs.crynux.ai/node-hosting/start-a-node-mac),
+[Start a node using Docker](https://docs.crynux.ai/node-hosting/start-a-node-docker)**
 
 
 # Crynux Node for the Helium(He) Network
@@ -8,67 +10,9 @@ Start a Crynux Node to share the spared local GPU to others in exchange for toke
 
 ![Crynux Node WebUI](./docs/webui.png)
 
-## Getting Started
+## Start the node from source code
 
-A complete getting started guide to start a node is provided in the document:
-
-[Join the Network](https://docs.crynux.ai/node-hosting/join-the-network)
-
-## Start the node
-
-### Start the node using Docker image
-1. Pull the Docker image from GitHub
-
-```shell
-# docker pull ghcr.io/crynux-ai/crynux-node:latest
-```
-
-2. Start the container
-
-The port ```7412``` is exposed for the WebUI. And GPUs must be provided to the container.
-
-```shell
-# docker run -d -p 127.0.0.1:7412:7412 --gpus all ghcr.io/crynux-ai/crynux-node:latest
-```
-
-
-3. Visit the WebUI in the browser
-```
-http://localhost:7412
-```
-
-4. Follow the instructions in the WebUI to join the network.
-
-### Start the node on Mac
-1. Build the package
-```shell
-bash build/macos/prepare.sh ~/crynux_app
-```
-
-2. Unpack the package
-```shell
-WORKDIR=~/crynux_app && mkdir $WORKDIR && tar -xvzf crynux.tar.gz -C $WORKDIR && cd $WORKDIR
-```
-
-3. Start the node
-```shell
-# if you've loaded the model before:
-bash start.sh run ~/crynux_data
-# if you are brand new:
-bash start.sh run
-```
-
-4. Visit the WebUI in the browser
-```
-http://localhost:7412
-```
-
-5. Follow the instructions in the WebUI to join the network.
-
-
-### Start the node from source code
-
-#### Prepare the config file
+### Prepare the config file
 
 Copy ```config/config.yml.shell_example``` to ```config/config.yml```. And adjust the file content according to your need:
 ```shell
@@ -76,7 +20,7 @@ Copy ```config/config.yml.shell_example``` to ```config/config.yml```. And adjus
 $ cp config/config.yml.shell_example config/config.yml
 ```
 
-#### Prepare the server venv
+### Prepare the server venv
 
 1. Create the venv in the root folder of the project:
 
@@ -99,7 +43,7 @@ $ ./venv/bin/activate
 ```
 
 
-#### Prepare the worker venv
+### Prepare the worker venv
 
 1. Get the source code of stable-diffusion-task and gpt-task using Git submodule:
 
@@ -147,7 +91,7 @@ $ ./venv/bin/activate
 (venv) $ pip install -r requirements_cuda.txt
 (venv) $ pip install .
 ```
-#### Prepare the WebUI
+### Prepare the WebUI
 1. Prepare the config file
 ```shell
 # Go to the root folder of the webui
@@ -169,7 +113,7 @@ $ yarn
 $ yarn build
 ```
 
-#### Start the node
+### Start the node
 
 Activate the server's venv, and start from the ```src/app/main.py``` script:
 
