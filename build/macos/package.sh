@@ -14,6 +14,7 @@ RES_DIR="dist/Crynux Node.app/Contents/Resources"
 cp -R webui "$RES_DIR/"
 mv dist/crynux_worker_process "dist/Crynux Node.app/Contents/MacOS/"
 
+
 if [ $DATA_DIR ] && [ -d $DATA_DIR ]; then
     echo "$DATA_DIR exist, copy it to macapp"
     mkdir "$RES_DIR/data"

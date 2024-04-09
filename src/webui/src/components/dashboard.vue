@@ -15,6 +15,8 @@ import taskAPI from '../api/v1/task'
 import accountAPI from '../api/v1/account'
 import config from "../config.json"
 
+const appVersion = APP_VERSION
+
 const accountEditor = ref(null)
 
 const systemInfo = reactive({
@@ -199,7 +201,7 @@ const topRowClasses = computed(() => {
       ></a-alert>
       <a-alert
         type="error"
-        :message="'Node error: ' + nodeStatus.message + '. Please restart the Docker container.'"
+        :message="'Node error: ' + nodeStatus.message + '. Please restart the Node.'"
         class="top-alert"
         v-if="nodeStatus.status === nodeAPI.NODE_STATUS_ERROR"
       ></a-alert>
@@ -660,6 +662,8 @@ const topRowClasses = computed(() => {
       <a-typography-link :href="config.discord_link" target="_blank"
         >Discord</a-typography-link
       >
+      &nbsp;|&nbsp;
+      <a-typography-text :style="{'color':'white'}">v{{ appVersion }}</a-typography-text>
     </a-space>
     <img class="footer-logo" src="./logo-full-white.png" width="140" alt="Crynux logo" />
   </div>
