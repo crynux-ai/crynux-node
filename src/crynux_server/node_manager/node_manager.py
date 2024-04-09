@@ -11,7 +11,7 @@ from anyio import (Event, TASK_STATUS_IGNORED, create_task_group, fail_after,
 from anyio.abc import TaskGroup, TaskStatus
 from web3 import Web3
 from web3.types import EventData
-from tenacity import AsyncRetrying, before_sleep_log, wait_fixed
+from tenacity import AsyncRetrying, before_sleep_log, wait_fixed, stop_after_attempt, stop_never
 
 from crynux_server import models
 from crynux_server.config import Config, wait_privkey
@@ -266,18 +266,25 @@ class NodeManager(object):
             else:
                 proxy = None
 
-            await to_thread.run_sync(
-                prefetch,
-                self.config.task_config.hf_cache_dir,
-                self.config.task_config.external_cache_dir,
-                self.config.task_config.script_dir,
-                base_models,
-                controlnet_models,
-                vae_models,
-                proxy,
-                cancellable=True,
-            )
-
+            # retry prefetch for 3 times
+            async for attemp in AsyncRetrying(
+                stop=stop_after_attempt(3) if self._retry else stop_after_attempt(1),
+                wait=wait_fixed(self._retry_delay),
+                before_sleep=before_sleep_log(_logger, logging.ERROR, exc_info=True),
+                reraise=True,
+            ):
+                with attemp:
+                    await to_thread.run_sync(
+                        prefetch,
+                        self.config.task_config.hf_cache_dir,
+                        self.config.task_config.external_cache_dir,
+                        self.config.task_config.script_dir,
+                        base_models,
+                        controlnet_models,
+                        vae_models,
+                        proxy,
+                        cancellable=True,
+                    )
 
             ### Inference ###
             prompt = (
