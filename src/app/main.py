@@ -35,7 +35,7 @@ if getattr(sys, "frozen", False):
         cfg.task_config.external_cache_dir = os.path.join(resdir, "data/external")
         cfg.task_config.inference_logs_dir = os.path.join(resdir, "data/inference-logs")
         cfg.task_config.script_dir = os.path.join(resdir, "worker")
-        cfg.task_config.resource_dir = os.path.join(resdir, "res")
+        cfg.resource_dir = os.path.join(resdir, "res")
         crynux_config.set_config(cfg)
         crynux_config.dump_config(cfg)
 
