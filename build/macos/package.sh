@@ -12,6 +12,7 @@ DATA_DIR=$1
 RES_DIR="dist/Crynux Node.app/Contents/Resources"
 
 cp -R webui "$RES_DIR/"
+cp -R res "$RES_DIR/"
 mv dist/crynux_worker_process "dist/Crynux Node.app/Contents/MacOS/"
 
 
