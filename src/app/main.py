@@ -63,9 +63,9 @@ _logger.info(f"Start Crynux Node from: {config_file_path}")
 
 import asyncio
 import sys
-from PyQt6.QtGui import QDesktopServices, QIcon
+from PyQt6.QtGui import QDesktopServices, QIcon, QAction
 from PyQt6.QtCore import QUrl
-from PyQt6.QtWidgets import QWidget, QApplication, QVBoxLayout
+from PyQt6.QtWidgets import QWidget, QApplication, QVBoxLayout, QSystemTrayIcon, QMenu
 from PyQt6.QtWebEngineWidgets import QWebEngineView
 from PyQt6.QtWebEngineCore import QWebEnginePage, QWebEngineSettings
 import qasync
@@ -111,7 +111,7 @@ class CrynuxApp(QWidget):
 
         vbox.addWidget(self.webview)
         self.setLayout(vbox)
-        self.setGeometry(300, 300, 1300, 700)
+        self.setGeometry(300, 300, 1300, 800)
         self.setWindowTitle('Crynux Node')
 
     def delayed_show(self):
@@ -119,13 +119,8 @@ class CrynuxApp(QWidget):
         self.show()
 
     def closeEvent(self, event):
-        loop = asyncio.get_running_loop()
-
-        async def _close() -> None:
-            await self.runner.stop()
-
-        task = loop.create_task(_close())
-        task.add_done_callback(lambda t: event.accept())
+        self.hide()
+        event.accept()
 
 
 def main():
@@ -135,6 +130,23 @@ def main():
     cfg = crynux_config.get_config()
     app.setWindowIcon(QIcon(os.path.join(cfg.resource_dir, "icon.ico")))
 
+    app.setQuitOnLastWindowClosed(False)
+    tray = QSystemTrayIcon()
+    tray.setIcon(QIcon(os.path.join(cfg.resource_dir, "icon.ico")))
+    tray.setVisible(True)
+
+    tray_menu = QMenu()
+    tray_menu_dashboard = QAction("Dashboard")
+    tray_menu_discord = QAction("Crynux Discord")
+    tray_menu_exit = QAction("Exit")
+
+    tray_menu.addAction(tray_menu_dashboard)
+    tray_menu.addAction(tray_menu_discord)
+    tray_menu.addSeparator()
+    tray_menu.addAction(tray_menu_exit)
+
+    tray.setContextMenu(tray_menu)
+
     loop = qasync.QEventLoop(app)
     asyncio.set_event_loop(loop)
 
@@ -142,6 +154,26 @@ def main():
         _logger.debug("Creating runner and crynux_app")
         runner = CrynuxRunner()
         crynux_app = CrynuxApp(runner=runner)
+
+        def exit_all():
+            async def _close() -> None:
+                await runner.stop()
+                app.quit()
+
+            loop.create_task(_close())
+
+        def system_tray_action(reason):
+            if reason == QSystemTrayIcon.ActivationReason.Trigger:
+                crynux_app.show()
+
+        def go_to_discord():
+            QDesktopServices.openUrl(QUrl("https://discord.gg/JRkuY9FW49"))
+
+        tray.activated.connect(system_tray_action)
+        tray_menu_dashboard.triggered.connect(crynux_app.show)
+        tray_menu_discord.triggered.connect(go_to_discord)
+        tray_menu_exit.triggered.connect(exit_all)
+
         async with create_task_group() as tg:
             _logger.debug("Starting init task")
             await tg.start(runner.run)
