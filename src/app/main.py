@@ -64,7 +64,7 @@ _logger.info(f"Start Crynux Node from: {config_file_path}")
 import asyncio
 import sys
 from PyQt6.QtGui import QDesktopServices, QIcon, QAction
-from PyQt6.QtCore import QUrl
+from PyQt6.QtCore import QUrl, Qt
 from PyQt6.QtWidgets import QWidget, QApplication, QVBoxLayout, QSystemTrayIcon, QMenu
 from PyQt6.QtWebEngineWidgets import QWebEngineView
 from PyQt6.QtWebEngineCore import QWebEnginePage, QWebEngineSettings
@@ -118,6 +118,11 @@ class CrynuxApp(QWidget):
         self.webview.load(QUrl("http://localhost:7412"))
         self.show()
 
+    def show_from_tray(self):
+        self.show()
+        self.setWindowState(self.windowState() & ~Qt.WindowState.WindowMinimized | Qt.WindowState.WindowActive)
+        self.activateWindow()
+
     def closeEvent(self, event):
         self.hide()
         event.accept()
@@ -164,13 +169,13 @@ def main():
 
         def system_tray_action(reason):
             if reason == QSystemTrayIcon.ActivationReason.Trigger:
-                crynux_app.show()
+                crynux_app.show_from_tray()
 
         def go_to_discord():
             QDesktopServices.openUrl(QUrl("https://discord.gg/JRkuY9FW49"))
 
         tray.activated.connect(system_tray_action)
-        tray_menu_dashboard.triggered.connect(crynux_app.show)
+        tray_menu_dashboard.triggered.connect(crynux_app.show_from_tray)
         tray_menu_discord.triggered.connect(go_to_discord)
         tray_menu_exit.triggered.connect(exit_all)
 
