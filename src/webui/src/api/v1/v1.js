@@ -104,7 +104,7 @@ class V1Client {
     } else if (status === 500) {
       if (typeof this.apiServerErrorHandler === 'function') {
         let handler = this.apiServerErrorHandler
-        handler()
+        handler(errorData.detail)
       }
 
       return Promise.reject(new ApiError(ApiError.Type.Server))
