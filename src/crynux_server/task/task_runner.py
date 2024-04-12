@@ -417,6 +417,7 @@ class InferenceTaskRunner(TaskRunner):
             await self._call_task_contract_method(
                 "reportTaskError", task_id=self.task_id, round=self.state.round
             )
+            _logger.info(f"Task {self.task_id} error. Report the task error to contract.")
         except TxRevertedError as e:
             _logger.error(
                 f"Report error of task {self.task_id} failed due to {e.reason}"
@@ -562,6 +563,7 @@ class InferenceTaskRunner(TaskRunner):
                         commitment=commitment,
                         nonce=nonce,
                     )
+                    _logger.info(f"Submit commitment of task {self.task_id}")
                 except TxRevertedError as e:
                     # all other nodes report error
                     if "Task is aborted" in e.reason:
@@ -592,6 +594,7 @@ class InferenceTaskRunner(TaskRunner):
                     result=self.state.result,
                 )
                 self.state.disclosed = True
+                _logger.info(f"Disclose task result of task {self.task_id}")
             self.state.status = models.TaskStatus.Disclosed
 
     async def task_success(
@@ -608,6 +611,7 @@ class InferenceTaskRunner(TaskRunner):
                     round=self.state.round,
                 )
 
+            _logger.info(f"Task {self.task_id} success")
             self.state.status = models.TaskStatus.Success
         await finish_callback()
 
