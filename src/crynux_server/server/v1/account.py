@@ -1,3 +1,4 @@
+import logging
 from typing import Dict, Literal
 
 from anyio import create_task_group, get_cancelled_exc_class, to_thread
@@ -10,6 +11,8 @@ from crynux_server.config import set_privkey
 
 from ..depends import ContractsDep
 from .utils import CommonResponse
+
+_logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/account")
 
@@ -33,9 +36,13 @@ async def get_account_info(*, contracts: ContractsDep):
                 contracts.account
             )
 
-        async with create_task_group() as tg:
-            tg.start_soon(get_eth_balance)
-            tg.start_soon(get_cnx_balance)
+        try:
+            async with create_task_group() as tg:
+                tg.start_soon(get_eth_balance)
+                tg.start_soon(get_cnx_balance)
+        except Exception as e:
+            _logger.error(e)
+            raise HTTPException(status_code=500, detail=f"ContractError: {str(e)}")
 
         return res
     else:
