@@ -1,8 +1,5 @@
-curl -L ...
-MACAPP_CHECKSUM=""
+curl -L https://github.com/crynux-ai/crynux-node/releases/download/v2.0.1/crynux-node-helium-v2.0.1-mac-apple-silicon.dmg --output Crynux.dmg
 
-if [[ -n $(shasum crynux.dmg | grep $MACAPP_CHECKSUM) ]]; then
-    # Unsigned app need to be explicitly handled with.
-    sudo xattr -rds com.apple.quarantine crynux.dmg
-    open Crynux.dmg
-fi
+# Unsigned app need to be explicitly handled with.
+sudo xattr -ds com.apple.quarantine Crynux.dmg
+open Crynux.dmg
