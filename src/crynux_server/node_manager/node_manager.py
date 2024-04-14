@@ -226,11 +226,6 @@ class NodeManager(object):
 
     async def _init(self):
         _logger.info("Initialize node manager")
-        await self.state_cache.set_node_state(models.NodeStatus.Init)
-
-        # clear tx error when restart
-        await self.state_cache.set_tx_state(models.TxStatus.Success)
-
         if not self.config.distributed:
 
             ### Prefetech ###
@@ -463,6 +458,11 @@ class NodeManager(object):
                         init_tg.start_soon(self._init_components)
                         if prefetch:
                             init_tg.start_soon(self._init)
+
+                        await self.state_cache.set_node_state(models.NodeStatus.Init)
+                        # clear tx error when restart
+                        # set tx status to pending to forbid user to control node from web
+                        await self.state_cache.set_tx_state(models.TxStatus.Pending)
                 except get_cancelled_exc_class():
                     _logger.exception(f"Node manager init error: init task cancelled")
                     raise
@@ -499,6 +499,10 @@ class NodeManager(object):
                     else:
                         _logger.warn(e)
                         _logger.info("Cannot auto join the network")
+                finally:
+                    tx_status = (await self.state_cache.get_tx_state()).status
+                    if tx_status == models.TxStatus.Pending:
+                        await self.state_cache.set_tx_state(models.TxStatus.Success)
         finally:
             self._tg = None
 

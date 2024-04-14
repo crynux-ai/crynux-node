@@ -157,7 +157,7 @@ class NodeStateManager(object):
                 waiter = await self.contracts.node_contract.resume(option=option)
                 await self.state_cache.set_tx_state(models.TxStatus.Pending)
                 await waiter.wait()
-                await self.state_cache.set_tx_state(models.TxStatus.Success)
+                await self._wait_for_running()
 
             _logger.info("Node joins in the network successfully.")
             break

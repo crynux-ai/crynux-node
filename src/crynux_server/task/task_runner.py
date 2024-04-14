@@ -7,32 +7,19 @@ from collections import deque
 from contextlib import asynccontextmanager
 from typing import Awaitable, Callable, Deque, List, Optional, Tuple
 
-from anyio import (
-    Condition,
-    CancelScope,
-    Lock,
-    create_task_group,
-    fail_after,
-    sleep_until,
-    get_cancelled_exc_class,
-    to_thread,
-)
+from anyio import (CancelScope, Condition, create_task_group, fail_after,
+                   get_cancelled_exc_class, sleep_until, to_thread)
 from celery.result import AsyncResult
 from hexbytes import HexBytes
-from tenacity import (
-    before_sleep_log,
-    retry,
-    retry_if_exception,
-    stop_after_delay,
-    wait_chain,
-    wait_fixed,
-)
+from tenacity import (before_sleep_log, retry, retry_if_exception,
+                      stop_after_delay, wait_chain, wait_fixed)
 from web3.types import EventData
 
 from crynux_server import models
 from crynux_server.config import TaskConfig as LocalConfig
 from crynux_server.config import get_config
-from crynux_server.contracts import Contracts, TxRevertedError, TxWaiter, get_contracts
+from crynux_server.contracts import (Contracts, TxRevertedError, TxWaiter,
+                                     get_contracts)
 from crynux_server.event_queue import EventQueue, get_event_queue
 from crynux_server.relay import Relay, RelayError, get_relay
 from crynux_server.watcher import EventWatcher, get_watcher
@@ -167,48 +154,40 @@ class TaskRunner(ABC):
     @abstractmethod
     async def task_started(
         self, event: models.TaskStarted, finish_callback: Callable[[], Awaitable[None]]
-    ):
-        ...
+    ): ...
 
     @abstractmethod
     async def result_ready(
         self,
         event: models.TaskResultReady,
         finish_callback: Callable[[], Awaitable[None]],
-    ):
-        ...
+    ): ...
 
     @abstractmethod
     async def commitment_ready(
         self,
         event: models.TaskResultCommitmentsReady,
         finish_callback: Callable[[], Awaitable[None]],
-    ):
-        ...
+    ): ...
 
     @abstractmethod
     async def task_success(
         self, event: models.TaskSuccess, finish_callback: Callable[[], Awaitable[None]]
-    ):
-        ...
+    ): ...
 
     @abstractmethod
     async def task_aborted(
         self, event: models.TaskAborted, finish_callback: Callable[[], Awaitable[None]]
-    ):
-        ...
+    ): ...
 
     @abstractmethod
-    async def cleanup(self):
-        ...
+    async def cleanup(self): ...
 
     @abstractmethod
-    async def get_task(self) -> Optional[models.ChainTask]:
-        ...
+    async def get_task(self) -> Optional[models.ChainTask]: ...
 
     @abstractmethod
-    async def cancel_task(self):
-        ...
+    async def cancel_task(self): ...
 
     async def _run_event(
         self,
@@ -285,24 +264,6 @@ class TaskRunner(ABC):
             self._queue_condition.notify(1)
 
 
-class OnceEventPusher(object):
-    def __init__(self, queue: EventQueue) -> None:
-        self.queue = queue
-
-        self.used = False
-        self.lock = Lock()
-
-    async def push(self, event_data: EventData):
-        async with self.lock:
-            if not self.used:
-                event = models.load_event_from_contracts(event_data)
-                await self.queue.put(event)
-                self.used = True
-                _logger.debug(f"push event {event_data} to queue successfully")
-            else:
-                _logger.debug(f"cannot push event {event_data} to queue twice")
-
-
 class InferenceTaskRunner(TaskRunner):
     def __init__(
         self,
@@ -351,24 +312,29 @@ class InferenceTaskRunner(TaskRunner):
 
         self._cleaned = False
 
+        async def _push_event(event_data: EventData):
+            event = models.load_event_from_contracts(event_data)
+            await self.queue.put(event)
+            _logger.debug(f"push event {event} to queue successfully")
+
         self._commitment_watch_id = self.watcher.watch_event(
             "task",
             "TaskResultCommitmentsReady",
-            callback=OnceEventPusher(self.queue).push,
+            callback=_push_event,
             filter_args={"taskId": self.task_id},
         )
         _logger.debug(f"commitment watcher id {self._commitment_watch_id}")
         self._success_watch_id = self.watcher.watch_event(
             "task",
             "TaskSuccess",
-            callback=OnceEventPusher(self.queue).push,
+            callback=_push_event,
             filter_args={"taskId": self.task_id},
         )
         _logger.debug(f"success watcher id {self._success_watch_id}")
         self._aborted_watch_id = self.watcher.watch_event(
             "task",
             "TaskAborted",
-            callback=OnceEventPusher(self.queue).push,
+            callback=_push_event,
             filter_args={"taskId": self.task_id},
         )
         _logger.debug(f"abort watcher id {self._aborted_watch_id}")
@@ -416,6 +382,9 @@ class InferenceTaskRunner(TaskRunner):
         try:
             await self._call_task_contract_method(
                 "reportTaskError", task_id=self.task_id, round=self.state.round
+            )
+            _logger.info(
+                f"Task {self.task_id} error. Report the task error to contract."
             )
         except TxRevertedError as e:
             _logger.error(
@@ -493,7 +462,8 @@ class InferenceTaskRunner(TaskRunner):
 
             def run_local_task():
                 import crynux_worker.task as h_task
-                from crynux_worker.task.utils import get_image_hash, get_gpt_resp_hash
+                from crynux_worker.task.utils import (get_gpt_resp_hash,
+                                                      get_image_hash)
 
                 assert self.local_config is not None
                 proxy = None
@@ -562,6 +532,7 @@ class InferenceTaskRunner(TaskRunner):
                         commitment=commitment,
                         nonce=nonce,
                     )
+                    _logger.info(f"Submit commitment of task {self.task_id}")
                 except TxRevertedError as e:
                     # all other nodes report error
                     if "Task is aborted" in e.reason:
@@ -592,6 +563,7 @@ class InferenceTaskRunner(TaskRunner):
                     result=self.state.result,
                 )
                 self.state.disclosed = True
+                _logger.info(f"Disclose task result of task {self.task_id}")
             self.state.status = models.TaskStatus.Disclosed
 
     async def task_success(
@@ -608,6 +580,7 @@ class InferenceTaskRunner(TaskRunner):
                     round=self.state.round,
                 )
 
+            _logger.info(f"Task {self.task_id} success")
             self.state.status = models.TaskStatus.Success
         await finish_callback()
 

@@ -6,8 +6,10 @@ import { onBeforeUnmount, onMounted, ref, h } from 'vue'
 import { BulbOutlined } from '@ant-design/icons-vue'
 const [messageApi, contextHolder] = message.useMessage()
 
-const defaultErrorHandler = () => {
-  messageApi.error('Unexpected server error. Please try again later.')
+const defaultErrorHandler = (msg) => {
+  if(!/ContractError/.test(msg)) {
+    messageApi.error('Unexpected server error. Please try again later.')
+  }
 }
 
 v1.apiServerErrorHandler = defaultErrorHandler
