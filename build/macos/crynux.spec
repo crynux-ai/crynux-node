@@ -1,12 +1,22 @@
 # -*- mode: python ; coding: utf-8 -*-
 from PyInstaller.utils.hooks import collect_data_files
+import argparse
+
+parser = argparse.ArgumentParser()
+parser.add_argument("--identity", action="store")
+options = parser.parse_args()
 
 a = Analysis(
     ['crynux-node/src/app/main.py'],
     pathex=[],
-    binaries=[],
+    binaries=[
+        ('dist/crynux_worker_process', '.'),
+    ],
     datas=[
         ('config/*', 'config/'),
+        ('data', 'data'),
+        ('res', 'res'),
+        ('webui', 'webui'),
     ] + collect_data_files('crynux_server.contracts.abi'),
     hiddenimports=['aiosqlite', "crynux_server.contracts.abi"],
     collect_submodules=["crynux_server.contracts.abi"],
@@ -37,8 +47,8 @@ exe = EXE(
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,
-    codesign_identity=None,
-    entitlements_file=None,
+    codesign_identity=options.identity,
+    entitlements_file='entitlements.plist',
     icon=['res/icon.icns'],
 )
 
@@ -57,6 +67,6 @@ app = BUNDLE(
     icon='res/icon.icns',
     bundle_identifier='ai.crynux.node',
     info_plist={
-        'CFBundleShortVersionString': '0.0.1',
+        'CFBundleShortVersionString': '2.0.2',
     },
 )

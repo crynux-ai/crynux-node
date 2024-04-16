@@ -1,19 +1,37 @@
 # Build package from source
-# Example call: bash build/macos/build.sh ~/crynux_app 
+# Example call: bash build/macos/prepare.sh -w ~/crynux_app
 
-if [[ -z $1 ]]; then
+while getopts ":w:d:" opt; do
+  case $opt in
+    w) WORK_DIR="$OPTARG"
+    ;;
+    d) DATA_DIR="$OPTARG"
+    ;;
+    \?) echo "Invalid option -$OPTARG" >&2
+    exit 1
+    ;;
+  esac
+
+  case $OPTARG in
+    -*) echo "Option $opt needs a valid argument"
+    exit 1
+    ;;
+  esac
+done
+
+if [[ -z $WORK_DIR ]]; then
   exit 1
 fi
 
-if [[ -d "$1" ]]; then
+if [[ -d "$WORK_DIR" ]]; then
   echo "Deleting old package folder"
-  rm -r $1
+  rm -r $WORK_DIR
 fi
 
 echo "Creating package folder"
-mkdir $1
+mkdir $WORK_DIR
 
-WORK_DIR=$(realpath $1)
+WORK_DIR=$(realpath $WORK_DIR)
 echo "Package folder: $WORK_DIR"
 
 GIT_DIR=$(pwd)
@@ -91,6 +109,7 @@ cp -R $GIT_DIR/gpt-task gpt-task
 cd gpt-task
 pip install -r requirements_macos.txt
 pip install .
+
 cd $WORK_DIR
 
 mkdir config
@@ -98,7 +117,12 @@ cp $GIT_DIR/config/config.yml.package_example config/config.yml
 cp $GIT_DIR/start.sh start.sh
 cp $GIT_DIR/build/macos/* .
 
-# bash build/macos/build.sh ~/crynux_app ~/crynux.tar.gz
-# OUTPUT_FILE=$2
-# echo $OUTPUT_FILE
-# tar czf $OUTPUT_FILE .
+## Prepare the data folder
+if [ $DATA_DIR ] && [ -d $DATA_DIR ]; then
+  # In case the data has been stored elsewhere
+  echo "$DATA_DIR exist, copy it to macapp"
+  mkdir "data"
+  cp -R $DATA_DIR/* "data/"
+else
+  cp -R $GIT_DIR/build/data .
+fi
