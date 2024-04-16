@@ -26,3 +26,5 @@ Go to the folder created in the last step, and run the package command:
 $ cd build/crynux_node
 $ ./package.sh
 ```
+
+3. Sign the app and send it to Apple for notarization

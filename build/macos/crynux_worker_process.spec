@@ -1,5 +1,9 @@
 # -*- mode: python ; coding: utf-8 -*-
+import argparse
 
+parser = argparse.ArgumentParser()
+parser.add_argument("--identity", action="store")
+options = parser.parse_args()
 
 a = Analysis(
     ['worker/crynux_worker_process.py'],
@@ -41,6 +45,6 @@ exe = EXE(
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,
-    codesign_identity=None,
-    entitlements_file=None,
+    codesign_identity=options.identity,
+    entitlements_file='entitlements.plist',
 )
