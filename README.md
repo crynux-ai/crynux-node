@@ -156,32 +156,14 @@ $ ./venv/bin/activate
 # docker run -d -p 127.0.0.1:7412:7412 --gpus all crynux-node:dev
 ```
 
-## Build the package on Mac
+## Build the binary package on Mac
 
-1. Clone the project
+Please refer to the [README](https://github.com/crynux-ai/crynux-node/blob/main/build/macos/README.md) for the detailed instructions on building the MacOS binary package.
 
-```shell
-# git clone https://github.com/crynux-ai/crynux-node.git
-```
 
-2. Go to the root folder of the project
+## Build the binary package on Windows
 
-```shell
-# cd crynux-node
-```
-
-3. Generate runner environment and package the code
-
-```shell
-# bash build/macos/build.sh ~/crynux_app ~/crynux.tar.gz
-```
-
-4. Start the node
-
-```shell
-# bash start.sh run
-```
-
+Please refer to the [README](https://github.com/crynux-ai/crynux-node/blob/main/build/windows/README.md) for the detailed instructions on building the Windows binary package.
 
 ## Run tests
 
