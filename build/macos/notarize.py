@@ -39,6 +39,21 @@ def upload_package(args):
     return uuid
 
 
+def get_log(args, uuid):
+    log_message('Retrieving logs...')
+    process = subprocess.Popen(['xcrun', 'notarytool', 'log',
+                                '--apple-id', args.username, '--team-id', args.team, '--password', args.password, uuid],
+                               stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    output, error = process.communicate()
+    output_str = output.decode('utf-8')
+    error_str = error.decode('utf-8')
+
+    if error_str != "":
+        log_message("error: " + error_str)
+
+    return output_str
+
+
 def check_status(args, uuid):
     process = subprocess.Popen(['xcrun', 'notarytool', 'info',
                                 '--output-format', 'json',
@@ -56,10 +71,12 @@ def check_status(args, uuid):
     output_json = json.loads(output_str)
 
     in_progress = output_json["status"] == "In Progress"
-    success = output_json["status"] != "Invalid"
+    invalid = output_json["status"] == "Invalid"
 
-    if not in_progress and not success:
+    if invalid:
         log_message('[Error] Notarization failed')
+        logs = get_log(args, uuid)
+        log_message(logs)
         exit(1)
 
     return in_progress
