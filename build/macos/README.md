@@ -55,7 +55,7 @@ If the notarization passes, the DMG file will be stapled.
 
 ### Step by step
 
-1. Prepare the project for packaging
+1. Prepare the distribution folder for the packaging
 
 Run the following command inside the root folder of the project:
 
@@ -63,7 +63,10 @@ Run the following command inside the root folder of the project:
 $ ./build/macos/prepare.sh -w build/crynux_node
 ```
 
-2. Create the distribution folder using pyinstaller
+A new distribution folder will be created as ```build/crynux_node```,
+all the dependencies will be fetched, venvs will be built, and sub projects such as webui will be built.
+
+2. Packaging the application
 
 Go to the folder created in the last step, and run the package command:
 
@@ -71,6 +74,9 @@ Go to the folder created in the last step, and run the package command:
 $ cd build/crynux_node
 $ ./package.sh
 ```
+
+```Crynux Node.app``` and ```Crynux Node.dmg``` will be created under
+the ```dist``` folder of the distribution folder created in the last step.
 
 3. Notarization
 
