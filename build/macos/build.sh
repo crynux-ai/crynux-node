@@ -1,9 +1,15 @@
 #!/bin/bash
 
-while getopts ":s:" opt; do
+while getopts ":s:u:p:t:" opt; do
   case $opt in
     s) IDENTITY="$OPTARG"
     ;;
+    u) APPLE_USER="$OPTARG"
+      ;;
+    p) APPLE_PASS="$OPTARG"
+      ;;
+    t) APPLE_TEAM_ID="$OPTARG"
+      ;;
     \?) echo "Invalid option -$OPTARG" >&2
     exit 1
     ;;
@@ -20,26 +26,28 @@ done
 ./build/macos/prepare.sh -w ./build/crynux_node
 
 ## Build the dist bundle
-cd ./build/crynux_node
-if [ $IDENTITY ]; then
+cd ./build/crynux_node || exit
+
+if [ "$IDENTITY" ]; then
   echo "Packaging using identity: $IDENTITY"
-  ./package.sh -s $IDENTITY
+  ./package.sh -s "$IDENTITY"
 else
   echo "Packaging using local developer identity"
   ./package.sh
 fi
 
-if [ $IDENTITY ]; then
+if [ "$IDENTITY" ]; then
   ## Sign the DMG file
   echo "Signing the DMG file"
-  codesign -s $IDENTITY "dist/Crynux Node.dmg"
+  codesign -s "$IDENTITY" "dist/Crynux Node.dmg"
 fi
 
-## Sign the app and send it to apple for notarization
-#cd dist
-#python notarize.py \
-#    --package "Crynux Node.dmg" \
-#    --entitlements "../entitlements.plist" \
-#    --primary-bundle-id ai.crynux.node \
-#    --username $APPLE_USER \
-#    --password $APPLE_PASS
+if [ "$IDENTITY" ]; then
+  echo "Notarizing the DMG file"
+  ## Sign the app and send it to apple for notarization
+  python notarize.py \
+    --package "dist/Crynux Node.dmg" \
+    --username "$APPLE_USER" \
+    --team-id "$APPLE_TEAM_ID" \
+    --password "$APPLE_PASS"
+fi
