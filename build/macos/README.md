@@ -2,6 +2,9 @@
 
 ### All in one script
 
+
+#### Local build for testing
+
 ```shell
 # In the root folder of the project
 
@@ -20,6 +23,7 @@ automatically.
 
 |---------- ...all the python .so/.lib executable files... -> signed by pyinstaller
 
+#### Production build for releasing
 
 When building the release package that will be distributed to the public,
 please use a team Apple account by providing the ID of the [Developer ID certificate](https://developer.apple.com/help/account/create-certificates/create-developer-id-certificates/)

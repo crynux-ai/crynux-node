@@ -48,6 +48,6 @@ if [ "$IDENTITY" ]; then
   python notarize.py \
     --package "dist/Crynux Node.dmg" \
     --username "$APPLE_USER" \
-    --team-id "$APPLE_TEAM_ID" \
+    --team "$APPLE_TEAM_ID" \
     --password "$APPLE_PASS"
 fi

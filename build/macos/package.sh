@@ -22,8 +22,8 @@ source worker/venv/bin/activate
 TAR_FILE=worker/venv/lib/python3.10/site-packages/controlnet_aux/zoe/zoedepth/models/layers/attractor.py
 sed -i.bak "s/@torch.jit.script/#@torch.jit.script/g" $TAR_FILE
 
-if [ $IDENTITY ]; then
-  pyinstaller crynux_worker_process.spec -- --identity $IDENTITY
+if [ "$IDENTITY" ]; then
+  pyinstaller crynux_worker_process.spec -- --identity "$IDENTITY"
 else
   pyinstaller crynux_worker_process.spec
 fi
@@ -33,8 +33,8 @@ fi
 ## as described in the crynux.spec file
 
 source venv/bin/activate
-if [ $IDENTITY ]; then
-  pyinstaller crynux.spec -- --identity $IDENTITY
+if [ "$IDENTITY" ]; then
+  pyinstaller crynux.spec -- --identity "$IDENTITY"
 else
   pyinstaller crynux.spec
 fi
@@ -43,7 +43,7 @@ cd dist
 
 [ -e Crynux.dmg ] && rm Crynux.dmg
 create-dmg \
-    --volname "Crynux" --volicon "../res/icon.icns" \
+    --volname "Crynux Node" --volicon "../res/icon.icns" \
     --window-pos 200 120 --window-size 800 400 --icon-size 100 \
     --icon "Crynux Node.app" 200 190 --hide-extension "Crynux Node.app" \
     --app-drop-link 600 185 \
