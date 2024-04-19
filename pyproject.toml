@@ -26,8 +26,9 @@ dependencies = [
     "python-multipart==0.0.6",
     "tenacity~=8.2.3",
     "psutil~=5.9.8",
+    "eth-rlp==1.0.1",
 ]
-version = "0.6.5"
+version = "2.0.2"
 
 [tool.setuptools.packages.find]
 where = ["src"]
