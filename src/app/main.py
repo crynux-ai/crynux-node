@@ -2,6 +2,8 @@ import logging
 import os
 import platform
 import sys
+from logging.handlers import RotatingFileHandler
+
 import psutil
 
 _logger = logging.getLogger(__name__)
@@ -64,7 +66,7 @@ _logger.info(f"Start Crynux Node from: {config_file_path}")
 import asyncio
 import sys
 from PyQt6.QtGui import QDesktopServices, QIcon, QAction
-from PyQt6.QtCore import QUrl, Qt
+from PyQt6.QtCore import QUrl, Qt, qInstallMessageHandler, QtMsgType
 from PyQt6.QtWidgets import QWidget, QApplication, QVBoxLayout, QSystemTrayIcon, QMenu
 from PyQt6.QtWebEngineWidgets import QWebEngineView
 from PyQt6.QtWebEngineCore import QWebEnginePage, QWebEngineSettings
@@ -74,14 +76,56 @@ from anyio import create_task_group, sleep
 from crynux_server.run import CrynuxRunner
 
 
+def init_log(_logger, config):
+
+    if config.log.level == "DEBUG":
+        os.environ['QT_LOGGING_RULES'] = "qt.webenginecontext.debug=true"
+
+    def qt_message_handler(mode, context, message):
+
+        position = '[QT] line: %d, func: %s(), file: %s\n' % (context.line, context.function, context.file)
+        msg = '[QT] %s\n' % message
+
+        if mode == QtMsgType.QtInfoMsg:
+            _logger.info(msg)
+            _logger.info(position)
+        elif mode == QtMsgType.QtWarningMsg:
+            _logger.warning(msg)
+            _logger.warning(position)
+        elif mode == QtMsgType.QtCriticalMsg:
+            _logger.error(msg)
+            _logger.error(position)
+        elif mode == QtMsgType.QtFatalMsg:
+            _logger.fatal(msg)
+            _logger.fatal(position)
+        else:
+            _logger.debug(msg)
+            _logger.debug(position)
+
+    qInstallMessageHandler(qt_message_handler)
+
+    log_file = os.path.join(config.log.dir, "main.log")
+    file_handler = RotatingFileHandler(
+        log_file,
+        encoding="utf-8",
+        delay=True,
+        maxBytes=50 * 1024 * 1024,
+        backupCount=5,
+    )
+    file_handler.setFormatter(logging.Formatter(
+        "[{asctime}] [{levelname:<8}] {name}: {message}", "%Y-%m-%d %H:%M:%S", style="{"
+    ))
+    _logger.addHandler(file_handler)
+
+
 class CustomWebEnginePage(QWebEnginePage):
 
     def createWindow(self, _type):
         page = CustomWebEnginePage(self)
-        page.urlChanged.connect(self.openBrowser)
+        page.urlChanged.connect(self.open_browser)
         return page
 
-    def openBrowser(self, url):
+    def open_browser(self, url):
         page = self.sender()
         QDesktopServices.openUrl(url)
         page.deleteLater()
@@ -92,12 +136,11 @@ class CrynuxApp(QWidget):
     def __init__(self, runner: CrynuxRunner):
         super().__init__()
         _logger.debug("Initializing Application UI...")
-        self.initUI()
+        self.init_ui()
         _logger.debug("Application UI initialized")
         self.runner = runner
 
-    def initUI(self):
-
+    def init_ui(self):
         vbox = QVBoxLayout(self)
         self.webview = QWebEngineView()
         self.webpage = CustomWebEnginePage()
@@ -130,14 +173,15 @@ class CrynuxApp(QWidget):
 
 def main():
     _logger.info("Starting Crynux node...")
+
+    crynux_cfg = crynux_config.get_config()
+    init_log(_logger, crynux_cfg)
+
     app = QApplication(sys.argv)
-
-    cfg = crynux_config.get_config()
-    app.setWindowIcon(QIcon(os.path.join(cfg.resource_dir, "icon.ico")))
-
+    app.setWindowIcon(QIcon(os.path.join(crynux_cfg.resource_dir, "icon.ico")))
     app.setQuitOnLastWindowClosed(False)
     tray = QSystemTrayIcon()
-    tray.setIcon(QIcon(os.path.join(cfg.resource_dir, "icon.ico")))
+    tray.setIcon(QIcon(os.path.join(crynux_cfg.resource_dir, "icon.ico")))
     tray.setVisible(True)
 
     tray_menu = QMenu()
