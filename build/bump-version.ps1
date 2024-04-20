@@ -1,0 +1,20 @@
+#!/bin/bash
+param(
+    [string]$VERSION
+)
+
+if (-not $VERSION) {
+    Write-Error "Please set the version number in the argument"
+    exit 1
+}
+
+Write-Output "Bumping version number to: $VERSION"
+
+## Update pyproject.toml
+(Get-Content "pyproject.toml") -replace "version = `"([0-9].[0-9].[0-9])`"", "version = `"$VERSION`"" | Set-Content "pyproject.toml"
+
+## Update src/webui/package.json
+(Get-Content "src/webui/package.json") -replace "`"version`": `"[0-9].[0-9].[0-9]`"", "`"version`": `"$VERSION`"" | Set-Content "src/webui/package.json"
+
+## Update build/macos/crynux.spec
+(Get-Content "build/macos/crynux.spec") -replace "'CFBundleShortVersionString': '[0-9].[0-9].[0-9]'", "'CFBundleShortVersionString': '$VERSION'" | Set-Content "build/macos/crynux.spec"
