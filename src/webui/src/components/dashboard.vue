@@ -188,6 +188,14 @@ const topRowClasses = computed(() => {
 
   return classes
 })
+
+const getPercent = (num) => {
+    if (num >= 100) {
+        return 99
+    }
+
+    return num
+}
 </script>
 
 <template>
@@ -459,11 +467,11 @@ const topRowClasses = computed(() => {
               type="circle"
               :size="70"
               :percent="100"
-              :stroke-color="'lightgray'"
-              v-if="taskStatus.status === 'stopped'"
+              status="success"
+              v-else-if="taskStatus.status === 'running'"
             >
               <template #format="percent">
-                <span style="font-size: 14px; color: lightgray">Stopped</span>
+                <span style="font-size: 14px">Running</span>
               </template>
             </a-progress>
 
@@ -471,13 +479,14 @@ const topRowClasses = computed(() => {
               type="circle"
               :size="70"
               :percent="100"
-              status="success"
-              v-if="taskStatus.status === 'running'"
+              :stroke-color="'lightgray'"
+              v-else
             >
               <template #format="percent">
-                <span style="font-size: 14px">Running</span>
+                <span style="font-size: 14px; color: lightgray">Stopped</span>
               </template>
             </a-progress>
+
           </a-col>
           <a-col :span="8">
             <a-statistic title="Today" :precision="0" :value="taskStatus.num_today"></a-statistic>
@@ -501,7 +510,7 @@ const topRowClasses = computed(() => {
       <a-card title="GPU" :bordered="false" style="height: 100%; opacity: 0.9">
         <a-row>
           <a-col :span="8">
-            <a-progress type="dashboard" :size="80" :percent="systemInfo.gpu.usage" />
+            <a-progress type="dashboard" :size="80" :percent="getPercent(systemInfo.gpu.usage)" />
           </a-col>
           <a-col :span="16">
             <a-row>
@@ -539,7 +548,7 @@ const topRowClasses = computed(() => {
       <a-card title="CPU" :bordered="false" style="height: 100%; opacity: 0.9">
         <a-row>
           <a-col :span="12">
-            <a-progress type="dashboard" :size="80" :percent="systemInfo.cpu.usage" />
+            <a-progress type="dashboard" :size="80" :percent="getPercent(systemInfo.cpu.usage)" />
           </a-col>
           <a-col :span="12">
             <a-row>
@@ -575,11 +584,11 @@ const topRowClasses = computed(() => {
               type="dashboard"
               :size="80"
               :percent="
-                Math.round(
+                getPercent(Math.round(
                   ((systemInfo.memory.total_mb - systemInfo.memory.available_mb) /
                     systemInfo.memory.total_mb) *
                     100
-                )
+                ))
               "
             />
           </a-col>
