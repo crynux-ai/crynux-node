@@ -211,7 +211,13 @@ const getPercent = (num) => {
         type="error"
         :message="'Node error: ' + nodeStatus.message + '. Please restart the Node.'"
         class="top-alert"
-        v-if="nodeStatus.status === nodeAPI.NODE_STATUS_ERROR"
+        v-if="nodeStatus.status === nodeAPI.NODE_STATUS_ERROR && !/cannot watch events from chain/.test(nodeStatus.message)"
+      ></a-alert>
+      <a-alert
+        type="warning"
+        :message="nodeStatus.message + ' Retrying...'"
+        class="top-alert"
+        v-if="nodeStatus.status === nodeAPI.NODE_STATUS_ERROR && /cannot watch events from chain/.test(nodeStatus.message)"
       ></a-alert>
       <a-alert
         type="error"

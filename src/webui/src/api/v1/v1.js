@@ -18,7 +18,7 @@ class V1Client {
 
     this.httpClient = axios.create({
       baseURL: this.v1BaseURL,
-      timeout: 10000,
+      timeout: 15000,
       transformResponse: [
         (data) => {
           if (!data) {

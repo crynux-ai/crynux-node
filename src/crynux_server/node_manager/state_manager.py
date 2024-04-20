@@ -109,6 +109,7 @@ class NodeStateManager(object):
     async def try_start(
         self, gpu_name: str, gpu_vram: int, interval: float = 5, *, option: "Optional[TxOption]" = None
     ):
+        _logger.info("Trying to join the network automatically...")
         while True:
             status = await self.contracts.node_contract.get_node_status(
                 self.contracts.account
@@ -150,12 +151,10 @@ class NodeStateManager(object):
                 )
                 # update tx state to avoid the web user controlling node status by api
                 # it's the same in try_stop method
-                await self.state_cache.set_tx_state(models.TxStatus.Pending)
                 await waiter.wait()
                 await self._wait_for_running()
             elif status == models.ChainNodeStatus.PAUSED:
                 waiter = await self.contracts.node_contract.resume(option=option)
-                await self.state_cache.set_tx_state(models.TxStatus.Pending)
                 await waiter.wait()
                 await self._wait_for_running()
 
