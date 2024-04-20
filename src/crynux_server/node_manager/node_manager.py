@@ -316,9 +316,9 @@ class NodeManager(object):
                         cancellable=True,
                     )
             except TimeoutError as e:
-                msg = "The initial inference task is timeout (5 min). Maybe your device does not meet the lowest hardware requirements"
+                msg = ("The initial inference task exceeded the timeout limit(5 min). Maybe your device does not meet "
+                       "the lowest hardware requirements")
                 raise ValueError(msg) from e
-            # TODO: validate image similarity.
 
         _logger.info("Node manager initializing complete.")
 
@@ -462,7 +462,7 @@ class NodeManager(object):
                         await self.state_cache.set_node_state(models.NodeStatus.Init)
                         # clear tx error when restart
                         # set tx status to pending to forbid user to control node from web
-                        await self.state_cache.set_tx_state(models.TxStatus.Pending)
+                        await self.state_cache.set_tx_state(models.TxStatus.Success)
                 except get_cancelled_exc_class():
                     _logger.exception(f"Node manager init error: init task cancelled")
                     raise
@@ -482,9 +482,6 @@ class NodeManager(object):
                 assert self._task_system is not None
                 tg.start_soon(self._task_system.start)
 
-                if not self.config.headless:
-                    tg.start_soon(self._sync_state)
-
                 # wait the event watcher to start first and then join the network sequentially
                 # because the node may be selected to execute one task in the same tx of join,
                 # start watcher after the joining operation will cause missing the TaskStarted event.
@@ -497,12 +494,15 @@ class NodeManager(object):
                     if self.config.headless:
                         raise e
                     else:
-                        _logger.warn(e)
+                        _logger.warning(e)
                         _logger.info("Cannot auto join the network")
                 finally:
                     tx_status = (await self.state_cache.get_tx_state()).status
                     if tx_status == models.TxStatus.Pending:
                         await self.state_cache.set_tx_state(models.TxStatus.Success)
+
+                if not self.config.headless:
+                    tg.start_soon(self._sync_state)
         finally:
             self._tg = None
 

@@ -8,7 +8,7 @@ const [messageApi, contextHolder] = message.useMessage()
 
 const defaultErrorHandler = (msg) => {
   if(!/ContractError/.test(msg)) {
-    messageApi.error('Unexpected server error. Please try again later.')
+    messageApi.error('Network error. Will try again later.')
   }
 }
 

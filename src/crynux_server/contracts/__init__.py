@@ -43,7 +43,7 @@ class Contracts(object):
         provider_path: Optional[str] = None,
         privkey: str = "",
         default_account_index: Optional[int] = None,
-        timeout: int = 30,
+        timeout: int = 3,
     ):
         self._w3 = None
         self._session = None
