@@ -45,7 +45,11 @@ const changeAccount = async () => {
 
   try {
     if (activeImportType.value === 'private-key') {
-      await accountAPI.updatePrivateKey(privateKeyInput.value)
+        if(!/^0x.+/.test(privateKeyInput.value)) {
+            await accountAPI.updatePrivateKey('0x' + privateKeyInput.value)
+        } else {
+            await accountAPI.updatePrivateKey(privateKeyInput.value)
+        }
     } else {
       await accountAPI.updateKeystore(keystoreInput.value, keystorePassphraseInput.value)
     }
