@@ -231,9 +231,9 @@ class TaskRunner(ABC):
             raise
         except TimeoutError:
             # cancel task
+            await self.cancel_task()
             async with self.state_context():
                 self.state.status = models.TaskStatus.Aborted
-            await self.cancel_task()
         finally:
             with fail_after(10, shield=True):
                 if self._state is not None and (
