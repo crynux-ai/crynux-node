@@ -231,9 +231,9 @@ class TaskRunner(ABC):
             raise
         except TimeoutError:
             # cancel task
+            await self.cancel_task()
             async with self.state_context():
                 self.state.status = models.TaskStatus.Aborted
-            await self.cancel_task()
         finally:
             with fail_after(10, shield=True):
                 if self._state is not None and (
@@ -574,6 +574,7 @@ class InferenceTaskRunner(TaskRunner):
         async with self.state_context():
             if event.result_node == self.contracts.account:
                 await self.relay.upload_task_result(self.task_id, self.state.files)
+                self.state.status = models.TaskStatus.ResultFileUploaded
                 await self._call_task_contract_method(
                     "reportResultsUploaded",
                     task_id=self.task_id,

@@ -1,19 +1,19 @@
 import os
 import shutil
 import time
-from datetime import datetime, timedelta
+from datetime import datetime
 from string import hexdigits
 from typing import List, Literal
 
-from fastapi import (APIRouter, File, Form, HTTPException, Path,
-                     UploadFile)
+from fastapi import APIRouter, File, Form, HTTPException, Path, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel
 from typing_extensions import Annotated
 
-from crynux_server.models import TaskResultReady, TaskStatus, NodeStatus
+from crynux_server.models import NodeStatus, TaskResultReady, TaskStatus
 
-from ..depends import ConfigDep, TaskStateCacheDep, EventQueueDep, ManagerStateCacheDep
+from ..depends import (ConfigDep, EventQueueDep, ManagerStateCacheDep,
+                       TaskStateCacheDep)
 from .utils import CommonResponse
 
 router = APIRouter(prefix="/tasks")
@@ -48,7 +48,7 @@ async def upload_result(
     *,
     config: ConfigDep,
     task_state_cache: TaskStateCacheDep,
-    event_queue: EventQueueDep
+    event_queue: EventQueueDep,
 ) -> CommonResponse:
     if event_queue is None or task_state_cache is None:
         raise HTTPException(400, detail="Node is not running.")
@@ -83,18 +83,22 @@ class TaskStats(BaseModel):
 
 @router.get("", response_model=TaskStats)
 async def get_task_stats(
-    *,
-    task_state_cache: TaskStateCacheDep,
-    state_cache: ManagerStateCacheDep
+    *, task_state_cache: TaskStateCacheDep, state_cache: ManagerStateCacheDep
 ):
     node_status = (await state_cache.get_node_state()).status
-    if task_state_cache is None or node_status not in [NodeStatus.Running, NodeStatus.PendingPause, NodeStatus.PendingStop]:
-        return TaskStats(
-            status="stopped",
-            num_today=0,
-            num_total=0
-        )
-    running_status = [TaskStatus.Pending, TaskStatus.Executing, TaskStatus.ResultUploaded, TaskStatus.Disclosed]
+    if task_state_cache is None or node_status not in [
+        NodeStatus.Running,
+        NodeStatus.PendingPause,
+        NodeStatus.PendingStop,
+    ]:
+        return TaskStats(status="stopped", num_today=0, num_total=0)
+    running_status = [
+        TaskStatus.Pending,
+        TaskStatus.Executing,
+        TaskStatus.ResultUploaded,
+        TaskStatus.Disclosed,
+        TaskStatus.ResultFileUploaded,
+    ]
     running_states = await task_state_cache.find(status=running_status)
     if len(running_states) > 0:
         status = "running"
@@ -106,10 +110,10 @@ async def get_task_stats(
     today_ts = time.mktime(date.timetuple())
     today = datetime.fromtimestamp(today_ts)
 
-    today_states = await task_state_cache.find(
-        start=today, status=[TaskStatus.Success]
-    )
+    today_states = await task_state_cache.find(start=today, status=[TaskStatus.Success])
 
     total_states = await task_state_cache.find(status=[TaskStatus.Success])
 
-    return TaskStats(status=status, num_today=len(today_states), num_total=len(total_states))
+    return TaskStats(
+        status=status, num_today=len(today_states), num_total=len(total_states)
+    )

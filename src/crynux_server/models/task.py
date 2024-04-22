@@ -55,6 +55,7 @@ class TaskStatus(Enum):
     Executing = "executing"
     ResultUploaded = "result_uploaded"
     Disclosed = "disclosed"
+    ResultFileUploaded = "result_file_uploaded"
     Success = "success"
     Aborted = "aborted"
 
