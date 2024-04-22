@@ -78,6 +78,7 @@ class TaskSystem(object):
             TaskStatus.Executing,
             TaskStatus.ResultUploaded,
             TaskStatus.Disclosed,
+            TaskStatus.ResultFileUploaded
         ]
         running_states = await self.state_cache.find(status=running_status)
         for state in running_states:

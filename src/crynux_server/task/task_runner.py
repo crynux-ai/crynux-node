@@ -574,6 +574,7 @@ class InferenceTaskRunner(TaskRunner):
         async with self.state_context():
             if event.result_node == self.contracts.account:
                 await self.relay.upload_task_result(self.task_id, self.state.files)
+                self.state.status = models.TaskStatus.ResultFileUploaded
                 await self._call_task_contract_method(
                     "reportResultsUploaded",
                     task_id=self.task_id,
