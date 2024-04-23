@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING, Callable, Optional, TypeVar, cast
 
 import importlib_resources as impresources
-from anyio import Lock, get_cancelled_exc_class
+from anyio import Lock
 from eth_abi import decode
 from eth_typing import ChecksumAddress
 from hexbytes import HexBytes
@@ -11,6 +11,7 @@ from typing_extensions import ParamSpec
 from web3 import AsyncWeb3, WebsocketProviderV2
 from web3.contract import AsyncContract
 from web3.contract.async_contract import AsyncContractFunction
+from web3.exceptions import ContractLogicError
 from web3.types import TxParams
 
 from crynux_server.config import get_default_tx_option
@@ -34,8 +35,33 @@ Contract_Func = Callable[[], AsyncContract]
 T = TypeVar("T")
 P = ParamSpec("P")
 
+
+@asynccontextmanager
+async def catch_tx_revert_error(method: str):
+    try:
+        yield
+    except ContractLogicError as e:
+        reason = ""
+        if e.message is not None:
+            reason = e.message
+        elif e.data is not None and isinstance(e.data, str):
+            if e.data.startswith("08c379a0"):
+                reason_hex = e.data[8:]
+                reason: str = decode(["string"], bytes.fromhex(reason_hex))[0]
+
+        raise TxRevertedError(method=method, reason=reason) from e
+
+
 class TxWaiter(object):
-    def __init__(self, w3: AsyncWeb3, method: str, tx_hash: HexBytes, timeout: float = 120, interval: float = 0.1, lock: Optional[Lock] = None):
+    def __init__(
+        self,
+        w3: AsyncWeb3,
+        method: str,
+        tx_hash: HexBytes,
+        timeout: float = 120,
+        interval: float = 0.1,
+        lock: Optional[Lock] = None,
+    ):
         self.w3 = w3
         self.method = method
         self.tx_hash = tx_hash
@@ -51,14 +77,13 @@ class TxWaiter(object):
         else:
             yield
 
-
     async def wait(self):
         async with self._with_lock():
             receipt = await self.w3.eth.wait_for_transaction_receipt(
                 self.tx_hash, self.timeout, self.interval
             )
             if not receipt["status"]:
-                try:
+                async with catch_tx_revert_error(self.method):
                     tx = await self.w3.eth.get_transaction(self.tx_hash)
                     await self.w3.eth.call(
                         {
@@ -73,14 +98,6 @@ class TxWaiter(object):
                         tx["blockNumber"] - 1,
                     )
                     raise TxRevertedError(method=self.method, reason="Unknown")
-                except (TxRevertedError, get_cancelled_exc_class()):
-                    raise
-                except Exception as e:
-                    reason = str(e)
-                    if reason.startswith("08c379a0"):
-                        reason_hex = reason[8:]
-                        reason: str = decode(["string"], bytes.fromhex(reason_hex))[0]
-                    raise TxRevertedError(method=self.method, reason=reason) from e
             return receipt
 
 
@@ -137,19 +154,18 @@ class ContractWrapperBase(object):
             if "from" not in option:
                 option["from"] = self.w3.eth.default_account
 
-            tx_hash = await _contract_builder.constructor(
-                *args, **kwargs
-            ).transact(  # type: ignore
-                option
-            )
+            async with catch_tx_revert_error("deploy"):
+                tx_hash = await _contract_builder.constructor(
+                    *args, **kwargs
+                ).transact(  # type: ignore
+                    option
+                )
         waiter = TxWaiter(self.w3, "deploy", tx_hash=tx_hash, lock=self._call_lock)
         receipt = await waiter.wait()
         address = receipt["contractAddress"]
         assert address is not None, "Deployed contract address is None"
         self._address = address
-        self._contract = self.w3.eth.contract(
-            address=address, abi=self.abi
-        )
+        self._contract = self.w3.eth.contract(address=address, abi=self.abi)
 
     @property
     def address(self) -> ChecksumAddress:
@@ -182,9 +198,17 @@ class ContractWrapperBase(object):
             )
             opt["nonce"] = nonce
             tx_func: AsyncContractFunction = getattr(self.contract.functions, method)
-            tx_hash: HexBytes = await tx_func(*args, **kwargs).transact(opt)
+            async with catch_tx_revert_error(method):
+                tx_hash: HexBytes = await tx_func(*args, **kwargs).transact(opt)
 
-        return TxWaiter(w3=self.w3, method=method, tx_hash=tx_hash, timeout=timeout, interval=interval, lock=self._call_lock)
+        return TxWaiter(
+            w3=self.w3,
+            method=method,
+            tx_hash=tx_hash,
+            timeout=timeout,
+            interval=interval,
+            lock=self._call_lock,
+        )
 
     async def _function_call(self, method: str, *args, **kwargs):
         opt: TxParams = {}
