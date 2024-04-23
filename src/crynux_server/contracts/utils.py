@@ -85,19 +85,21 @@ class TxWaiter(object):
             if not receipt["status"]:
                 async with catch_tx_revert_error(self.method):
                     tx = await self.w3.eth.get_transaction(self.tx_hash)
+                    tx_params: TxParams = {
+                        "to": tx["to"],
+                        "from": tx["from"],
+                        "value": tx["value"],
+                        "data": tx["input"],
+                        "chainId": tx["chainId"],
+                        "gas": tx["gas"],
+                        "gasPrice": tx["gasPrice"],
+                    }
+                    blocknum = tx["blockNumber"] - 1
                     await self.w3.eth.call(
-                        {
-                            "to": tx["to"],
-                            "from": tx["from"],
-                            "value": tx["value"],
-                            "data": tx["input"],
-                            "chainId": tx["chainId"],
-                            "gas": tx["gas"],
-                            "gasPrice": tx["gasPrice"],
-                        },
-                        tx["blockNumber"] - 1,
+                        tx_params,
+                        blocknum,
                     )
-                    raise TxRevertedError(method=self.method, reason="Unknown")
+                    raise TxRevertedError(method=self.method, reason=f"Unknown error: {tx_params} on block {blocknum}")
             return receipt
 
 
