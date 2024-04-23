@@ -537,10 +537,13 @@ class InferenceTaskRunner(TaskRunner):
                     _logger.info(f"Submit commitment of task {self.task_id}")
                 except TxRevertedError as e:
                     # all other nodes report error
+                    _logger.error(f"SubmitTaskResultCommitment failed due to {e.reason}")
                     if "Task is aborted" in e.reason:
                         with fail_after(60, shield=True):
                             await self._report_error()
                         await finish_callback()
+                    else:
+                        raise e
                 self.state.result = result
             _logger.info(f"Task {self.task_id} result 0x{self.state.result.hex()}")
             self.state.status = models.TaskStatus.ResultUploaded
