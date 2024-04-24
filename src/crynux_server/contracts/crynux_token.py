@@ -3,7 +3,8 @@ from typing import TYPE_CHECKING, Optional
 from eth_typing import ChecksumAddress
 from web3 import AsyncWeb3
 
-from .utils import ContractWrapperBase, TxWaiter
+from .utils import ContractWrapper, TxWaiter
+from .utils import W3Pool
 
 if TYPE_CHECKING:
     from crynux_server.config import TxOption
@@ -11,18 +12,18 @@ if TYPE_CHECKING:
 __all__ = ["TokenContract"]
 
 
-class TokenContract(ContractWrapperBase):
+class TokenContract(ContractWrapper):
     def __init__(
-        self, w3: AsyncWeb3, contract_address: Optional[ChecksumAddress] = None
+        self, w3_pool: W3Pool, contract_address: Optional[ChecksumAddress] = None
     ):
-        super().__init__(w3, "CrynuxToken", contract_address)
+        super().__init__(w3_pool, "CrynuxToken", contract_address)
 
-    async def balance_of(self, account: str) -> int:
-        return await self._function_call("balanceOf", account=account)
+    async def balance_of(self, account: str , *, w3: Optional[AsyncWeb3] = None) -> int:
+        return await self._function_call("balanceOf", account=account, w3=w3)
 
-    async def allowance(self, account: str) -> int:
+    async def allowance(self, account: str, *, w3: Optional[AsyncWeb3] = None) -> int:
         return await self._function_call(
-            "allowance", owner=self.w3.eth.default_account, spender=account
+            "allowance", owner=self.w3_pool.account, spender=account, w3=w3
         )
 
     async def transfer(
@@ -31,9 +32,10 @@ class TokenContract(ContractWrapperBase):
         amount: int,
         *,
         option: "Optional[TxOption]" = None,
+        w3: Optional[AsyncWeb3] = None
     ) -> TxWaiter:
         return await self._transaction_call(
-            "transfer", option=option, to=to, amount=amount
+            "transfer", option=option, to=to, amount=amount, w3=w3
         )
 
     async def approve(
@@ -42,7 +44,8 @@ class TokenContract(ContractWrapperBase):
         amount: int,
         *,
         option: "Optional[TxOption]" = None,
+        w3: Optional[AsyncWeb3] = None,
     ) -> TxWaiter:
         return await self._transaction_call(
-            "approve", option=option, spender=spender, amount=amount
+            "approve", option=option, spender=spender, amount=amount, w3=w3
         )

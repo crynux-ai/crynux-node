@@ -2,7 +2,7 @@ import secrets
 import time
 from typing import Tuple
 
-from anyio import create_task_group, create_memory_object_stream
+from anyio import create_task_group, create_memory_object_stream, sleep
 import pytest
 from web3 import Web3
 
@@ -190,6 +190,7 @@ async def test_task_with_event_watcher(
 
     async with create_task_group() as tg:
         tg.start_soon(watcher.start)
+        await sleep(1)
 
         task_hash = Web3.keccak(text="task_hash")
         data_hash = Web3.keccak(text="data_hash")

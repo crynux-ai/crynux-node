@@ -132,7 +132,7 @@ async def test_task_system_cancel():
             data_hash=data_hash,
             round=round,
         ),
-        models.TaskAborted(task_id=task_id),
+        models.TaskAborted(task_id=task_id, reason=""),
     ]
 
     async with create_task_group() as tg:

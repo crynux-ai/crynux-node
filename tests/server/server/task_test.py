@@ -22,18 +22,20 @@ async def test_get_task_stats_empty(client: TestClient):
     assert resp_data["num_total"] == 0
 
 
-async def start_nodes(
-    managers: List[NodeManager], gpu_name: str, gpu_vram: int, tx_option
-):
-    waits = []
-    for m in managers:
-        assert m._node_state_manager is not None
-        waits.append(
-            await m._node_state_manager.start(gpu_name, gpu_vram, option=tx_option)
-        )
+
+async def wait_nodes_start(node_managers: List[NodeManager]):
+    async def _wait(node_manager: NodeManager):
+        while True:
+            status = (await node_manager.state_cache.get_node_state()).status
+            assert status in [models.NodeStatus.Running, models.NodeStatus.Init]
+            if status != models.NodeStatus.Running:
+                await sleep(1)
+            else:
+                break
+    
     async with create_task_group() as tg:
-        for w in waits:
-            tg.start_soon(w)
+        for node_manager in node_managers:
+            tg.start_soon(_wait, node_manager)
 
 
 async def create_task(
@@ -85,16 +87,11 @@ async def create_task(
 async def test_upload_task_result(
     running_client: TestClient, node_contracts, managers, relay, tx_option
 ):
-    await start_nodes(
-        managers=managers,
-        gpu_name="NVIDIA GeForce GTX 1070 Ti",
-        gpu_vram=8,
-        tx_option=tx_option,
-    )
+    await wait_nodes_start(managers)
     task_id = await create_task(
         node_contracts=node_contracts, relay=relay, tx_option=tx_option
     )
-    await sleep(1)
+    await sleep(2)
 
     result_file = "test.png"
     result_hash = "0x0102030405060708"
@@ -121,12 +118,7 @@ async def test_get_task_stats(
     assert resp_data["num_today"] == 0
     assert resp_data["num_total"] == 0
 
-    await start_nodes(
-        managers=managers,
-        gpu_name="NVIDIA GeForce GTX 1070 Ti",
-        gpu_vram=8,
-        tx_option=tx_option,
-    )
+    await wait_nodes_start(managers)
     resp = running_client.get("/manager/v1/tasks")
     resp.raise_for_status()
     resp_data = resp.json()
@@ -135,7 +127,7 @@ async def test_get_task_stats(
     assert resp_data["num_total"] == 0
 
     await create_task(node_contracts=node_contracts, relay=relay, tx_option=tx_option)
-    await sleep(1)
+    await sleep(2)
 
     resp = running_client.get("/manager/v1/tasks")
     resp.raise_for_status()

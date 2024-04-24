@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, Any, Dict, Optional, Union, cast
+from typing import TYPE_CHECKING, Optional, Union
 
 from eth_typing import ChecksumAddress
 from web3 import AsyncWeb3
@@ -6,7 +6,8 @@ from web3.contract.async_contract import AsyncContractEvent
 
 from crynux_server.models import ChainTask, TaskType
 
-from .utils import ContractWrapperBase, TxWaiter
+from .utils import ContractWrapper, TxWaiter
+from .w3_pool import W3Pool
 
 if TYPE_CHECKING:
     from crynux_server.config import TxOption
@@ -15,11 +16,11 @@ if TYPE_CHECKING:
 __all__ = ["TaskContract"]
 
 
-class TaskContract(ContractWrapperBase):
+class TaskContract(ContractWrapper):
     def __init__(
-        self, w3: AsyncWeb3, contract_address: Optional[ChecksumAddress] = None
+        self, w3_pool: W3Pool, contract_address: Optional[ChecksumAddress] = None
     ):
-        super().__init__(w3, "Task", contract_address)
+        super().__init__(w3_pool, "Task", contract_address)
 
     async def create_task(
         self,
@@ -31,6 +32,7 @@ class TaskContract(ContractWrapperBase):
         cap: int,
         *,
         option: "Optional[TxOption]" = None,
+        w3: Optional[AsyncWeb3] = None
     ) -> TxWaiter:
         return await self._transaction_call(
             "createTask",
@@ -41,13 +43,14 @@ class TaskContract(ContractWrapperBase):
             vramLimit=vram_limit,
             taskFee=task_fee,
             cap=cap,
+            w3=w3,
         )
 
     async def get_selected_node(
-        self, task_hash: Union[str, bytes], data_hash: Union[str, bytes], round: int
+        self, task_hash: Union[str, bytes], data_hash: Union[str, bytes], round: int, *, w3: Optional[AsyncWeb3] = None
     ) -> str:
         return await self._function_call(
-            "getSelectedNode", taskHash=task_hash, dataHash=data_hash, round=round
+            "getSelectedNode", taskHash=task_hash, dataHash=data_hash, round=round, w3=w3
         )
 
     async def submit_task_result_commitment(
@@ -58,6 +61,7 @@ class TaskContract(ContractWrapperBase):
         nonce: bytes,
         *,
         option: "Optional[TxOption]" = None,
+        w3: Optional[AsyncWeb3] = None
     ) -> TxWaiter:
         return await self._transaction_call(
             "submitTaskResultCommitment",
@@ -66,6 +70,7 @@ class TaskContract(ContractWrapperBase):
             round=round,
             commitment=commitment,
             nonce=nonce,
+            w3=w3
         )
 
     async def disclose_task_result(
@@ -75,6 +80,7 @@ class TaskContract(ContractWrapperBase):
         result: Union[str, bytes],
         *,
         option: "Optional[TxOption]" = None,
+        w3: Optional[AsyncWeb3] = None
     ) -> TxWaiter:
         return await self._transaction_call(
             "discloseTaskResult",
@@ -82,57 +88,63 @@ class TaskContract(ContractWrapperBase):
             taskId=task_id,
             round=round,
             result=result,
+            w3=w3
         )
 
     async def report_results_uploaded(
-        self, task_id: int, round: int, *, option: "Optional[TxOption]" = None
+        self, task_id: int, round: int, *, option: "Optional[TxOption]" = None, w3: Optional[AsyncWeb3] = None
     ) -> TxWaiter:
         return await self._transaction_call(
             "reportResultsUploaded",
             option=option,
             taskId=task_id,
             round=round,
+            w3=w3
         )
 
     async def report_task_error(
-        self, task_id: int, round: int, *, option: "Optional[TxOption]" = None
+        self, task_id: int, round: int, *, option: "Optional[TxOption]" = None, w3: Optional[AsyncWeb3] = None
     ) -> TxWaiter:
         return await self._transaction_call(
             "reportTaskError",
             option=option,
             taskId=task_id,
             round=round,
+            w3=w3
         )
 
     async def cancel_task(
-        self, task_id: int, *, option: "Optional[TxOption]" = None
+        self, task_id: int, *, option: "Optional[TxOption]" = None, w3: Optional[AsyncWeb3] = None
     ) -> TxWaiter:
         return await self._transaction_call(
             "cancelTask",
             option=option,
             taskId=task_id,
+            w3=w3
         )
 
     async def update_distance_threshold(
-        self, threshold: int, *, option: "Optional[TxOption]" = None
+        self, threshold: int, *, option: "Optional[TxOption]" = None, w3: Optional[AsyncWeb3] = None
     ) -> TxWaiter:
         return await self._transaction_call(
             "updateDistanceThreshold",
             option=option,
             threshold=threshold,
+            w3=w3
         )
 
     async def update_timeout(
-        self, timeout: int, *, option: "Optional[TxOption]" = None
+        self, timeout: int, *, option: "Optional[TxOption]" = None, w3: Optional[AsyncWeb3] = None
     ) -> TxWaiter:
         return await self._transaction_call(
             "updateTimeout",
             option=option,
             t=timeout,
+            w3=w3
         )
 
-    async def get_task(self, task_id: int) -> ChainTask:
-        res = await self._function_call("getTask", taskId=task_id)
+    async def get_task(self, task_id: int, *, w3: Optional[AsyncWeb3] = None) -> ChainTask:
+        res = await self._function_call("getTask", taskId=task_id, w3=w3)
         return ChainTask(
             id=res[0],
             task_type=res[1],
@@ -152,19 +164,5 @@ class TaskContract(ContractWrapperBase):
             timeout=res[15],
         )
 
-    async def get_node_task(self, address: str) -> int:
-        return await self._function_call("getNodeTask", nodeAddress=address)
-
-    async def get_events(
-        self,
-        event_name: str,
-        filter_args: Optional[Dict[str, Any]] = None,
-        from_block: Optional[int] = None,
-        to_block: Optional[int] = None,
-    ):
-        event = self.contract.events[event_name]
-        event = cast(AsyncContractEvent, event)
-        events = await event.get_logs(
-            argument_filters=filter_args, fromBlock=from_block, toBlock=to_block
-        )
-        return list(events)
+    async def get_node_task(self, address: str, *, w3: Optional[AsyncWeb3] = None) -> int:
+        return await self._function_call("getNodeTask", nodeAddress=address, w3=w3)
