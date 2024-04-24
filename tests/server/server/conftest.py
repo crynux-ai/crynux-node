@@ -58,10 +58,15 @@ def privkeys():
 
 
 @pytest.fixture
-async def root_contracts(tx_option, privkeys):
+def provider():
     from web3.providers.eth_tester import AsyncEthereumTesterProvider
 
     provider = AsyncEthereumTesterProvider()
+    return provider
+
+
+@pytest.fixture
+async def root_contracts(provider, tx_option, privkeys):
     c0 = Contracts(provider=provider, default_account_index=0)
 
     await c0.init(option=tx_option)
@@ -118,7 +123,7 @@ def config():
 
 @pytest.fixture
 async def node_contracts(
-    root_contracts: Contracts, tx_option: TxOption, privkeys: List[str]
+    provider, root_contracts: Contracts, tx_option: TxOption, privkeys: List[str]
 ):
     token_contract_address = root_contracts.token_contract.address
     node_contract_address = root_contracts.node_contract.address
@@ -129,7 +134,7 @@ async def node_contracts(
 
     cs = []
     for privkey in privkeys:
-        contracts = Contracts(provider=root_contracts.provider, privkey=privkey)
+        contracts = Contracts(provider=provider, privkey=privkey)
         await contracts.init(
             token_contract_address=token_contract_address,
             node_contract_address=node_contract_address,

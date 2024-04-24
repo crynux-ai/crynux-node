@@ -21,10 +21,14 @@ def privkeys():
 
 
 @pytest.fixture(scope="module")
-async def root_contracts(tx_option, privkeys):
+def provider():
     from web3.providers.eth_tester import AsyncEthereumTesterProvider
 
     provider = AsyncEthereumTesterProvider()
+    return provider
+
+@pytest.fixture(scope="module")
+async def root_contracts(provider, tx_option, privkeys):
 
     c0 = Contracts(provider=provider, default_account_index=0)
 
@@ -49,7 +53,7 @@ async def root_contracts(tx_option, privkeys):
 
 
 @pytest.fixture(scope="module")
-async def contracts_with_tokens(root_contracts: Contracts, tx_option, privkeys):
+async def contracts_with_tokens(provider, root_contracts: Contracts, tx_option, privkeys):
     token_contract_address = root_contracts.token_contract.address
     node_contract_address = root_contracts.node_contract.address
     task_contract_address = root_contracts.task_contract.address
@@ -59,7 +63,7 @@ async def contracts_with_tokens(root_contracts: Contracts, tx_option, privkeys):
 
     cs = []
     for privkey in privkeys:
-        contracts = Contracts(provider=root_contracts.provider, privkey=privkey)
+        contracts = Contracts(provider=provider, privkey=privkey)
         await contracts.init(
             token_contract_address=token_contract_address,
             node_contract_address=node_contract_address,

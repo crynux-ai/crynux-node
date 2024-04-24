@@ -360,7 +360,7 @@ class InferenceTaskRunner(TaskRunner):
             and len(self.state.waiting_tx_hash) > 0
         ):
             waiter = TxWaiter(
-                w3=self.contracts.w3,
+                w3_pool=self.contracts._w3_pool,
                 method=self.state.waiting_tx_method,
                 tx_hash=HexBytes(self.state.waiting_tx_hash),
             )
@@ -400,14 +400,17 @@ class InferenceTaskRunner(TaskRunner):
 
     async def cancel_task(self):
         try:
-            await self.contracts.task_contract.cancel_task(self.task_id)
+            waiter = await self.contracts.task_contract.cancel_task(self.task_id)
+            await waiter.wait()
             _logger.info(f"Task {self.task_id} timeout. Cancel the task.")
         except TxRevertedError as e:
             _logger.error(f"Cancel task {self.task_id} failed due to {e.reason}")
+            raise
         except get_cancelled_exc_class():
             raise
         except Exception as e:
             _logger.debug(f"Cancel task {self.task_id} failed")
+            raise
 
     async def task_started(
         self, event: models.TaskStarted, finish_callback: Callable[[], Awaitable[None]]
@@ -535,10 +538,13 @@ class InferenceTaskRunner(TaskRunner):
                     _logger.info(f"Submit commitment of task {self.task_id}")
                 except TxRevertedError as e:
                     # all other nodes report error
+                    _logger.error(f"SubmitTaskResultCommitment failed due to {e.reason}")
                     if "Task is aborted" in e.reason:
                         with fail_after(60, shield=True):
                             await self._report_error()
                         await finish_callback()
+                    else:
+                        raise e
                 self.state.result = result
             _logger.info(f"Task {self.task_id} result 0x{self.state.result.hex()}")
             self.state.status = models.TaskStatus.ResultUploaded
