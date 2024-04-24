@@ -15,6 +15,8 @@ from web3.exceptions import ContractLogicError
 from web3.logs import WARN
 from web3.types import EventData, TxParams, TxReceipt
 
+from crynux_server.config import get_default_tx_option
+
 from .exceptions import TxRevertedError
 from .w3_pool import W3Pool
 
@@ -127,6 +129,8 @@ class ContractWrapper(object):
             opt: TxParams = {}
             if option is not None:
                 opt.update(**option)
+            else:
+                opt.update(**get_default_tx_option())
 
             _contract_builder = w3.eth.contract(abi=self.abi, bytecode=self.bytecode)
             async with self.w3_pool.with_nonce_lock():
@@ -177,6 +181,9 @@ class ContractWrapper(object):
             opt: TxParams = {}
             if option is not None:
                 opt.update(**option)
+            else:
+                opt.update(**get_default_tx_option())
+
             contract = w3.eth.contract(address=self._address, abi=self.abi)
             async with self.w3_pool.with_nonce_lock():
                 opt["from"] = self.w3_pool.account
