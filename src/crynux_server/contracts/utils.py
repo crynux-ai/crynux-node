@@ -81,11 +81,14 @@ class TxWaiter(object):
                         "to": tx["to"],
                         "from": tx["from"],
                         "value": tx["value"],
-                        "data": tx["data"],
                         "chainId": tx["chainId"],
                         "gas": tx["gas"],
                         "gasPrice": tx["gasPrice"],
                     }
+                    if "input" in tx:
+                        tx_params["data"] = tx["input"]
+                    elif "data" in tx:
+                        tx_params["data"] = tx["data"]
                     blocknum = tx["blockNumber"] - 1
                     await w3.eth.call(
                         tx_params,
