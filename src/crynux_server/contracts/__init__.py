@@ -1,8 +1,8 @@
 import logging
-import ssl
 from enum import IntEnum
 from typing import Any, Dict, Optional
 
+from anyio import Condition
 from eth_typing import ChecksumAddress
 from web3.logs import WARN
 from web3.providers.async_base import AsyncBaseProvider
@@ -15,7 +15,15 @@ from .exceptions import TxRevertedError
 from .utils import ContractWrapper, TxWaiter
 from .w3_pool import W3Pool
 
-__all__ = ["TxRevertedError", "Contracts", "TxWaiter", "get_contracts", "set_contracts", "ContractWrapper"]
+__all__ = [
+    "TxRevertedError",
+    "Contracts",
+    "TxWaiter",
+    "get_contracts",
+    "set_contracts",
+    "ContractWrapper",
+    "wait_contracts",
+]
 
 _logger = logging.getLogger(__name__)
 
@@ -96,11 +104,14 @@ class Contracts(object):
 
                 if task_queue_contract_address is not None:
                     self.task_queue_contract = task_queue.TaskQueueContract(
-                        self._w3_pool, w3.to_checksum_address(task_queue_contract_address)
+                        self._w3_pool,
+                        w3.to_checksum_address(task_queue_contract_address),
                     )
                 elif task_contract_address is None:
                     # task contract has not been deployed, need deploy qos contract
-                    self.task_queue_contract = task_queue.TaskQueueContract(self._w3_pool)
+                    self.task_queue_contract = task_queue.TaskQueueContract(
+                        self._w3_pool
+                    )
                     await self.task_queue_contract.deploy(option=option, w3=w3)
                     task_queue_contract_address = self.task_queue_contract.address
 
@@ -121,7 +132,9 @@ class Contracts(object):
                         self._w3_pool, w3.to_checksum_address(node_contract_address)
                     )
                 else:
-                    assert qos_contract_address is not None, "QOS contract address is None"
+                    assert (
+                        qos_contract_address is not None
+                    ), "QOS contract address is None"
                     assert (
                         netstats_contract_address is not None
                     ), "NetworkStats contract address is None"
@@ -131,7 +144,7 @@ class Contracts(object):
                         qos_contract_address,
                         netstats_contract_address,
                         option=option,
-                        w3=w3
+                        w3=w3,
                     )
                     node_contract_address = self.node_contract.address
                     await self.qos_contract.update_node_contract_address(
@@ -146,7 +159,9 @@ class Contracts(object):
                         self._w3_pool, w3.to_checksum_address(task_contract_address)
                     )
                 else:
-                    assert qos_contract_address is not None, "QOS contract address is None"
+                    assert (
+                        qos_contract_address is not None
+                    ), "QOS contract address is None"
                     assert (
                         task_queue_contract_address is not None
                     ), "Task queue contract address is None"
@@ -162,7 +177,7 @@ class Contracts(object):
                         task_queue_contract_address,
                         netstats_contract_address,
                         option=option,
-                        w3=w3
+                        w3=w3,
                     )
                     task_contract_address = self.task_contract.address
 
@@ -272,13 +287,37 @@ class Contracts(object):
 _default_contracts: Optional[Contracts] = None
 
 
+_condition: Optional[Condition] = None
+
+
+def _get_condition() -> Condition:
+    global _condition
+
+    if _condition is None:
+        _condition = Condition()
+
+    return _condition
+
+
 def get_contracts() -> Contracts:
     assert _default_contracts is not None, "Contracts has not been set."
 
     return _default_contracts
 
 
-def set_contracts(contracts: Contracts):
+async def set_contracts(contracts: Contracts):
     global _default_contracts
 
-    _default_contracts = contracts
+    condition = _get_condition()
+    async with condition:
+        _default_contracts = contracts
+        condition.notify_all()
+
+
+async def wait_contracts():
+    condition = _get_condition()
+    async with condition:
+        while _default_contracts is None:
+            await condition.wait()
+
+        return _default_contracts

@@ -50,7 +50,7 @@ async def _make_contracts(
         task_queue_contract_address=task_queue_contract_address,
         netstats_contract_address=netstats_contract_address
     )
-    set_contracts(contracts)
+    await set_contracts(contracts)
     return contracts
 
 
@@ -524,6 +524,9 @@ class NodeManager(object):
                 raise
 
     async def finish(self):
+        if self._tg is not None and not self._tg.cancel_scope.cancel_called:
+            self._tg.cancel_scope.cancel()
+
         if self._relay is not None:
             with fail_after(2, shield=True):
                 await self._relay.close()
@@ -543,8 +546,6 @@ class NodeManager(object):
         if self._contracts is not None:
             await self._contracts.close()
             self._contracts = None
-        if self._tg is not None and not self._tg.cancel_scope.cancel_called:
-            self._tg.cancel_scope.cancel()
 
 
 _node_manager: Optional[NodeManager] = None
