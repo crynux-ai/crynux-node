@@ -9,7 +9,7 @@ from typing import Awaitable, Callable, Optional, Dict, cast
 
 import certifi
 from aiohttp import ClientSession, ClientTimeout, TCPConnector
-from anyio import Condition, Lock, get_cancelled_exc_class
+from anyio import Condition, Lock, move_on_after
 from eth_account.signers.local import LocalAccount
 from eth_typing import ChecksumAddress
 from web3 import AsyncHTTPProvider, AsyncWeb3, WebsocketProviderV2
@@ -47,7 +47,8 @@ class W3Guard(ABC):
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         if isinstance(exc_val, ConnectionClosed):
-            await self._on_close(self._id)
+            await self.close()
+            _logger.error(f"w3 guard {self._id} is closed due to ConnectionClosed")
             return True
         await self._on_idle(self._id)
         return False
@@ -71,8 +72,9 @@ class HTTPW3Guard(W3Guard):
 
     async def close(self) -> None:
         if not self._session.closed:
-            await self._session.close()
-            await self._on_close(self._id)
+            with move_on_after(5, shield=True):
+                await self._session.close()
+                await self._on_close(self._id)
 
 
 class WebSocketW3Guard(W3Guard):
@@ -91,9 +93,10 @@ class WebSocketW3Guard(W3Guard):
 
     async def close(self):
         if not self._closed:
-            await self._provider.disconnect()
-            await self._on_close(self._id)
-            self._closed = True
+            with move_on_after(5, shield=True):
+                await self._provider.disconnect()
+                await self._on_close(self._id)
+                self._closed = True
 
 
 class OtherW3Guard(W3Guard):
@@ -110,8 +113,9 @@ class OtherW3Guard(W3Guard):
 
     async def close(self):
         if not self._closed:
-            await self._on_close(self._id)
-            self._closed = True
+            with move_on_after(5, shield=True):
+                await self._on_close(self._id)
+                self._closed = True
 
 
 class W3Pool(object):
@@ -203,9 +207,7 @@ class W3Pool(object):
                 self._provider_path,
                 websocket_kwargs={
                     "open_timeout": self._timeout,
-                    "ping_timeout": self._timeout,
                     "close_timeout": self._timeout,
-                    "ping_interval": self._timeout,
                     "ssl": ssl_context,
                 },
             )
@@ -260,7 +262,7 @@ class W3Pool(object):
                 await self._condition.wait()
 
             if self._closed:
-                raise get_cancelled_exc_class()
+                raise ValueError("w3 pool is closed")
 
             guard_id = self._idle_pool.popleft()
             guard = self._guards[guard_id]
@@ -286,3 +288,5 @@ class W3Pool(object):
             async with self._condition:
                 self._closed = True
                 self._condition.notify_all()
+            
+            _logger.debug("w3 pool is closed")
