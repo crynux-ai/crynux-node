@@ -260,7 +260,7 @@ class W3Pool(object):
                 await self._condition.wait()
 
             if self._closed:
-                raise get_cancelled_exc_class()
+                raise ValueError("w3 pool is closed")
 
             guard_id = self._idle_pool.popleft()
             guard = self._guards[guard_id]
