@@ -5,7 +5,8 @@ from web3 import AsyncWeb3
 
 from crynux_server.models import ChainNetworkNodeInfo
 
-from .utils import ContractWrapperBase, TxWaiter
+from .utils import ContractWrapper, TxWaiter
+from .w3_pool import W3Pool
 
 if TYPE_CHECKING:
     from crynux_server.config import TxOption
@@ -13,52 +14,52 @@ if TYPE_CHECKING:
 __all__ = ["NetworkStatsContract"]
 
 
-class NetworkStatsContract(ContractWrapperBase):
+class NetworkStatsContract(ContractWrapper):
     def __init__(
-        self, w3: AsyncWeb3, contract_address: Optional[ChecksumAddress] = None
+        self, w3_pool: W3Pool, contract_address: Optional[ChecksumAddress] = None
     ):
-        super().__init__(w3, "NetworkStats", contract_address)
+        super().__init__(w3_pool, "NetworkStats", contract_address)
 
-    async def total_nodes(self) -> int:
-        return await self._function_call("totalNodes")
+    async def total_nodes(self, *, w3: Optional[AsyncWeb3] = None) -> int:
+        return await self._function_call("totalNodes", w3=w3)
 
-    async def active_nodes(self) -> int:
-        return await self._function_call("activeNodes")
+    async def active_nodes(self, *, w3: Optional[AsyncWeb3] = None) -> int:
+        return await self._function_call("activeNodes", w3=w3)
 
-    async def available_nodes(self) -> int:
-        return await self._function_call("availableNodes")
+    async def available_nodes(self, *, w3: Optional[AsyncWeb3] = None) -> int:
+        return await self._function_call("availableNodes", w3=w3)
 
-    async def busy_nodes(self) -> int:
-        return await self._function_call("busyNodes")
+    async def busy_nodes(self, *, w3: Optional[AsyncWeb3] = None) -> int:
+        return await self._function_call("busyNodes", w3=w3)
 
-    async def total_tasks(self) -> int:
-        return await self._function_call("totalTasks")
+    async def total_tasks(self, *, w3: Optional[AsyncWeb3] = None) -> int:
+        return await self._function_call("totalTasks", w3=w3)
 
-    async def queued_tasks(self) -> int:
-        return await self._function_call("queuedTasks")
+    async def queued_tasks(self, *, w3: Optional[AsyncWeb3] = None) -> int:
+        return await self._function_call("queuedTasks", w3=w3)
 
-    async def running_tasks(self) -> int:
-        return await self._function_call("runningTasks")
+    async def running_tasks(self, *, w3: Optional[AsyncWeb3] = None) -> int:
+        return await self._function_call("runningTasks", w3=w3)
 
     async def update_task_contract_address(
-        self, address: str, *, option: "Optional[TxOption]" = None
+        self, address: str, *, option: "Optional[TxOption]" = None, w3: Optional[AsyncWeb3] = None
     ) -> TxWaiter:
         return await self._transaction_call(
-            "updateTaskContractAddress", option=option, taskContract=address
+            "updateTaskContractAddress", option=option, taskContract=address, w3=w3
         )
 
     async def update_node_contract_address(
-        self, address: str, *, option: "Optional[TxOption]" = None
+        self, address: str, *, option: "Optional[TxOption]" = None, w3: Optional[AsyncWeb3] = None
     ) -> TxWaiter:
         return await self._transaction_call(
-            "updateNodeContractAddress", option=option, nodeContract=address
+            "updateNodeContractAddress", option=option, nodeContract=address, w3=w3
         )
 
     async def get_all_node_info(
-        self, offset: int, length: int
+        self, offset: int, length: int, w3: Optional[AsyncWeb3] = None
     ) -> List[ChainNetworkNodeInfo]:
         nodes = await self._function_call(
-            "getAllNodeInfo", offset=offset, length=length
+            "getAllNodeInfo", offset=offset, length=length, w3=w3
         )
         res = []
         for node in nodes:

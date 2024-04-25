@@ -119,6 +119,8 @@ class NodeStateManager(object):
                 models.ChainNodeStatus.BUSY,
             ]:
                 _logger.info("Node has joined in the network.")
+                local_status = models.convert_node_status(status)
+                await self.state_cache.set_node_state(local_status)
                 break
             elif status in [
                 models.ChainNodeStatus.PENDING_PAUSE,

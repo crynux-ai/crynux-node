@@ -30,7 +30,7 @@ async def test_memory_event_queue():
         ),
         models.TaskResultReady(task_id=task_id, hashes=hashes, files=files),
         models.TaskResultCommitmentsReady(task_id=task_id),
-        models.TaskAborted(task_id=task_id),
+        models.TaskAborted(task_id=task_id, reason=""),
     ]
 
     queue = MemoryEventQueue()
@@ -83,7 +83,7 @@ async def test_db_event_queue(init_db):
         ),
         models.TaskResultReady(task_id=task_id, hashes=hashes, files=files),
         models.TaskResultCommitmentsReady(task_id=task_id),
-        models.TaskAborted(task_id=task_id),
+        models.TaskAborted(task_id=task_id, reason=""),
     ]
 
     queue = DbEventQueue()

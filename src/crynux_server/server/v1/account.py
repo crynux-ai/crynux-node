@@ -7,9 +7,9 @@ from fastapi import APIRouter, Body, HTTPException
 from pydantic import BaseModel, Field, Json, SecretStr
 from typing_extensions import Annotated
 
-from crynux_server.config import set_privkey
+from crynux_server.config import set_privkey, get_privkey
+from crynux_server.contracts import wait_contracts
 
-from ..depends import ContractsDep
 from .utils import CommonResponse
 
 _logger = logging.getLogger(__name__)
@@ -24,8 +24,16 @@ class AccountInfo(BaseModel):
 
 
 @router.get("", response_model=AccountInfo)
-async def get_account_info(*, contracts: ContractsDep):
-    if contracts is not None:
+async def get_account_info():
+    privkey = get_privkey()
+    if privkey == "":
+        return AccountInfo(
+            address="",
+            eth_balance=0,
+            cnx_balance=0,
+        )
+    else:
+        contracts = await wait_contracts()
         res = AccountInfo(address=contracts.account, eth_balance=0, cnx_balance=0)
 
         async def get_eth_balance():
@@ -45,12 +53,6 @@ async def get_account_info(*, contracts: ContractsDep):
             raise HTTPException(status_code=500, detail=f"ContractError: {str(e)}")
 
         return res
-    else:
-        return AccountInfo(
-            address="",
-            eth_balance=0,
-            cnx_balance=0,
-        )
 
 
 PrivkeyType = Literal["private_key", "keystore"]

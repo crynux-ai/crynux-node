@@ -360,7 +360,7 @@ class InferenceTaskRunner(TaskRunner):
             and len(self.state.waiting_tx_hash) > 0
         ):
             waiter = TxWaiter(
-                w3=self.contracts.w3,
+                w3_pool=self.contracts._w3_pool,
                 method=self.state.waiting_tx_method,
                 tx_hash=HexBytes(self.state.waiting_tx_hash),
             )
@@ -400,7 +400,8 @@ class InferenceTaskRunner(TaskRunner):
 
     async def cancel_task(self):
         try:
-            await self.contracts.task_contract.cancel_task(self.task_id)
+            waiter = await self.contracts.task_contract.cancel_task(self.task_id)
+            await waiter.wait()
             _logger.info(f"Task {self.task_id} timeout. Cancel the task.")
         except TxRevertedError as e:
             _logger.error(f"Cancel task {self.task_id} failed due to {e.reason}")
