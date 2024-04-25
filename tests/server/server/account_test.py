@@ -1,5 +1,4 @@
 import json
-import secrets
 
 import pytest
 from eth_account import Account
@@ -78,7 +77,7 @@ async def test_set_account(running_client: TestClient, privkeys):
     assert (await wait_privkey()) == privkey
 
 
-async def test_get_account(running_client: TestClient, accounts):
+async def test_get_account(running_client: TestClient, accounts, privkeys):
     resp = running_client.get("/manager/v1/account")
     resp.raise_for_status()
     resp_data = resp.json()

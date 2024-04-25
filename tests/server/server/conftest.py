@@ -1,13 +1,13 @@
 from typing import List
 
 import pytest
-from anyio import create_task_group, sleep
+from anyio import create_task_group
 from eth_account import Account
 from fastapi.testclient import TestClient
 from web3 import Web3
 
 from crynux_server import models
-from crynux_server.config import Config, TxOption, set_config
+from crynux_server.config import Config, TxOption, set_config, set_privkey
 from crynux_server.contracts import Contracts, set_contracts
 from crynux_server.event_queue import MemoryEventQueue, set_event_queue
 from crynux_server.node_manager import (
@@ -200,7 +200,8 @@ async def managers(
 
     for i, (privkey, contracts) in enumerate(zip(privkeys, node_contracts)):
         if i == 0:
-            set_contracts(contracts)
+            await set_privkey(privkeys[0])
+            await set_contracts(contracts)
         queue = MemoryEventQueue()
         if i == 0:
             set_event_queue(queue)
@@ -287,7 +288,7 @@ async def running_client(managers):
 
 
 @pytest.fixture
-def client():
+def client(config: Config):
     state_cache = ManagerStateCache(
         node_state_cache_cls=MemoryNodeStateCache, tx_state_cache_cls=MemoryTxStateCache
     )
