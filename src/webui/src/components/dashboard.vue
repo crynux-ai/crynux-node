@@ -14,6 +14,7 @@ import nodeAPI from '../api/v1/node'
 import taskAPI from '../api/v1/task'
 import accountAPI from '../api/v1/account'
 import config from "../config.json"
+import logger from "../log/log"
 
 const appVersion = APP_VERSION
 
@@ -124,21 +125,40 @@ const updateUI = async () => {
 }
 
 const updateUIWithTicket = async (ticket) => {
+
+    logger.debug("[" + ticket + "] Updating UI")
+
     if (isTxSending.value) return
     await updateAccountInfo(ticket)
 
+    if (ticket !== uiUpdateCurrentTicket) {
+        logger.debug("[" + ticket + "] Ticket is old. Do not use this data to update UI.")
+        return
+    }
+
     if (accountStatus.address === '') {
+      logger.debug("[" + ticket + "] Account address is empty. Show edit account dialog.")
       accountEditor.value.showModal()
     } else {
+        logger.debug("[" + ticket + "] Account address is not empty. Continue updating network info.")
         await updateNetworkInfo(ticket)
         await updateSystemInfo(ticket)
     }
 }
 
 const updateAccountInfo = async (ticket) => {
+
+    logger.debug("[" + ticket + "] Updating account info")
+
     const accountResp = await accountAPI.getAccountInfo()
+
+    logger.debug("[" + ticket + "] Retrieved account address: " + accountResp.address)
+
     if(ticket === uiUpdateCurrentTicket) {
+        logger.debug("[" + ticket + "] Ticket is latest. Update the data.")
         Object.assign(accountStatus, accountResp)
+    } else {
+        logger.debug("[" + ticket + "] Ticket is old. Discard the response")
     }
 }
 
