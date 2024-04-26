@@ -96,42 +96,75 @@ const cnxEnough = () => {
   return accountStatus.cnx_balance >= 4e20
 }
 
-let systemUpdateInterval = null
-onMounted(async () => {
-  await updateSystemInfo()
-
-  if (systemUpdateInterval == null) {
-    systemUpdateInterval = setInterval(async () => {
-      if (isTxSending.value) return
-      await updateSystemInfo()
-    }, 5000)
-  }
-
-  if (accountStatus.address === '') {
-    accountEditor.value.showModal()
-  }
-})
-onBeforeUnmount(() => {
-  clearInterval(systemUpdateInterval)
-  systemUpdateInterval = null
-})
-
-let isTxSending = ref(false)
-
-const updateSystemInfo = async () => {
-  const systemResp = await systemAPI.getSystemInfo()
-  Object.assign(systemInfo, systemResp)
-
-  const nodeResp = await nodeAPI.getNodeStatus()
-  Object.assign(nodeStatus, nodeResp)
-
-  const accountResp = await accountAPI.getAccountInfo()
-  Object.assign(accountStatus, accountResp)
-
-  const taskResp = await taskAPI.getTaskRunningStatus()
-  Object.assign(taskStatus, taskResp)
+const privateKeyUpdated = async () => {
+    console.log("received privateKeyUpdated")
+    await updateUI()
 }
 
+let uiUpdateInterval = null
+let uiUpdateCurrentTicket = null
+onMounted(async () => {
+    await updateUI()
+
+    if (uiUpdateInterval != null) {
+        clearInterval(uiUpdateInterval)
+    }
+
+    uiUpdateInterval = setInterval(updateUI, 5000)
+})
+
+onBeforeUnmount(() => {
+  clearInterval(uiUpdateInterval)
+  uiUpdateInterval = null
+})
+
+const updateUI = async () => {
+    uiUpdateCurrentTicket = Date.now()
+    await updateUIWithTicket(uiUpdateCurrentTicket)
+}
+
+const updateUIWithTicket = async (ticket) => {
+    if (isTxSending.value) return
+    await updateAccountInfo(ticket)
+
+    if (accountStatus.address === '') {
+      accountEditor.value.showModal()
+    } else {
+        await updateNetworkInfo(ticket)
+        await updateSystemInfo(ticket)
+    }
+}
+
+const updateAccountInfo = async (ticket) => {
+    const accountResp = await accountAPI.getAccountInfo()
+    if(ticket === uiUpdateCurrentTicket) {
+        Object.assign(accountStatus, accountResp)
+    }
+}
+
+const updateNetworkInfo = async (ticket) => {
+
+    const nodeResp = await nodeAPI.getNodeStatus()
+
+    if(ticket === uiUpdateCurrentTicket) {
+        Object.assign(nodeStatus, nodeResp)
+    }
+
+    const taskResp = await taskAPI.getTaskRunningStatus()
+
+    if(ticket === uiUpdateCurrentTicket) {
+        Object.assign(taskStatus, taskResp)
+    }
+}
+
+const updateSystemInfo = async (ticket) => {
+    const systemResp = await systemAPI.getSystemInfo()
+    if(ticket === uiUpdateCurrentTicket) {
+        Object.assign(systemInfo, systemResp)
+    }
+}
+
+let isTxSending = ref(false)
 const sendNodeAction = async (action) => {
   if (isTxSending.value) {
     return
@@ -426,7 +459,7 @@ const getPercent = (num) => {
           <edit-account
             ref="accountEditor"
             :account-status="accountStatus"
-            @private-key-updated="updateSystemInfo"
+            @private-key-updated="privateKeyUpdated"
           ></edit-account>
         </template>
         <a-row>
