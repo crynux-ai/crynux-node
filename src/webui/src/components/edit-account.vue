@@ -14,7 +14,11 @@ const isLoading = ref(false)
 const props = defineProps(['accountStatus'])
 const emits = defineEmits(['privateKeyUpdated'])
 
+let isCreatingWallet = false
+
 const showModal = () => {
+  if(isCreatingWallet)
+    return
   modalVisible.value = true
 }
 
@@ -25,7 +29,14 @@ const hideModal = () => {
   keystorePassphraseInput.value = ''
 }
 
+const startCreateWallet = () => {
+    isCreatingWallet = true
+    hideModal()
+}
+
 const onCloseCreateWallet = () => {
+  isCreatingWallet = false
+
   if (props.accountStatus.address === '') {
     showModal();
   }
@@ -61,6 +72,10 @@ const changeAccount = async () => {
   }
 
   isLoading.value = false
+}
+
+const onPrivateKeyUpdated = () => {
+    emits('privateKeyUpdated')
 }
 
 defineExpose({ showModal })
@@ -124,8 +139,9 @@ defineExpose({ showModal })
       <create-account
        v-if="!isLoading"
        :old-wallet-exists="props.accountStatus.address !== ''"
-       @start-create-wallet="hideModal"
+       @start-create-wallet="startCreateWallet"
        @close-create-wallet="onCloseCreateWallet"
+       @private-key-updated="onPrivateKeyUpdated"
        ></create-account>
       <a-button
         key="submit"
