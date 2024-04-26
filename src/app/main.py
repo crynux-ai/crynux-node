@@ -6,6 +6,8 @@ from logging.handlers import RotatingFileHandler
 
 import psutil
 
+from crynux_server.config import Config
+
 _logger = logging.getLogger(__name__)
 handler = logging.StreamHandler()
 dt_fmt = "%Y-%m-%d %H:%M:%S"
@@ -131,13 +133,12 @@ class CustomWebEnginePage(QWebEnginePage):
 
 class CrynuxApp(QWidget):
 
-    def __init__(self, runner: CrynuxRunner):
+    def __init__(self):
         super().__init__()
         _logger.debug("Initializing Application UI...")
         self.initializing = True
         self.init_ui()
         _logger.debug("Application UI initialized")
-        self.runner = runner
 
     def init_ui(self):
         stack = QStackedLayout(self)
@@ -176,10 +177,10 @@ class CrynuxApp(QWidget):
 def main():
     from crynux_server import config as crynux_config
 
-    _logger.info("Starting Crynux node...")
+    _logger.debug("Starting Crynux node...")
 
-    crynux_cfg = crynux_config.get_config()
-    init_log(_logger, crynux_cfg)
+    crynux_cfg: Config = crynux_config.get_config()
+    _logger.debug("Log file loaded")
 
     app = QApplication(sys.argv)
     app.setWindowIcon(QIcon(os.path.join(crynux_cfg.resource_dir, "icon.ico")))
@@ -200,6 +201,9 @@ def main():
     )
     splash_screen.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint)
 
+    splash_screen.show()
+    _logger.debug("show splash screen")
+
     tray = QSystemTrayIcon()
     tray.setIcon(QIcon(os.path.join(crynux_cfg.resource_dir, "icon.ico")))
     tray.setVisible(True)
@@ -215,11 +219,15 @@ def main():
     tray_menu.addAction(tray_menu_exit)
 
     tray.setContextMenu(tray_menu)
+    
+    crynux_app = CrynuxApp()
+
+    init_log(_logger, crynux_cfg)
 
     async def _main():
+
         _logger.debug("Creating runner and crynux_app")
         runner = CrynuxRunner()
-        crynux_app = CrynuxApp(runner=runner)
 
         exit_event = Event()
 
@@ -251,7 +259,6 @@ def main():
         app.applicationStateChanged.connect(app_state_changed)
 
         async with create_task_group() as tg:
-            splash_screen.show()
             _logger.debug("Starting init task")
             tg.start_soon(wait_for_exit)
             await tg.start(runner.run)
@@ -260,12 +267,12 @@ def main():
             _logger.debug("Starting the user interface")
             crynux_app.delayed_show()
             splash_screen.finish(crynux_app.activateWindow())
-        
+
         _logger.debug("app _main finish")
 
     try:
-        loop.run_until_complete(_main())
-        loop.close()
+        with loop:
+            loop.run_until_complete(_main())
         _logger.debug("app quit")
     finally:
         proc = psutil.Process(os.getpid())
