@@ -65,9 +65,9 @@ _logger.info(f"Start Crynux Node from: {config_file_path}")
 
 import asyncio
 import sys
-from PyQt6.QtGui import QDesktopServices, QIcon, QAction
+from PyQt6.QtGui import QDesktopServices, QIcon, QAction, QPixmap
 from PyQt6.QtCore import QUrl, Qt, qInstallMessageHandler, QtMsgType
-from PyQt6.QtWidgets import QWidget, QApplication, QVBoxLayout, QSystemTrayIcon, QMenu
+from PyQt6.QtWidgets import QWidget, QApplication, QSplashScreen, QStackedLayout, QSystemTrayIcon, QMenu
 from PyQt6.QtWebEngineWidgets import QWebEngineView
 from PyQt6.QtWebEngineCore import QWebEnginePage, QWebEngineSettings
 import qasync
@@ -136,12 +136,13 @@ class CrynuxApp(QWidget):
     def __init__(self, runner: CrynuxRunner):
         super().__init__()
         _logger.debug("Initializing Application UI...")
+        self.initializing = True
         self.init_ui()
         _logger.debug("Application UI initialized")
         self.runner = runner
 
     def init_ui(self):
-        vbox = QVBoxLayout(self)
+        stack = QStackedLayout(self)
         self.webview = QWebEngineView()
         self.webpage = CustomWebEnginePage()
         self.webview.setPage(self.webpage)
@@ -152,8 +153,8 @@ class CrynuxApp(QWidget):
             True
         )
 
-        vbox.addWidget(self.webview)
-        self.setLayout(vbox)
+        stack.addWidget(self.webview)
+        self.setLayout(stack)
         self.setGeometry(300, 300, 1300, 800)
         self.setWindowTitle('Crynux Node')
 
@@ -161,7 +162,10 @@ class CrynuxApp(QWidget):
         self.webview.load(QUrl("http://localhost:7412"))
         self.show()
 
-    def show_from_tray(self):
+    def show_recreate_window(self):
+        if self.initializing:
+            return
+
         self.show()
         self.setWindowState(self.windowState() & ~Qt.WindowState.WindowMinimized | Qt.WindowState.WindowActive)
         self.activateWindow()
@@ -180,6 +184,22 @@ def main():
     app = QApplication(sys.argv)
     app.setWindowIcon(QIcon(os.path.join(crynux_cfg.resource_dir, "icon.ico")))
     app.setQuitOnLastWindowClosed(False)
+
+    loop = qasync.QEventLoop(app)
+    asyncio.set_event_loop(loop)
+
+    geometry = app.primaryScreen().availableGeometry()
+
+    pixmap = QPixmap(os.path.join(crynux_cfg.resource_dir, "splash.png")).scaledToWidth(
+        int(geometry.width() / 4),
+        mode=Qt.TransformationMode.SmoothTransformation
+    )
+
+    splash_screen = QSplashScreen(
+        pixmap=pixmap
+    )
+    splash_screen.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint)
+
     tray = QSystemTrayIcon()
     tray.setIcon(QIcon(os.path.join(crynux_cfg.resource_dir, "icon.ico")))
     tray.setVisible(True)
@@ -196,9 +216,6 @@ def main():
 
     tray.setContextMenu(tray_menu)
 
-    loop = qasync.QEventLoop(app)
-    asyncio.set_event_loop(loop)
-
     async def _main():
         _logger.debug("Creating runner and crynux_app")
         runner = CrynuxRunner()
@@ -213,29 +230,33 @@ def main():
 
         def system_tray_action(reason):
             if reason == QSystemTrayIcon.ActivationReason.Trigger:
-                crynux_app.show_from_tray()
+                if platform.system() == "Windows":
+                    crynux_app.show_recreate_window()
 
         def go_to_discord():
             QDesktopServices.openUrl(QUrl("https://discord.gg/JRkuY9FW49"))
 
         tray.activated.connect(system_tray_action)
-        tray_menu_dashboard.triggered.connect(crynux_app.show_from_tray)
+        tray_menu_dashboard.triggered.connect(crynux_app.show_recreate_window)
         tray_menu_discord.triggered.connect(go_to_discord)
         tray_menu_exit.triggered.connect(exit_all)
 
         def app_state_changed(reason):
             if reason == Qt.ApplicationState.ApplicationActive:
                 if app.activeWindow() is None:
-                    crynux_app.show_from_tray()
+                    crynux_app.show_recreate_window()
 
         app.applicationStateChanged.connect(app_state_changed)
 
         async with create_task_group() as tg:
+            splash_screen.show()
             _logger.debug("Starting init task")
             await tg.start(runner.run)
             await sleep(3.5)
+            crynux_app.initializing = False
             _logger.debug("Starting the user interface")
             crynux_app.delayed_show()
+            splash_screen.finish(crynux_app.activateWindow())
 
     try:
         loop.create_task(_main())
