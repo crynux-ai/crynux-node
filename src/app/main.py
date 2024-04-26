@@ -43,7 +43,6 @@ if getattr(sys, "frozen", False):
 
     elif system_name == "Windows":
         os.environ["CRYNUX_SERVER_CONFIG"] = os.path.join("config", "config.yml")
-        from crynux_server import config as crynux_config
 
     else:
         error = RuntimeError(f"Unsupported platform: {system_name}")
@@ -55,7 +54,6 @@ elif os.getenv("CRYNUX_SERVER_CONFIG") is None:
     root_dir = __file__[:index]
 
     os.environ["CRYNUX_SERVER_CONFIG"] = os.path.join(root_dir, "config", "config.yml")
-    from crynux_server import config as crynux_config
 
 
 assert os.environ["CRYNUX_SERVER_CONFIG"]
@@ -72,7 +70,7 @@ from PyQt6.QtWebEngineWidgets import QWebEngineView
 from PyQt6.QtWebEngineCore import QWebEnginePage, QWebEngineSettings
 import qasync
 
-from anyio import create_task_group, sleep
+from anyio import Event, create_task_group, sleep
 from crynux_server.run import CrynuxRunner
 
 
@@ -176,6 +174,8 @@ class CrynuxApp(QWidget):
 
 
 def main():
+    from crynux_server import config as crynux_config
+
     _logger.info("Starting Crynux node...")
 
     crynux_cfg = crynux_config.get_config()
@@ -221,12 +221,14 @@ def main():
         runner = CrynuxRunner()
         crynux_app = CrynuxApp(runner=runner)
 
-        def exit_all():
-            async def _close() -> None:
-                await runner.stop()
-                app.quit()
+        exit_event = Event()
 
-            loop.create_task(_close())
+        async def wait_for_exit():
+            await exit_event.wait()
+            _logger.debug("exit event is set")
+            await runner.stop()
+            _logger.debug("runner stop")
+            
 
         def system_tray_action(reason):
             if reason == QSystemTrayIcon.ActivationReason.Trigger:
@@ -239,7 +241,7 @@ def main():
         tray.activated.connect(system_tray_action)
         tray_menu_dashboard.triggered.connect(crynux_app.show_recreate_window)
         tray_menu_discord.triggered.connect(go_to_discord)
-        tray_menu_exit.triggered.connect(exit_all)
+        tray_menu_exit.triggered.connect(exit_event.set)
 
         def app_state_changed(reason):
             if reason == Qt.ApplicationState.ApplicationActive:
@@ -251,23 +253,32 @@ def main():
         async with create_task_group() as tg:
             splash_screen.show()
             _logger.debug("Starting init task")
+            tg.start_soon(wait_for_exit)
             await tg.start(runner.run)
             await sleep(3.5)
             crynux_app.initializing = False
             _logger.debug("Starting the user interface")
             crynux_app.delayed_show()
             splash_screen.finish(crynux_app.activateWindow())
+        
+        _logger.debug("app _main finish")
 
     try:
-        loop.create_task(_main())
-        loop.run_forever()
+        loop.run_until_complete(_main())
+        loop.close()
+        _logger.debug("app quit")
     finally:
         proc = psutil.Process(os.getpid())
         for p in proc.children(recursive=True):
-            _logger.info(f"Kill process: {p.ppid()}, {p.cmdline()}")
-            p.kill()
-        proc.kill()
+            try:
+                _logger.info(f"Kill process: {p.ppid()}, {p.cmdline()}")
+                p.kill()
+            except psutil.NoSuchProcess:
+                pass
+            except Exception as e:
+                _logger.error(e)
 
+        proc.kill()
 
 if __name__ == '__main__':
     main()
