@@ -6,8 +6,6 @@ from logging.handlers import RotatingFileHandler
 
 import psutil
 
-from crynux_server.config import Config
-
 _logger = logging.getLogger(__name__)
 handler = logging.StreamHandler()
 dt_fmt = "%Y-%m-%d %H:%M:%S"
@@ -18,7 +16,6 @@ handler.setFormatter(formatter)
 _logger.addHandler(handler)
 _logger.setLevel(logging.DEBUG)
 
-
 if getattr(sys, "frozen", False):
     app_path = os.path.dirname(sys.executable)
     system_name = platform.system()
@@ -28,6 +25,7 @@ if getattr(sys, "frozen", False):
         os.environ["CRYNUX_SERVER_CONFIG"] = os.path.join(resdir, "config", "config.yml")
 
         from crynux_server import config as crynux_config
+
         cfg = crynux_config.get_config()
         cfg.task_dir = os.path.join(resdir, "tasks")
         cfg.web_dist = os.path.join(resdir, "webui/dist")
@@ -57,11 +55,9 @@ elif os.getenv("CRYNUX_SERVER_CONFIG") is None:
 
     os.environ["CRYNUX_SERVER_CONFIG"] = os.path.join(root_dir, "config", "config.yml")
 
-
 assert os.environ["CRYNUX_SERVER_CONFIG"]
 config_file_path = os.path.abspath(os.environ["CRYNUX_SERVER_CONFIG"])
 _logger.info(f"Start Crynux Node from: {config_file_path}")
-
 
 import asyncio
 import sys
@@ -77,7 +73,6 @@ from crynux_server.run import CrynuxRunner
 
 
 def init_log(_logger, config):
-
     if config.log.level == "DEBUG":
         os.environ['QT_LOGGING_RULES'] = "qt.webenginecontext.debug=true"
 
@@ -179,7 +174,7 @@ def main():
 
     _logger.debug("Starting Crynux node...")
 
-    crynux_cfg: Config = crynux_config.get_config()
+    crynux_cfg = crynux_config.get_config()
     _logger.debug("Log file loaded")
 
     app = QApplication(sys.argv)
@@ -219,7 +214,7 @@ def main():
     tray_menu.addAction(tray_menu_exit)
 
     tray.setContextMenu(tray_menu)
-    
+
     crynux_app = CrynuxApp()
 
     init_log(_logger, crynux_cfg)
@@ -236,12 +231,12 @@ def main():
             _logger.debug("exit event is set")
             await runner.stop()
             _logger.debug("runner stop")
-            
 
         def system_tray_action(reason):
-            if reason == QSystemTrayIcon.ActivationReason.Trigger:
-                if platform.system() == "Windows":
-                    crynux_app.show_recreate_window()
+            if (platform.system() == "Windows"
+                    and reason == QSystemTrayIcon.ActivationReason.Trigger
+                    and reason != QSystemTrayIcon.ActivationReason.Context):
+                crynux_app.show_recreate_window()
 
         def go_to_discord():
             QDesktopServices.openUrl(QUrl("https://discord.gg/JRkuY9FW49"))
@@ -286,6 +281,7 @@ def main():
                 _logger.error(e)
 
         proc.kill()
+
 
 if __name__ == '__main__':
     main()
