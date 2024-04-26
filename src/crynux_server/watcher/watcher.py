@@ -1,9 +1,8 @@
 import logging
-from typing import Any, Awaitable, Callable, Dict, Optional, cast
+from typing import Any, Awaitable, Callable, Dict, Optional
 
 from anyio import CancelScope, TASK_STATUS_IGNORED, create_task_group, fail_after, sleep
 from anyio.abc import TaskGroup, TaskStatus
-from web3.contract.async_contract import AsyncContract, AsyncContractEvent
 from web3.types import EventData
 
 from crynux_server.contracts import Contracts, ContractWrapper
