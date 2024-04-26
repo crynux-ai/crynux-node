@@ -195,8 +195,6 @@ def main():
         pixmap=pixmap
     )
     splash_screen.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint)
-
-    splash_screen.show()
     _logger.debug("show splash screen")
 
     tray = QSystemTrayIcon()
@@ -220,6 +218,8 @@ def main():
     init_log(_logger, crynux_cfg)
 
     async def _main():
+
+        splash_screen.show()
 
         _logger.debug("Creating runner and crynux_app")
         runner = CrynuxRunner()
