@@ -268,7 +268,7 @@ class ContractWrapper(object):
 
         async def _process_receipt(w3: AsyncWeb3):
             contract = w3.eth.contract(address=self._address, abi=self.abi)
-            event = contract.events[event_name]
+            event = contract.events[event_name]()
             event = cast(AsyncContractEvent, event)
             return event.process_receipt(recepit, errors=errors)
 
