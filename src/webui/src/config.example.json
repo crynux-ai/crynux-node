@@ -1,4 +1,7 @@
 {
     "base_url": "",
-    "discord_link": "https://discord.gg/JRkuY9FW49"
+    "discord_link": "https://discord.gg/JRkuY9FW49",
+    "log": {
+        "level": "info"
+    }
 }
