@@ -223,6 +223,13 @@ def main():
         tray_menu_discord.triggered.connect(go_to_discord)
         tray_menu_exit.triggered.connect(exit_all)
 
+        def app_state_changed(reason):
+            if reason == Qt.ApplicationState.ApplicationActive:
+                if app.activeWindow() is None:
+                    crynux_app.show_from_tray()
+
+        app.applicationStateChanged.connect(app_state_changed)
+
         async with create_task_group() as tg:
             _logger.debug("Starting init task")
             await tg.start(runner.run)
