@@ -79,7 +79,7 @@ class CrynuxRunner(object):
 
                 tg.start_soon(self._wait_for_shutdown)
 
-                tg.start_soon(self._node_manager.run, False)
+                tg.start_soon(self._node_manager.run)
                 if not self.config.headless:
                     await tg.start(
                         self._server.start,
