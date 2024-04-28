@@ -52,8 +52,7 @@ const nodeStatus = reactive({
 
 const accountStatus = reactive({
   address: '',
-  eth_balance: 0,
-  cnx_balance: 0
+  eth_balance: 0
 })
 
 const taskStatus = reactive({
@@ -88,12 +87,7 @@ const toEtherValue = (bigNum) => {
 
 const ethEnough = () => {
   if (accountStatus.eth_balance === 0) return false
-  return accountStatus.eth_balance >= 1e16
-}
-
-const cnxEnough = () => {
-  if (accountStatus.cnx_balance === 0) return false
-  return accountStatus.cnx_balance >= 4e20
+  return accountStatus.eth_balance >= 5e20
 }
 
 const privateKeyUpdated = async () => {
@@ -275,46 +269,20 @@ const getPercent = (num) => {
       ></a-alert>
       <a-alert
         type="error"
-        message="Not enough gas tokens in the wallet. At least 0.01 gas token is required."
-        class="top-alert"
-        v-if="accountStatus.address !== '' && !ethEnough() && cnxEnough()"
-      >
-        <template #action>
-          <a-button size="small" type="primary" :href="config.discord_link" target="_blank">Crynux Discord</a-button>
-        </template>
-        <template #description>
-        Get the test tokens for free from: <a-typography-link :href="config.discord_link" target="_blank">{{ config.discord_link }}</a-typography-link>
-      </template>
-      </a-alert>
-      <a-alert
-        type="error"
-        message="Not enough test CNX in the wallet. At least 400 test CNX is required."
+        message="Not enough tokens in the wallet. At least 500 test CNXs are required."
         class="top-alert"
         v-if="
           nodeStatus.status === nodeAPI.NODE_STATUS_STOPPED &&
           accountStatus.address !== '' &&
-          !cnxEnough() && ethEnough()
+          !ethEnough()
         "
       >
         <template #action>
           <a-button size="small" type="primary" :href="config.discord_link" target="_blank">Crynux Discord</a-button>
         </template>
         <template #description>
-        Get the test tokens for free from: <a-typography-link :href="config.discord_link" target="_blank">{{ config.discord_link }}</a-typography-link>
-      </template>
-      </a-alert>
-      <a-alert
-        type="error"
-        message="Not enough test tokens in the wallet."
-        class="top-alert"
-        v-if="accountStatus.address !== '' && !ethEnough() && !cnxEnough()"
-      >
-        <template #action>
-          <a-button size="small" type="primary" :href="config.discord_link" target="_blank">Crynux Discord</a-button>
+          Get the test CNXs for free: <a-typography-link :href="config.discord_link" target="_blank">{{ config.discord_link }}</a-typography-link>
         </template>
-        <template #description>
-        Get the test tokens for free from: <a-typography-link :href="config.discord_link" target="_blank">{{ config.discord_link }}</a-typography-link>
-      </template>
       </a-alert>
     </a-col>
   </a-row>
@@ -424,7 +392,7 @@ const getPercent = (num) => {
                 :icon="h(PlayCircleOutlined)"
                 @click="sendNodeAction('start')"
                 :loading="isTxSending || nodeStatus.tx_status === nodeAPI.TX_STATUS_PENDING"
-                :disabled="!ethEnough() || !cnxEnough()"
+                :disabled="!ethEnough()"
                 >Start</a-button
               >
             </div>
@@ -463,17 +431,14 @@ const getPercent = (num) => {
           ></edit-account>
         </template>
         <a-row>
-          <a-col :span="10">
+          <a-col :span="14">
             <a-tooltip>
               <template #title>{{ accountStatus.address }}</template>
               <a-statistic title="Address" :value="shortAddress"></a-statistic>
             </a-tooltip>
           </a-col>
-          <a-col :span="7">
-            <a-statistic title="Gas token" :value="toEtherValue(accountStatus.eth_balance)"></a-statistic>
-          </a-col>
-          <a-col :span="7">
-            <a-statistic title="Test CNX" :value="toEtherValue(accountStatus.cnx_balance)"></a-statistic>
+          <a-col :span="10">
+            <a-statistic title="Test CNX" :value="toEtherValue(accountStatus.eth_balance)"></a-statistic>
           </a-col>
         </a-row>
       </a-card>
