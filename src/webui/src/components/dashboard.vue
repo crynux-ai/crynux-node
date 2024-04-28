@@ -4,7 +4,8 @@ import {
   PauseCircleOutlined,
   LogoutOutlined,
   PlayCircleOutlined,
-  ExclamationCircleOutlined
+  ExclamationCircleOutlined,
+  CopyOutlined,
 } from '@ant-design/icons-vue'
 import { Grid, Modal } from 'ant-design-vue'
 import EditAccount from './edit-account.vue'
@@ -45,7 +46,7 @@ const systemInfo = reactive({
 })
 
 const nodeStatus = reactive({
-  status: '',
+  status: nodeAPI.NODE_STATUS_INITIALIZING,
   message: '',
   tx_status: '',
   tx_error: ''
@@ -67,9 +68,9 @@ const shortAddress = computed(() => {
     return 'N/A'
   } else {
     return (
-      accountStatus.address.substring(0, 6) +
+      accountStatus.address.substring(0, 8) +
       '...' +
-      accountStatus.address.substring(accountStatus.address.length - 4)
+      accountStatus.address.substring(accountStatus.address.length - 6)
     )
   }
 })
@@ -79,16 +80,31 @@ const toEtherValue = (bigNum) => {
 
   const decimals = (bigNum / BigInt(1e18)).toString()
 
-  let fractions = ((bigNum / BigInt(1e16)) % 100n).toString()
+  let fractions = ((bigNum / BigInt(1e14)) % 10000n).toString()
 
-  if (fractions.length === 1) fractions += '0'
+  while(fractions.length < 4) {
+      fractions = '0' + fractions
+  }
 
   return decimals + '.' + fractions
 }
 
+const stakingMinimum = 4e20
+const gasMinimum = 1e16
+
+const ethEnoughForStaking = () => {
+    if (accountStatus.eth_balance === 0) return false
+    return accountStatus.eth_balance >= stakingMinimum
+}
+
+const ethEnoughForGas = () => {
+    if (accountStatus.eth_balance === 0) return false
+    return accountStatus.eth_balance >= gasMinimum
+}
+
 const ethEnough = () => {
-  if (accountStatus.eth_balance === 0) return false
-  return accountStatus.eth_balance >= 5e20
+    if (accountStatus.eth_balance === 0) return false
+    return accountStatus.eth_balance >= (stakingMinimum + gasMinimum)
 }
 
 const privateKeyUpdated = async () => {
@@ -243,6 +259,11 @@ const getPercent = (num) => {
 
     return num
 }
+
+const copyText = async (text) => {
+    return navigator.clipboard.writeText(text);
+}
+
 </script>
 
 <template>
@@ -289,12 +310,30 @@ const getPercent = (num) => {
       ></a-alert>
       <a-alert
         type="error"
-        message="Not enough tokens in the wallet. At least 500 test CNXs are required."
+        message="Not enough tokens in the wallet. At least 400.01 test CNXs are required."
         class="top-alert"
         v-if="
-          nodeStatus.status === nodeAPI.NODE_STATUS_STOPPED &&
+          (nodeStatus.status === nodeAPI.NODE_STATUS_STOPPED || nodeStatus.status === nodeAPI.NODE_STATUS_INITIALIZING) &&
           accountStatus.address !== '' &&
           !ethEnough()
+        "
+      >
+        <template #action>
+          <a-button size="small" type="primary" :href="config.discord_link" target="_blank">Crynux Discord</a-button>
+        </template>
+        <template #description>
+          Get the test CNXs for free: <a-typography-link :href="config.discord_link" target="_blank">{{ config.discord_link }}</a-typography-link>
+        </template>
+      </a-alert>
+      <a-alert
+        type="error"
+        message="Not enough tokens in the wallet. At least 0.01 test CNXs are required for the gas fee."
+        class="top-alert"
+        v-if="
+          nodeStatus.status !== nodeAPI.NODE_STATUS_STOPPED &&
+          nodeStatus.status !== nodeAPI.NODE_STATUS_INITIALIZING &&
+          accountStatus.address !== '' &&
+          !ethEnoughForGas()
         "
       >
         <template #action>
@@ -451,13 +490,20 @@ const getPercent = (num) => {
           ></edit-account>
         </template>
         <a-row>
-          <a-col :span="14">
+          <a-col :span="18">
             <a-tooltip>
               <template #title>{{ accountStatus.address }}</template>
-              <a-statistic title="Address" :value="shortAddress"></a-statistic>
+              <a-statistic title="Address">
+                <template #formatter>
+                    {{ shortAddress }}
+                    <a-button @click="copyText(accountStatus.address)">
+                        <template #icon><CopyOutlined /></template>
+                    </a-button>
+                </template>
+              </a-statistic>
             </a-tooltip>
           </a-col>
-          <a-col :span="10">
+          <a-col :span="6">
             <a-statistic title="Test CNX" :value="toEtherValue(accountStatus.eth_balance)"></a-statistic>
           </a-col>
         </a-row>
