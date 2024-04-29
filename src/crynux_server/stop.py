@@ -41,7 +41,6 @@ async def _stop(
                 privkey=config.ethereum.privkey,
             )
             await contracts.init(
-                token_contract_address=config.ethereum.contract.token,
                 node_contract_address=config.ethereum.contract.node,
                 task_contract_address=config.ethereum.contract.task,
                 qos_contract_address=config.ethereum.contract.qos,

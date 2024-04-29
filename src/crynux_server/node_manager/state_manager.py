@@ -131,25 +131,16 @@ class NodeStateManager(object):
 
             elif status == models.ChainNodeStatus.QUIT:
                 node_amount = Web3.to_wei(400, "ether")
-                balance = await self.contracts.token_contract.balance_of(
+                balance = await self.contracts.get_balance(
                     self.contracts.account
                 )
                 if balance < node_amount:
                     raise ValueError("Node token balance is not enough to join.")
-                allowance = await self.contracts.token_contract.allowance(
-                    self.contracts.node_contract.address
-                )
-                if allowance < node_amount:
-                    waiter = await self.contracts.token_contract.approve(
-                        self.contracts.node_contract.address,
-                        node_amount,
-                        option=option,
-                    )
-                    await waiter.wait()
                 waiter = await self.contracts.node_contract.join(
                     gpu_name=gpu_name,
                     gpu_vram=gpu_vram,
                     option=option,
+                    stake_amount=node_amount
                 )
                 # update tx state to avoid the web user controlling node status by api
                 # it's the same in try_stop method
@@ -198,24 +189,17 @@ class NodeStateManager(object):
             ), "Cannot start node. Last transaction is in pending."
 
             node_amount = Web3.to_wei(400, "ether")
-            balance = await self.contracts.token_contract.balance_of(
+            balance = await self.contracts.get_balance(
                 self.contracts.account
             )
             if balance < node_amount:
                 raise ValueError("Node token balance is not enough to join.")
-            allowance = await self.contracts.token_contract.allowance(
-                self.contracts.node_contract.address
-            )
-            if allowance < node_amount:
-                waiter = await self.contracts.token_contract.approve(
-                    self.contracts.node_contract.address, node_amount, option=option
-                )
-                await waiter.wait()
 
             waiter = await self.contracts.node_contract.join(
                 gpu_name=gpu_name,
                 gpu_vram=gpu_vram,
                 option=option,
+                stake_amount=node_amount
             )
             await self.state_cache.set_tx_state(models.TxStatus.Pending)
 

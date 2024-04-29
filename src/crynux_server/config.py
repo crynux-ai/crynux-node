@@ -89,7 +89,6 @@ class LogConfig(BaseModel):
 
 
 class Contract(BaseModel):
-    token: str
     node: str
     task: str
     qos: Optional[str] = None
