@@ -71,7 +71,6 @@ async def node_contracts(privkey, tx_option):
     amount = Web3.to_wei(1000, "ether")
     await root_contracts.transfer(account.address, amount, option=tx_option)
 
-    token_contract_address = root_contracts.token_contract.address
     node_contract_address = root_contracts.node_contract.address
     task_contract_address = root_contracts.task_contract.address
     qos_contract_address = root_contracts.task_contract.address
@@ -80,7 +79,6 @@ async def node_contracts(privkey, tx_option):
 
     contracts = Contracts(provider=provider, privkey=privkey)
     await contracts.init(
-        token_contract_address=token_contract_address,
         node_contract_address=node_contract_address,
         task_contract_address=task_contract_address,
         qos_contract_address=qos_contract_address,
@@ -88,28 +86,6 @@ async def node_contracts(privkey, tx_option):
         netstats_contract_address=netstats_contract_address,
         option=tx_option,
     )
-    amount = Web3.to_wei(1000, "ether")
-    if (await contracts.token_contract.balance_of(contracts.account)) < amount:
-        waiter = await root_contracts.token_contract.transfer(
-            contracts.account, amount, option=tx_option
-        )
-        await waiter.wait()
-    task_amount = Web3.to_wei(400, "ether")
-    if (
-        await contracts.token_contract.allowance(task_contract_address)
-    ) < task_amount:
-        waiter = await contracts.token_contract.approve(
-            task_contract_address, task_amount, option=tx_option
-        )
-        await waiter.wait()
-    node_amount = Web3.to_wei(400, "ether")
-    if (
-        await contracts.token_contract.allowance(node_contract_address)
-    ) < node_amount:
-        waiter = await contracts.token_contract.approve(
-            node_contract_address, node_amount, option=tx_option
-        )
-        await waiter.wait()
     try:
         yield contracts
     finally:

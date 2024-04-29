@@ -54,7 +54,6 @@ async def root_contracts(provider, tx_option, privkeys):
 
 @pytest.fixture(scope="module")
 async def contracts_with_tokens(provider, root_contracts: Contracts, tx_option, privkeys):
-    token_contract_address = root_contracts.token_contract.address
     node_contract_address = root_contracts.node_contract.address
     task_contract_address = root_contracts.task_contract.address
     qos_contract_address = root_contracts.task_contract.address
@@ -65,7 +64,6 @@ async def contracts_with_tokens(provider, root_contracts: Contracts, tx_option, 
     for privkey in privkeys:
         contracts = Contracts(provider=provider, privkey=privkey)
         await contracts.init(
-            token_contract_address=token_contract_address,
             node_contract_address=node_contract_address,
             task_contract_address=task_contract_address,
             qos_contract_address=qos_contract_address,
@@ -73,12 +71,6 @@ async def contracts_with_tokens(provider, root_contracts: Contracts, tx_option, 
             netstats_contract_address=netstats_contract_address,
             option=tx_option,
         )
-        amount = Web3.to_wei(1000, "ether")
-        if (await contracts.token_contract.balance_of(contracts.account)) < amount:
-            waiter = await root_contracts.token_contract.transfer(
-                contracts.account, amount, option=tx_option
-            )
-            await waiter.wait()
         cs.append(contracts)
     
     try:

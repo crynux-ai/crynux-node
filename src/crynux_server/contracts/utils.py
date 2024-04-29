@@ -174,6 +174,7 @@ class ContractWrapper(object):
         method: str,
         timeout: float = 120,
         interval: float = 0.1,
+        value: Optional[int] = None,
         option: Optional["TxOption"] = None,
         w3: Optional[AsyncWeb3] = None,
         **kwargs,
@@ -186,6 +187,9 @@ class ContractWrapper(object):
                 opt.update(**option)
             else:
                 opt.update(**get_default_tx_option())
+
+            if value is not None:
+                opt["value"] = w3.to_wei(value, "wei")
 
             contract = w3.eth.contract(address=self._address, abi=self.abi)
             async with self.w3_pool.with_nonce_lock():

@@ -36,18 +36,8 @@ async def get_account_info():
         contracts = await wait_contracts()
         res = AccountInfo(address=contracts.account, eth_balance=0, cnx_balance=0)
 
-        async def get_eth_balance():
-            res.eth_balance = await contracts.get_balance(contracts.account)
-
-        async def get_cnx_balance():
-            res.cnx_balance = await contracts.token_contract.balance_of(
-                contracts.account
-            )
-
         try:
-            async with create_task_group() as tg:
-                tg.start_soon(get_eth_balance)
-                tg.start_soon(get_cnx_balance)
+            res.eth_balance = await contracts.get_balance(contracts.account)
         except Exception as e:
             _logger.error(e)
             raise HTTPException(status_code=500, detail=f"ContractError: {str(e)}")

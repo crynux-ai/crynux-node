@@ -34,7 +34,6 @@ _logger = logging.getLogger(__name__)
 async def _make_contracts(
     privkey: str,
     provider: str,
-    token_contract_address: str,
     node_contract_address: str,
     task_contract_address: str,
     qos_contract_address: Optional[str],
@@ -43,7 +42,6 @@ async def _make_contracts(
 ) -> Contracts:
     contracts = Contracts(provider_path=provider, privkey=privkey)
     await contracts.init(
-        token_contract_address=token_contract_address,
         node_contract_address=node_contract_address,
         task_contract_address=task_contract_address,
         qos_contract_address=qos_contract_address,
@@ -190,7 +188,6 @@ class NodeManager(object):
                 self._contracts = await _make_contracts(
                     privkey=self._privkey,
                     provider=self.config.ethereum.provider,
-                    token_contract_address=self.config.ethereum.contract.token,
                     node_contract_address=self.config.ethereum.contract.node,
                     task_contract_address=self.config.ethereum.contract.task,
                     qos_contract_address=self.config.ethereum.contract.qos,

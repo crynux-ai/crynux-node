@@ -17,42 +17,6 @@ async def contracts_for_task(
 ):
     c1, c2, c3 = contracts_with_tokens
 
-    node_contract_address = c1.node_contract.address
-    task_contract_address = c1.task_contract.address
-    task_amount = Web3.to_wei(400, "ether")
-    if (await c1.token_contract.allowance(task_contract_address)) < task_amount:
-        waiter = await c1.token_contract.approve(
-            task_contract_address, task_amount, option=tx_option
-        )
-        await waiter.wait()
-    if (await c2.token_contract.allowance(task_contract_address)) < task_amount:
-        waiter = await c2.token_contract.approve(
-            task_contract_address, task_amount, option=tx_option
-        )
-        await waiter.wait()
-    if (await c3.token_contract.allowance(task_contract_address)) < task_amount:
-        waiter = await c3.token_contract.approve(
-            task_contract_address, task_amount, option=tx_option
-        )
-        await waiter.wait()
-
-    node_amount = Web3.to_wei(400, "ether")
-    if (await c1.token_contract.allowance(node_contract_address)) < node_amount:
-        waiter = await c1.token_contract.approve(
-            node_contract_address, node_amount, option=tx_option
-        )
-        await waiter.wait()
-    if (await c2.token_contract.allowance(node_contract_address)) < node_amount:
-        waiter = await c2.token_contract.approve(
-            node_contract_address, node_amount, option=tx_option
-        )
-        await waiter.wait()
-    if (await c3.token_contract.allowance(node_contract_address)) < node_amount:
-        waiter = await c3.token_contract.approve(
-            node_contract_address, node_amount, option=tx_option
-        )
-        await waiter.wait()
-
     try:
         waiter = await c1.node_contract.join(
             gpu_name="NVIDIA GeForce GTX 1070 Ti", gpu_vram=8, option=tx_option

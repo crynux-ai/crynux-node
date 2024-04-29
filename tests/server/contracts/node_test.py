@@ -9,14 +9,6 @@ from crynux_server.models import GpuInfo, ChainNodeStatus
 async def test_node(contracts_with_tokens: Tuple[Contracts, Contracts, Contracts], tx_option):
     c1, c2, c3 = contracts_with_tokens
 
-    node_contract_address = c1.node_contract.address
-    waiter = await c1.token_contract.approve(node_contract_address, Web3.to_wei(400, "ether"), option=tx_option)
-    await waiter.wait()
-    waiter = await c2.token_contract.approve(node_contract_address, Web3.to_wei(400, "ether"), option=tx_option)
-    await waiter.wait()
-    waiter = await c3.token_contract.approve(node_contract_address, Web3.to_wei(400, "ether"), option=tx_option)
-    await waiter.wait()
-
     gpus = [
         GpuInfo(name="NVIDIA GeForce GTX 1070 Ti", vram=8),
         GpuInfo(name="NVIDIA GeForce RTX 4060 Ti", vram=8),
