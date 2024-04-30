@@ -20,7 +20,6 @@ router = APIRouter(prefix="/account")
 class AccountInfo(BaseModel):
     address: str
     eth_balance: int
-    cnx_balance: int
 
 
 @router.get("", response_model=AccountInfo)
@@ -30,11 +29,10 @@ async def get_account_info():
         return AccountInfo(
             address="",
             eth_balance=0,
-            cnx_balance=0,
         )
     else:
         contracts = await wait_contracts()
-        res = AccountInfo(address=contracts.account, eth_balance=0, cnx_balance=0)
+        res = AccountInfo(address=contracts.account, eth_balance=0)
 
         try:
             res.eth_balance = await contracts.get_balance(contracts.account)
