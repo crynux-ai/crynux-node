@@ -1,5 +1,6 @@
 import platform
 import re
+import time
 from collections import OrderedDict
 from typing import Any, Dict, Optional
 
@@ -152,9 +153,9 @@ class CpuInfo(BaseModel):
 async def _get_cpu_info() -> CpuInfo:
     info = CpuInfo()
 
-    info.usage = int(await to_thread.run_sync(psutil.cpu_percent))
+    info.usage = int(await to_thread.run_sync(psutil.cpu_percent, 0.1))
     info.num_cores = await to_thread.run_sync(psutil.cpu_count)
-    info.frequency_mhz = int((await to_thread.run_sync(psutil.cpu_freq)).max)
+    info.frequency_mhz = int((await to_thread.run_sync(psutil.cpu_freq)).current)
 
     return info
 
