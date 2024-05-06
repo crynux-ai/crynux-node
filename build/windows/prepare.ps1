@@ -22,7 +22,8 @@ Write-Output $RELEASE_DIR
 # 0. Clear the release dir if exists
 
 if (Test-Path -Path $RELEASE_DIR) {
-    Remove-Item -Recurse $RELEASE_DIR
+    Write-Output "Deleting the old release folder"
+    Remove-Item -Recurse -Force $RELEASE_DIR
 }
 
 New-Item -ItemType Directory -Path $RELEASE_DIR
