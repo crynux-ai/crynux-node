@@ -14,21 +14,20 @@ ethereum:
   
   # The JSON RPC endpoint of the Blockchain node
   # Here we use the private chain for the Hydrogen Network
-  provider: "https://json-rpc.rolx.evm.ra.blumbus.noisnemyd.xyz"
+  provider: "https://json-rpc.crynux.evm.ra.blumbus.noisnemyd.xyz/"
 
   # The Blockchain params
   # Leave it as is for the private chain used in the Hydrogen Network
-  gas_price: 1
+  gas_price: 10
   gas: 5000000
 
   # The deployed addresses of the smart contracts
   contract:
-    token: "0xB47E277aE7Cbb93949D7202b6e29e33f541EC262"
-    node: "0x7334e4EA8D6328108fcA0bE7B3042458f058a74b"
-    task: "0x02700Ae3Cc6927a1c957ff48F0D6262236924f82"
-    qos: "0xE15b5DD09f9867C8dD0FbC0f57216b440300c99d"
-    task_queue: "0x719f8f1e106BeF85f2ffC1D23e86C9cbCb7ddB67"
-    netstats: "0xd14f963B54Deff1993FF7987954602c9593d36A4"
+    node: "0x662d296cae3f1Be2ed5803227dAd6435f1ffC438"
+    task: "0x07E149A0e372C2F54Df6358d021d700703D222D1"
+    qos: "0x95E7e7Ed5463Ff482f61585605a0ff278e0E1FFb"
+    task_queue: "0xeD4cbf24978AD18d73ee6190e361E71095E857A7"
+    netstats: "0xC2c060f8C46640394E0937D75Ea977207E6df130"
 
 # The directory to store the temp files related to the running task
 task_dir: tasks

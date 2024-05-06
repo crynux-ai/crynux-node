@@ -83,4 +83,3 @@ async def test_get_account(running_client: TestClient, accounts, privkeys):
     resp_data = resp.json()
     assert resp_data["address"] == accounts[0]
     assert resp_data["eth_balance"] > 0
-    assert resp_data["cnx_balance"] > 0
