@@ -9,6 +9,7 @@ import {
 } from '@ant-design/icons-vue'
 import { Grid, Modal } from 'ant-design-vue'
 import EditAccount from './edit-account.vue'
+import GithubButton from 'vue-github-button'
 
 import systemAPI from '../api/v1/system'
 import nodeAPI from '../api/v1/node'
@@ -723,14 +724,10 @@ const copyText = async (text) => {
     </a-col>
   </a-row>
   <div class="bottom-bar">
-    <a-space class="footer-links">
+    <a-space class="footer-links" align="center">
       <a-typography-link href="https://crynux.ai" target="_blank">Home</a-typography-link>
       &nbsp;|&nbsp;
       <a-typography-link href="https://docs.crynux.ai" target="_blank">Docs</a-typography-link>
-      &nbsp;|&nbsp;
-      <a-typography-link href="https://github.com/crynux-ai" target="_blank"
-        >GitHub</a-typography-link
-      >
       &nbsp;|&nbsp;
       <a-typography-link href="https://blog.crynux.ai" target="_blank">Blog</a-typography-link>
       &nbsp;|&nbsp;
@@ -742,7 +739,15 @@ const copyText = async (text) => {
         >Discord</a-typography-link
       >
       &nbsp;|&nbsp;
-      <a-typography-text :style="{'color':'white'}">v{{ appVersion }}</a-typography-text>
+        <a-typography-text :style="{'color':'white'}">v{{ appVersion }}</a-typography-text>
+        &nbsp;|&nbsp;
+        <!-- Place this tag where you want the button to render. -->
+        <github-button
+            href="https://github.com/crynux-ai/crynux-node"
+            data-color-scheme="no-preference: light; light: light; dark: light;"
+            data-show-count="true" aria-label="Star Crynux Node on GitHub"
+            :style="{'position': 'relative', 'top': '4px'}"
+        >Star</github-button>
     </a-space>
     <img class="footer-logo" src="./logo-full-white.png" width="140" alt="Crynux logo" />
   </div>
