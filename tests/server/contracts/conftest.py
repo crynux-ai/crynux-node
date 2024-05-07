@@ -21,10 +21,14 @@ def privkeys():
 
 
 @pytest.fixture(scope="module")
-async def root_contracts(tx_option, privkeys):
+def provider():
     from web3.providers.eth_tester import AsyncEthereumTesterProvider
 
     provider = AsyncEthereumTesterProvider()
+    return provider
+
+@pytest.fixture(scope="module")
+async def root_contracts(provider, tx_option, privkeys):
 
     c0 = Contracts(provider=provider, default_account_index=0)
 
@@ -49,8 +53,7 @@ async def root_contracts(tx_option, privkeys):
 
 
 @pytest.fixture(scope="module")
-async def contracts_with_tokens(root_contracts: Contracts, tx_option, privkeys):
-    token_contract_address = root_contracts.token_contract.address
+async def contracts_with_tokens(provider, root_contracts: Contracts, tx_option, privkeys):
     node_contract_address = root_contracts.node_contract.address
     task_contract_address = root_contracts.task_contract.address
     qos_contract_address = root_contracts.task_contract.address
@@ -59,9 +62,8 @@ async def contracts_with_tokens(root_contracts: Contracts, tx_option, privkeys):
 
     cs = []
     for privkey in privkeys:
-        contracts = Contracts(provider=root_contracts.provider, privkey=privkey)
+        contracts = Contracts(provider=provider, privkey=privkey)
         await contracts.init(
-            token_contract_address=token_contract_address,
             node_contract_address=node_contract_address,
             task_contract_address=task_contract_address,
             qos_contract_address=qos_contract_address,
@@ -69,12 +71,6 @@ async def contracts_with_tokens(root_contracts: Contracts, tx_option, privkeys):
             netstats_contract_address=netstats_contract_address,
             option=tx_option,
         )
-        amount = Web3.to_wei(1000, "ether")
-        if (await contracts.token_contract.balance_of(contracts.account)) < amount:
-            waiter = await root_contracts.token_contract.transfer(
-                contracts.account, amount, option=tx_option
-            )
-            await waiter.wait()
         cs.append(contracts)
     
     try:

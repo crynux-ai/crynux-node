@@ -1,13 +1,13 @@
 from typing import List
 
 import pytest
-from anyio import create_task_group, sleep
+from anyio import create_task_group
 from eth_account import Account
 from fastapi.testclient import TestClient
 from web3 import Web3
 
 from crynux_server import models
-from crynux_server.config import Config, TxOption, set_config
+from crynux_server.config import Config, TxOption, set_config, set_privkey
 from crynux_server.contracts import Contracts, set_contracts
 from crynux_server.event_queue import MemoryEventQueue, set_event_queue
 from crynux_server.node_manager import (
@@ -58,10 +58,15 @@ def privkeys():
 
 
 @pytest.fixture
-async def root_contracts(tx_option, privkeys):
+def provider():
     from web3.providers.eth_tester import AsyncEthereumTesterProvider
 
     provider = AsyncEthereumTesterProvider()
+    return provider
+
+
+@pytest.fixture
+async def root_contracts(provider, tx_option, privkeys):
     c0 = Contracts(provider=provider, default_account_index=0)
 
     await c0.init(option=tx_option)
@@ -118,9 +123,8 @@ def config():
 
 @pytest.fixture
 async def node_contracts(
-    root_contracts: Contracts, tx_option: TxOption, privkeys: List[str]
+    provider, root_contracts: Contracts, tx_option: TxOption, privkeys: List[str]
 ):
-    token_contract_address = root_contracts.token_contract.address
     node_contract_address = root_contracts.node_contract.address
     task_contract_address = root_contracts.task_contract.address
     qos_contract_address = root_contracts.task_contract.address
@@ -129,9 +133,8 @@ async def node_contracts(
 
     cs = []
     for privkey in privkeys:
-        contracts = Contracts(provider=root_contracts.provider, privkey=privkey)
+        contracts = Contracts(provider=provider, privkey=privkey)
         await contracts.init(
-            token_contract_address=token_contract_address,
             node_contract_address=node_contract_address,
             task_contract_address=task_contract_address,
             qos_contract_address=qos_contract_address,
@@ -139,29 +142,6 @@ async def node_contracts(
             netstats_contract_address=netstats_contract_address,
             option=tx_option,
         )
-        amount = Web3.to_wei(1000, "ether")
-        if (await contracts.token_contract.balance_of(contracts.account)) < amount:
-            waiter = await root_contracts.token_contract.transfer(
-                contracts.account, amount, option=tx_option
-            )
-            await waiter.wait()
-        task_amount = Web3.to_wei(400, "ether")
-        if (
-            await contracts.token_contract.allowance(task_contract_address)
-        ) < task_amount:
-            waiter = await contracts.token_contract.approve(
-                task_contract_address, task_amount, option=tx_option
-            )
-            await waiter.wait()
-        node_amount = Web3.to_wei(400, "ether")
-        if (
-            await contracts.token_contract.allowance(node_contract_address)
-        ) < node_amount:
-            waiter = await contracts.token_contract.approve(
-                node_contract_address, node_amount, option=tx_option
-            )
-            await waiter.wait()
-
         cs.append(contracts)
     try:
         yield cs
@@ -195,7 +175,8 @@ async def managers(
 
     for i, (privkey, contracts) in enumerate(zip(privkeys, node_contracts)):
         if i == 0:
-            set_contracts(contracts)
+            await set_privkey(privkeys[0])
+            await set_contracts(contracts)
         queue = MemoryEventQueue()
         if i == 0:
             set_event_queue(queue)
@@ -282,7 +263,7 @@ async def running_client(managers):
 
 
 @pytest.fixture
-def client():
+def client(config: Config):
     state_cache = ManagerStateCache(
         node_state_cache_cls=MemoryNodeStateCache, tx_state_cache_cls=MemoryTxStateCache
     )

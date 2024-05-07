@@ -43,35 +43,35 @@ class CrynuxRunner(object):
     async def _wait_for_shutdown(self):
         if self._shutdown_event is not None:
             await self._shutdown_event.wait()
-            await self.stop()
+            await self._stop()
 
     async def run(self, task_status: TaskStatus[None] = TASK_STATUS_IGNORED):
         assert self._tg is None, "Crynux Server is running"
 
-        print("Starting Crynux server")
+        _logger.info("Starting Crynux server")
 
         self._shutdown_event = Event()
 
         await db.init(self.config.db)
-        print("DB init completed.")
+        _logger.info("DB init completed.")
 
-        print("Serving WebUI from: ", os.path.abspath(self.config.web_dist))
+        _logger.info(f"Serving WebUI from: {os.path.abspath(self.config.web_dist)}")
         self._server = Server(self.config.web_dist)
         set_server(self._server)
-        print("Web server init completed.")
+        _logger.info("Web server init completed.")
 
         gpu_info = await utils.get_gpu_info()
         gpu_name = gpu_info.model
         gpu_vram_gb = math.ceil(gpu_info.vram_total_mb / 1024)
 
-        print("Starting node manager...")
+        _logger.info("Starting node manager...")
 
         self._node_manager = NodeManager(
             config=self.config, gpu_name=gpu_name, gpu_vram=gpu_vram_gb
         )
         set_node_manager(self._node_manager)
 
-        print("Node manager created.")
+        _logger.info("Node manager created.")
 
         try:
             async with create_task_group() as tg:
@@ -87,7 +87,7 @@ class CrynuxRunner(object):
                         self.config.server_port,
                         self.config.log.level == "DEBUG",
                     )
-                print("Crynux server started.")
+                _logger.info("Crynux server started.")
                 task_status.started()
         finally:
             with move_on_after(2, shield=True):
@@ -95,7 +95,7 @@ class CrynuxRunner(object):
             self._shutdown_event = None
             self._tg = None
 
-    async def stop(self):
+    async def _stop(self):
         if self._tg is None:
             return
 
@@ -106,6 +106,9 @@ class CrynuxRunner(object):
                 await self._node_manager.finish()
         self._tg.cancel_scope.cancel()
 
+    async def stop(self):
+        self._set_shutdown_event()
+
 
 def run():
     try:
@@ -113,3 +116,7 @@ def run():
         anyio.run(runner.run)
     except KeyboardInterrupt:
         pass
+
+
+if __name__ == "__main__":
+    run()

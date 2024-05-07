@@ -7,9 +7,9 @@ from fastapi import APIRouter, Body, HTTPException
 from pydantic import BaseModel, Field, Json, SecretStr
 from typing_extensions import Annotated
 
-from crynux_server.config import set_privkey
+from crynux_server.config import set_privkey, get_privkey
+from crynux_server.contracts import wait_contracts
 
-from ..depends import ContractsDep
 from .utils import CommonResponse
 
 _logger = logging.getLogger(__name__)
@@ -19,38 +19,28 @@ router = APIRouter(prefix="/account")
 
 class AccountInfo(BaseModel):
     address: str
-    eth_balance: int
-    cnx_balance: int
+    balance: int
 
 
 @router.get("", response_model=AccountInfo)
-async def get_account_info(*, contracts: ContractsDep):
-    if contracts is not None:
-        res = AccountInfo(address=contracts.account, eth_balance=0, cnx_balance=0)
-
-        async def get_eth_balance():
-            res.eth_balance = await contracts.get_balance(contracts.account)
-
-        async def get_cnx_balance():
-            res.cnx_balance = await contracts.token_contract.balance_of(
-                contracts.account
-            )
+async def get_account_info():
+    privkey = get_privkey()
+    if privkey == "":
+        return AccountInfo(
+            address="",
+            balance=0,
+        )
+    else:
+        contracts = await wait_contracts()
+        res = AccountInfo(address=contracts.account, balance=0)
 
         try:
-            async with create_task_group() as tg:
-                tg.start_soon(get_eth_balance)
-                tg.start_soon(get_cnx_balance)
+            res.balance = await contracts.get_balance(contracts.account)
         except Exception as e:
             _logger.error(e)
             raise HTTPException(status_code=500, detail=f"ContractError: {str(e)}")
 
         return res
-    else:
-        return AccountInfo(
-            address="",
-            eth_balance=0,
-            cnx_balance=0,
-        )
 
 
 PrivkeyType = Literal["private_key", "keystore"]

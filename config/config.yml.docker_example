@@ -14,22 +14,20 @@ ethereum:
   
   # The JSON RPC endpoint of the Blockchain node
   # Here we use the private chain for the Hydrogen Network
-  provider: "https://block-node.crynux.ai/rpc"
-  
+  provider: "https://json-rpc.crynux.evm.ra.blumbus.noisnemyd.xyz/"
+
   # The Blockchain params
   # Leave it as is for the private chain used in the Hydrogen Network
-  chain_id: 42
-  gas: 42949670
-  gas_price: 1
+  gas_price: 10
+  gas: 5000000
 
   # The deployed addresses of the smart contracts
   contract:
-    token: "0x95E7e7Ed5463Ff482f61585605a0ff278e0E1FFb"
-    node: "0xc674d7d3599Cb566eC8027767f410dd8cD7Bd36D"
-    task: "0x9b483dc4D18a35802DD4fB0fE9f02A8b32FaD906"
-    qos: "0x91754172B22b4ba8ff2F34C2A7C90cA7ce96B806"
-    task_queue: "0xeA44D3565B48e4791529F591C0bBDA2AC8958258"
-    netstats: "0xaa0F19cb42a19415591003Ed9D99c40cE69B0224"
+    node: "0x662d296cae3f1Be2ed5803227dAd6435f1ffC438"
+    task: "0x07E149A0e372C2F54Df6358d021d700703D222D1"
+    qos: "0x95E7e7Ed5463Ff482f61585605a0ff278e0E1FFb"
+    task_queue: "0xeD4cbf24978AD18d73ee6190e361E71095E857A7"
+    netstats: "0xC2c060f8C46640394E0937D75Ea977207E6df130"
 
 # The directory to store the temp files related to the running task
 task_dir: tasks
@@ -40,7 +38,7 @@ task_dir: tasks
 db: sqlite+aiosqlite:///db/server.db
 
 # The URL of the Relay
-relay_url: "https://relay.h.crynux.ai"
+relay_url: "https://dy.relay.crynux.ai"
 
 # The directory that stores the distribution files of the WebUI
 web_dist: dist

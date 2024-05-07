@@ -20,6 +20,7 @@ __all__ = [
     "dump_config",
     "wait_privkey",
     "set_privkey",
+    "get_privkey",
     "TxOption",
     "get_default_tx_option",
 ]
@@ -88,7 +89,6 @@ class LogConfig(BaseModel):
 
 
 class Contract(BaseModel):
-    token: str
     node: str
     task: str
     qos: Optional[str] = None
@@ -242,6 +242,11 @@ async def set_privkey(privkey: str):
         condition.notify(1)
 
     await to_thread.run_sync(functools.partial(dump_config, config=config))
+
+
+def get_privkey() -> str:
+    config = get_config()
+    return config.ethereum.privkey
 
 
 class TxOption(TypedDict, total=False):

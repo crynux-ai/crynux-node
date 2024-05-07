@@ -4,16 +4,19 @@ import {
   PauseCircleOutlined,
   LogoutOutlined,
   PlayCircleOutlined,
-  ExclamationCircleOutlined
+  ExclamationCircleOutlined,
+  CopyOutlined,
 } from '@ant-design/icons-vue'
 import { Grid, Modal } from 'ant-design-vue'
 import EditAccount from './edit-account.vue'
+import GithubButton from 'vue-github-button'
 
 import systemAPI from '../api/v1/system'
 import nodeAPI from '../api/v1/node'
 import taskAPI from '../api/v1/task'
 import accountAPI from '../api/v1/account'
 import config from "../config.json"
+import logger from "../log/log"
 
 const appVersion = APP_VERSION
 
@@ -44,7 +47,7 @@ const systemInfo = reactive({
 })
 
 const nodeStatus = reactive({
-  status: '',
+  status: nodeAPI.NODE_STATUS_INITIALIZING,
   message: '',
   tx_status: '',
   tx_error: ''
@@ -52,8 +55,7 @@ const nodeStatus = reactive({
 
 const accountStatus = reactive({
   address: '',
-  eth_balance: 0,
-  cnx_balance: 0
+  eth_balance: 0
 })
 
 const taskStatus = reactive({
@@ -67,9 +69,9 @@ const shortAddress = computed(() => {
     return 'N/A'
   } else {
     return (
-      accountStatus.address.substring(0, 6) +
+      accountStatus.address.substring(0, 8) +
       '...' +
-      accountStatus.address.substring(accountStatus.address.length - 4)
+      accountStatus.address.substring(accountStatus.address.length - 6)
     )
   }
 })
@@ -79,59 +81,121 @@ const toEtherValue = (bigNum) => {
 
   const decimals = (bigNum / BigInt(1e18)).toString()
 
-  let fractions = ((bigNum / BigInt(1e16)) % 100n).toString()
+  let fractions = ((bigNum / BigInt(1e14)) % 10000n).toString()
 
-  if (fractions.length === 1) fractions += '0'
+  while(fractions.length < 4) {
+      fractions = '0' + fractions
+  }
 
   return decimals + '.' + fractions
 }
 
+const stakingMinimum = 4e20
+const gasMinimum = 1e16
+
+const ethEnoughForStaking = () => {
+    if (accountStatus.eth_balance === 0) return false
+    return accountStatus.eth_balance >= stakingMinimum
+}
+
+const ethEnoughForGas = () => {
+    if (accountStatus.eth_balance === 0) return false
+    return accountStatus.eth_balance >= gasMinimum
+}
+
 const ethEnough = () => {
-  if (accountStatus.eth_balance === 0) return false
-  return accountStatus.eth_balance >= 1e16
+    if (accountStatus.eth_balance === 0) return false
+    return accountStatus.eth_balance >= (stakingMinimum + gasMinimum)
 }
 
-const cnxEnough = () => {
-  if (accountStatus.cnx_balance === 0) return false
-  return accountStatus.cnx_balance >= 4e20
+const privateKeyUpdated = async () => {
+    console.log("received privateKeyUpdated")
+    await updateUI()
 }
 
-let systemUpdateInterval = null
+let uiUpdateInterval = null
+let uiUpdateCurrentTicket = null
 onMounted(async () => {
-  await updateSystemInfo()
+    await updateUI()
 
-  if (systemUpdateInterval == null) {
-    systemUpdateInterval = setInterval(async () => {
-      if (isTxSending.value) return
-      await updateSystemInfo()
-    }, 5000)
-  }
+    if (uiUpdateInterval != null) {
+        clearInterval(uiUpdateInterval)
+    }
 
-  if (accountStatus.address === '') {
-    accountEditor.value.showModal()
-  }
+    uiUpdateInterval = setInterval(updateUI, 5000)
 })
+
 onBeforeUnmount(() => {
-  clearInterval(systemUpdateInterval)
-  systemUpdateInterval = null
+  clearInterval(uiUpdateInterval)
+  uiUpdateInterval = null
 })
+
+const updateUI = async () => {
+    uiUpdateCurrentTicket = Date.now()
+    await updateUIWithTicket(uiUpdateCurrentTicket)
+}
+
+const updateUIWithTicket = async (ticket) => {
+
+    logger.debug("[" + ticket + "] Updating UI")
+
+    if (isTxSending.value) return
+    await updateAccountInfo(ticket)
+
+    if (ticket !== uiUpdateCurrentTicket) {
+        logger.debug("[" + ticket + "] Ticket is old. Do not use this data to update UI.")
+        return
+    }
+
+    if (accountStatus.address === '') {
+      logger.debug("[" + ticket + "] Account address is empty. Show edit account dialog.")
+      accountEditor.value.showModal()
+    } else {
+        logger.debug("[" + ticket + "] Account address is not empty. Continue updating network info.")
+        await updateNetworkInfo(ticket)
+        await updateSystemInfo(ticket)
+    }
+}
+
+const updateAccountInfo = async (ticket) => {
+
+    logger.debug("[" + ticket + "] Updating account info")
+
+    const accountResp = await accountAPI.getAccountInfo()
+
+    logger.debug("[" + ticket + "] Retrieved account address: " + accountResp.address)
+
+    if(ticket === uiUpdateCurrentTicket) {
+        logger.debug("[" + ticket + "] Ticket is latest. Update the data.")
+        Object.assign(accountStatus, accountResp)
+    } else {
+        logger.debug("[" + ticket + "] Ticket is old. Discard the response")
+    }
+}
+
+const updateNetworkInfo = async (ticket) => {
+
+    const nodeResp = await nodeAPI.getNodeStatus()
+
+    if(ticket === uiUpdateCurrentTicket) {
+        Object.assign(nodeStatus, nodeResp)
+    }
+
+    const taskResp = await taskAPI.getTaskRunningStatus()
+
+    if(ticket === uiUpdateCurrentTicket) {
+        Object.assign(taskStatus, taskResp)
+    }
+}
+
+const updateSystemInfo = async (ticket) => {
+    const systemResp = await systemAPI.getSystemInfo()
+    if(ticket === uiUpdateCurrentTicket) {
+        Object.assign(systemInfo, systemResp)
+    }
+}
 
 let isTxSending = ref(false)
-
-const updateSystemInfo = async () => {
-  const systemResp = await systemAPI.getSystemInfo()
-  Object.assign(systemInfo, systemResp)
-
-  const nodeResp = await nodeAPI.getNodeStatus()
-  Object.assign(nodeStatus, nodeResp)
-
-  const accountResp = await accountAPI.getAccountInfo()
-  Object.assign(accountStatus, accountResp)
-
-  const taskResp = await taskAPI.getTaskRunningStatus()
-  Object.assign(taskStatus, taskResp)
-}
-
 const sendNodeAction = async (action) => {
   if (isTxSending.value) {
     return
@@ -196,6 +260,11 @@ const getPercent = (num) => {
 
     return num
 }
+
+const copyText = async (text) => {
+    return navigator.clipboard.writeText(text);
+}
+
 </script>
 
 <template>
@@ -242,46 +311,38 @@ const getPercent = (num) => {
       ></a-alert>
       <a-alert
         type="error"
-        message="Not enough gas tokens in the wallet. At least 0.01 gas token is required."
-        class="top-alert"
-        v-if="accountStatus.address !== '' && !ethEnough() && cnxEnough()"
-      >
-        <template #action>
-          <a-button size="small" type="primary" :href="config.discord_link" target="_blank">Crynux Discord</a-button>
-        </template>
-        <template #description>
-        Get the test tokens for free from: <a-typography-link :href="config.discord_link" target="_blank">{{ config.discord_link }}</a-typography-link>
-      </template>
-      </a-alert>
-      <a-alert
-        type="error"
-        message="Not enough test CNX in the wallet. At least 400 test CNX is required."
+        message="Not enough tokens in the wallet. At least 400.01 test CNXs are required."
         class="top-alert"
         v-if="
-          nodeStatus.status === nodeAPI.NODE_STATUS_STOPPED &&
+          (nodeStatus.status === nodeAPI.NODE_STATUS_STOPPED || nodeStatus.status === nodeAPI.NODE_STATUS_INITIALIZING) &&
           accountStatus.address !== '' &&
-          !cnxEnough() && ethEnough()
+          !ethEnough()
         "
       >
         <template #action>
           <a-button size="small" type="primary" :href="config.discord_link" target="_blank">Crynux Discord</a-button>
         </template>
         <template #description>
-        Get the test tokens for free from: <a-typography-link :href="config.discord_link" target="_blank">{{ config.discord_link }}</a-typography-link>
-      </template>
+          Get the test CNXs for free: <a-typography-link :href="config.discord_link" target="_blank">{{ config.discord_link }}</a-typography-link>
+        </template>
       </a-alert>
       <a-alert
         type="error"
-        message="Not enough test tokens in the wallet."
+        message="Not enough tokens in the wallet. At least 0.01 test CNXs are required for the gas fee."
         class="top-alert"
-        v-if="accountStatus.address !== '' && !ethEnough() && !cnxEnough()"
+        v-if="
+          nodeStatus.status !== nodeAPI.NODE_STATUS_STOPPED &&
+          nodeStatus.status !== nodeAPI.NODE_STATUS_INITIALIZING &&
+          accountStatus.address !== '' &&
+          !ethEnoughForGas()
+        "
       >
         <template #action>
           <a-button size="small" type="primary" :href="config.discord_link" target="_blank">Crynux Discord</a-button>
         </template>
         <template #description>
-        Get the test tokens for free from: <a-typography-link :href="config.discord_link" target="_blank">{{ config.discord_link }}</a-typography-link>
-      </template>
+          Get the test CNXs for free: <a-typography-link :href="config.discord_link" target="_blank">{{ config.discord_link }}</a-typography-link>
+        </template>
       </a-alert>
     </a-col>
   </a-row>
@@ -391,7 +452,7 @@ const getPercent = (num) => {
                 :icon="h(PlayCircleOutlined)"
                 @click="sendNodeAction('start')"
                 :loading="isTxSending || nodeStatus.tx_status === nodeAPI.TX_STATUS_PENDING"
-                :disabled="!ethEnough() || !cnxEnough()"
+                :disabled="!ethEnough()"
                 >Start</a-button
               >
             </div>
@@ -426,21 +487,25 @@ const getPercent = (num) => {
           <edit-account
             ref="accountEditor"
             :account-status="accountStatus"
-            @private-key-updated="updateSystemInfo"
+            @private-key-updated="privateKeyUpdated"
           ></edit-account>
         </template>
         <a-row>
-          <a-col :span="10">
+          <a-col :span="18">
             <a-tooltip>
               <template #title>{{ accountStatus.address }}</template>
-              <a-statistic title="Address" :value="shortAddress"></a-statistic>
+              <a-statistic title="Address">
+                <template #formatter>
+                    {{ shortAddress }}
+                    <a-button @click="copyText(accountStatus.address)">
+                        <template #icon><CopyOutlined /></template>
+                    </a-button>
+                </template>
+              </a-statistic>
             </a-tooltip>
           </a-col>
-          <a-col :span="7">
-            <a-statistic title="Gas token" :value="toEtherValue(accountStatus.eth_balance)"></a-statistic>
-          </a-col>
-          <a-col :span="7">
-            <a-statistic title="Test CNX" :value="toEtherValue(accountStatus.cnx_balance)"></a-statistic>
+          <a-col :span="6">
+            <a-statistic title="Test CNX" :value="toEtherValue(accountStatus.eth_balance)"></a-statistic>
           </a-col>
         </a-row>
       </a-card>
@@ -659,14 +724,10 @@ const getPercent = (num) => {
     </a-col>
   </a-row>
   <div class="bottom-bar">
-    <a-space class="footer-links">
+    <a-space class="footer-links" align="center">
       <a-typography-link href="https://crynux.ai" target="_blank">Home</a-typography-link>
       &nbsp;|&nbsp;
       <a-typography-link href="https://docs.crynux.ai" target="_blank">Docs</a-typography-link>
-      &nbsp;|&nbsp;
-      <a-typography-link href="https://github.com/crynux-ai" target="_blank"
-        >GitHub</a-typography-link
-      >
       &nbsp;|&nbsp;
       <a-typography-link href="https://blog.crynux.ai" target="_blank">Blog</a-typography-link>
       &nbsp;|&nbsp;
@@ -678,7 +739,15 @@ const getPercent = (num) => {
         >Discord</a-typography-link
       >
       &nbsp;|&nbsp;
-      <a-typography-text :style="{'color':'white'}">v{{ appVersion }}</a-typography-text>
+        <a-typography-text :style="{'color':'white'}">v{{ appVersion }}</a-typography-text>
+        &nbsp;|&nbsp;
+        <!-- Place this tag where you want the button to render. -->
+        <github-button
+            href="https://github.com/crynux-ai/crynux-node"
+            data-color-scheme="no-preference: light; light: light; dark: light;"
+            data-show-count="true" aria-label="Star Crynux Node on GitHub"
+            :style="{'position': 'relative', 'top': '4px'}"
+        >Star</github-button>
     </a-space>
     <img class="footer-logo" src="./logo-full-white.png" width="140" alt="Crynux logo" />
   </div>

@@ -56,10 +56,14 @@ def gpu_vram():
 
 
 @pytest.fixture
-async def root_contracts(tx_option, privkeys):
+def provider():
     from web3.providers.eth_tester import AsyncEthereumTesterProvider
 
     provider = AsyncEthereumTesterProvider()
+    return provider
+
+@pytest.fixture
+async def root_contracts(provider, tx_option, privkeys):
     c0 = Contracts(provider=provider, default_account_index=0)
 
     await c0.init(option=tx_option)
@@ -115,9 +119,8 @@ def config():
 
 @pytest.fixture
 async def node_contracts(
-    root_contracts: Contracts, tx_option: TxOption, privkeys: List[str]
+    provider, root_contracts: Contracts, tx_option: TxOption, privkeys: List[str]
 ):
-    token_contract_address = root_contracts.token_contract.address
     node_contract_address = root_contracts.node_contract.address
     task_contract_address = root_contracts.task_contract.address
     qos_contract_address = root_contracts.task_contract.address
@@ -126,9 +129,8 @@ async def node_contracts(
 
     cs = []
     for privkey in privkeys:
-        contracts = Contracts(provider=root_contracts.provider, privkey=privkey)
+        contracts = Contracts(provider=provider, privkey=privkey)
         await contracts.init(
-            token_contract_address=token_contract_address,
             node_contract_address=node_contract_address,
             task_contract_address=task_contract_address,
             qos_contract_address=qos_contract_address,
@@ -136,29 +138,6 @@ async def node_contracts(
             netstats_contract_address=netstats_contract_address,
             option=tx_option,
         )
-        amount = Web3.to_wei(1000, "ether")
-        if (await contracts.token_contract.balance_of(contracts.account)) < amount:
-            waiter = await root_contracts.token_contract.transfer(
-                contracts.account, amount, option=tx_option
-            )
-            await waiter.wait()
-        task_amount = Web3.to_wei(400, "ether")
-        if (
-            await contracts.token_contract.allowance(task_contract_address)
-        ) < task_amount:
-            waiter = await contracts.token_contract.approve(
-                task_contract_address, task_amount, option=tx_option
-            )
-            await waiter.wait()
-        node_amount = Web3.to_wei(400, "ether")
-        if (
-            await contracts.token_contract.allowance(node_contract_address)
-        ) < node_amount:
-            waiter = await contracts.token_contract.approve(
-                node_contract_address, node_amount, option=tx_option
-            )
-            await waiter.wait()
-
         cs.append(contracts)
     try:
         yield cs
@@ -415,6 +394,21 @@ async def start_nodes(
         ).status == models.NodeStatus.Running
 
 
+async def wait_nodes_start(node_managers: List[NodeManager]):
+    async def _wait(node_manager: NodeManager):
+        while True:
+            status = (await node_manager.state_cache.get_node_state()).status
+            assert status in [models.NodeStatus.Running, models.NodeStatus.Init]
+            if status != models.NodeStatus.Running:
+                await sleep(1)
+            else:
+                break
+    
+    async with create_task_group() as tg:
+        for node_manager in node_managers:
+            tg.start_soon(_wait, node_manager)
+
+
 @pytest.mark.parametrize("fail_step", [0, 1, 2, 3])
 @pytest.mark.parametrize("task_type", [models.TaskType.SD, models.TaskType.LLM])
 async def test_node_manager(
@@ -433,7 +427,8 @@ async def test_node_manager(
         for n in node_managers:
             tg.start_soon(n.run, False)
 
-        await start_nodes(node_managers, gpu_name, gpu_vram, tx_option)
+        # await start_nodes(node_managers, gpu_name, gpu_vram, tx_option)
+        await wait_nodes_start(node_managers)
 
         task_id, _, _ = await create_task(
             task_type, node_contracts[0], relay, tx_option=tx_option
@@ -524,8 +519,6 @@ async def test_node_manager_auto_cancel(
         await root_contracts.task_contract.update_timeout(1, option=tx_option)
 
         async with create_task_group() as tg:
-            tg.start_soon(node_managers[0].run, False)
-
             await start_nodes(node_managers, gpu_name, gpu_vram, tx_option)
 
             task_id, _, _ = await create_task(
@@ -545,6 +538,10 @@ async def test_node_manager_auto_cancel(
                 callback=_cancel,
                 filter_args={"taskId": task_id},
             )
+
+            await sleep(2)
+
+            tg.start_soon(node_managers[0].run, False)
 
             assert node_managers[0]._task_system is not None
 

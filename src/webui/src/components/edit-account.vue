@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 import accountAPI from '../api/v1/account'
 import createAccount from './create-account.vue';
 import config from '../config.json';
+import logger from '../log/log';
 
 const modalVisible = ref(false)
 const activeImportType = ref('private-key')
@@ -14,7 +15,11 @@ const isLoading = ref(false)
 const props = defineProps(['accountStatus'])
 const emits = defineEmits(['privateKeyUpdated'])
 
+let isCreatingWallet = false
+
 const showModal = () => {
+  if(isCreatingWallet)
+    return
   modalVisible.value = true
 }
 
@@ -25,10 +30,21 @@ const hideModal = () => {
   keystorePassphraseInput.value = ''
 }
 
+const startCreateWallet = () => {
+    isCreatingWallet = true
+    hideModal()
+}
+
 const onCloseCreateWallet = () => {
-  if (props.accountStatus.address === '') {
-    showModal();
-  }
+
+    logger.debug("EditAccount: onCloseCreateWallet")
+
+    isCreatingWallet = false
+
+    if (props.accountStatus.address === '') {
+        logger.debug("EditAccount: account address is empty, show edit account dialog")
+        showModal();
+    }
 };
 
 const readyToSubmit = computed(() => {
@@ -124,7 +140,8 @@ defineExpose({ showModal })
       <create-account
        v-if="!isLoading"
        :old-wallet-exists="props.accountStatus.address !== ''"
-       @start-create-wallet="hideModal"
+       :account-status="props.accountStatus"
+       @start-create-wallet="startCreateWallet"
        @close-create-wallet="onCloseCreateWallet"
        ></create-account>
       <a-button

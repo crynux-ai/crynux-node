@@ -3,9 +3,10 @@ import { ref } from 'vue'
 import accountAPI from '../api/v1/account'
 import { CopyOutlined, SmileTwoTone } from '@ant-design/icons-vue'
 import config from '../config.json'
+import logger from '../log/log'
 
-const props = defineProps(['oldWalletExists']);
-const emits = defineEmits(['startCreateWallet', 'closeCreateWallet', 'privateKeyUpdated']);
+const props = defineProps(['oldWalletExists', 'accountStatus']);
+const emits = defineEmits(['startCreateWallet', 'closeCreateWallet']);
 
 const modalVisible = ref(false);
 const isLoading = ref(false);
@@ -23,6 +24,7 @@ const start = () => {
 };
 
 const cancel = () => {
+    logger.debug("Closing account creation dialog")
     modalVisible.value = false;
     emits('closeCreateWallet');
 };
@@ -32,10 +34,10 @@ const createAccount = async () => {
 
     try {
         const wallet = await accountAPI.createAccount();
-        emits('privateKeyUpdated');
         privateKey.value = wallet.key;
         address.value = wallet.address;
         step.value = 'backup';
+        props.accountStatus.address = wallet.address;
     } finally {
         isLoading.value = false;
     }

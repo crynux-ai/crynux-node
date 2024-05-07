@@ -2,7 +2,7 @@ import secrets
 import time
 from typing import Tuple
 
-from anyio import create_task_group, create_memory_object_stream
+from anyio import create_task_group, create_memory_object_stream, sleep
 import pytest
 from web3 import Web3
 
@@ -16,42 +16,6 @@ async def contracts_for_task(
     contracts_with_tokens: Tuple[Contracts, Contracts, Contracts], tx_option
 ):
     c1, c2, c3 = contracts_with_tokens
-
-    node_contract_address = c1.node_contract.address
-    task_contract_address = c1.task_contract.address
-    task_amount = Web3.to_wei(400, "ether")
-    if (await c1.token_contract.allowance(task_contract_address)) < task_amount:
-        waiter = await c1.token_contract.approve(
-            task_contract_address, task_amount, option=tx_option
-        )
-        await waiter.wait()
-    if (await c2.token_contract.allowance(task_contract_address)) < task_amount:
-        waiter = await c2.token_contract.approve(
-            task_contract_address, task_amount, option=tx_option
-        )
-        await waiter.wait()
-    if (await c3.token_contract.allowance(task_contract_address)) < task_amount:
-        waiter = await c3.token_contract.approve(
-            task_contract_address, task_amount, option=tx_option
-        )
-        await waiter.wait()
-
-    node_amount = Web3.to_wei(400, "ether")
-    if (await c1.token_contract.allowance(node_contract_address)) < node_amount:
-        waiter = await c1.token_contract.approve(
-            node_contract_address, node_amount, option=tx_option
-        )
-        await waiter.wait()
-    if (await c2.token_contract.allowance(node_contract_address)) < node_amount:
-        waiter = await c2.token_contract.approve(
-            node_contract_address, node_amount, option=tx_option
-        )
-        await waiter.wait()
-    if (await c3.token_contract.allowance(node_contract_address)) < node_amount:
-        waiter = await c3.token_contract.approve(
-            node_contract_address, node_amount, option=tx_option
-        )
-        await waiter.wait()
 
     try:
         waiter = await c1.node_contract.join(
@@ -190,6 +154,7 @@ async def test_task_with_event_watcher(
 
     async with create_task_group() as tg:
         tg.start_soon(watcher.start)
+        await sleep(1)
 
         task_hash = Web3.keccak(text="task_hash")
         data_hash = Web3.keccak(text="data_hash")

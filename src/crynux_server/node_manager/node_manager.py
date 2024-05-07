@@ -34,7 +34,6 @@ _logger = logging.getLogger(__name__)
 async def _make_contracts(
     privkey: str,
     provider: str,
-    token_contract_address: str,
     node_contract_address: str,
     task_contract_address: str,
     qos_contract_address: Optional[str],
@@ -43,14 +42,13 @@ async def _make_contracts(
 ) -> Contracts:
     contracts = Contracts(provider_path=provider, privkey=privkey)
     await contracts.init(
-        token_contract_address=token_contract_address,
         node_contract_address=node_contract_address,
         task_contract_address=task_contract_address,
         qos_contract_address=qos_contract_address,
         task_queue_contract_address=task_queue_contract_address,
         netstats_contract_address=netstats_contract_address
     )
-    set_contracts(contracts)
+    await set_contracts(contracts)
     return contracts
 
 
@@ -190,7 +188,6 @@ class NodeManager(object):
                 self._contracts = await _make_contracts(
                     privkey=self._privkey,
                     provider=self.config.ethereum.provider,
-                    token_contract_address=self.config.ethereum.contract.token,
                     node_contract_address=self.config.ethereum.contract.node,
                     task_contract_address=self.config.ethereum.contract.task,
                     qos_contract_address=self.config.ethereum.contract.qos,
@@ -524,6 +521,9 @@ class NodeManager(object):
                 raise
 
     async def finish(self):
+        if self._tg is not None and not self._tg.cancel_scope.cancel_called:
+            self._tg.cancel_scope.cancel()
+
         if self._relay is not None:
             with fail_after(2, shield=True):
                 await self._relay.close()
@@ -543,8 +543,6 @@ class NodeManager(object):
         if self._contracts is not None:
             await self._contracts.close()
             self._contracts = None
-        if self._tg is not None and not self._tg.cancel_scope.cancel_called:
-            self._tg.cancel_scope.cancel()
 
 
 _node_manager: Optional[NodeManager] = None
