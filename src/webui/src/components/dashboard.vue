@@ -55,7 +55,7 @@ const nodeStatus = reactive({
 
 const accountStatus = reactive({
   address: '',
-  eth_balance: 0
+  balance: 0
 })
 
 const taskStatus = reactive({
@@ -93,19 +93,14 @@ const toEtherValue = (bigNum) => {
 const stakingMinimum = 4e20
 const gasMinimum = 1e16
 
-const ethEnoughForStaking = () => {
-    if (accountStatus.eth_balance === 0) return false
-    return accountStatus.eth_balance >= stakingMinimum
-}
-
 const ethEnoughForGas = () => {
-    if (accountStatus.eth_balance === 0) return false
-    return accountStatus.eth_balance >= gasMinimum
+    if (accountStatus.balance === 0) return false
+    return accountStatus.balance >= gasMinimum
 }
 
 const ethEnough = () => {
-    if (accountStatus.eth_balance === 0) return false
-    return accountStatus.eth_balance >= (stakingMinimum + gasMinimum)
+    if (accountStatus.balance === 0) return false
+    return accountStatus.balance >= (stakingMinimum + gasMinimum)
 }
 
 const privateKeyUpdated = async () => {
@@ -505,7 +500,7 @@ const copyText = async (text) => {
             </a-tooltip>
           </a-col>
           <a-col :span="6">
-            <a-statistic title="Test CNX" :value="toEtherValue(accountStatus.eth_balance)"></a-statistic>
+            <a-statistic title="Test CNX" :value="toEtherValue(accountStatus.balance)"></a-statistic>
           </a-col>
         </a-row>
       </a-card>
