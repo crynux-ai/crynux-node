@@ -19,7 +19,7 @@ router = APIRouter(prefix="/account")
 
 class AccountInfo(BaseModel):
     address: str
-    eth_balance: int
+    balance: int
 
 
 @router.get("", response_model=AccountInfo)
@@ -28,14 +28,14 @@ async def get_account_info():
     if privkey == "":
         return AccountInfo(
             address="",
-            eth_balance=0,
+            balance=0,
         )
     else:
         contracts = await wait_contracts()
-        res = AccountInfo(address=contracts.account, eth_balance=0)
+        res = AccountInfo(address=contracts.account, balance=0)
 
         try:
-            res.eth_balance = await contracts.get_balance(contracts.account)
+            res.balance = await contracts.get_balance(contracts.account)
         except Exception as e:
             _logger.error(e)
             raise HTTPException(status_code=500, detail=f"ContractError: {str(e)}")
