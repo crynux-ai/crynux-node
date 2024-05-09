@@ -135,7 +135,14 @@ $ ./venv/bin/activate
 1. Clone the project
 
 ```shell
-# git clone https://github.com/crynux-ai/crynux-node.git
+# git clone --recurse-submodules https://github.com/crynux-ai/crynux-node.git
+```
+
+Or if you are pulling the latest updates from a repo cloned earlier, use the following command:
+
+```shell
+# git pull
+# git submodule update --recursive
 ```
 
 2. Go to the root folder of the project
