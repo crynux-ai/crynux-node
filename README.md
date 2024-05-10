@@ -145,6 +145,10 @@ Activate the server's venv, and start from the server module:
 # Use ./venv/Scripts/Activate.ps1 on Windows
 $ ./venv/bin/activate
 
+# Use $env:CRYNUX_SERVER_CONFIG = $PWD.Path + '\config\config.yml' on Windows Powershell
+# Use set CRYNUX_SERVER_CONFIG=%cd%\config\config.yml on Windows CMD
+(venv) $ export CRYNUX_SERVER_CONFIG="${PWD}/config/config.yml"
+
 (venv) $ python -m crynux_server.main run
 ```
 
