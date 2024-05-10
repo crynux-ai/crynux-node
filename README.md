@@ -118,6 +118,10 @@ $ yarn build
 
 ### Start the node
 
+#### Start the node with desktop GUI
+
+On Windows/Mac/Linux with GUI, you could start the Crynux GUI directly.
+
 Activate the server's venv, and start from the ```src/app/main.py``` script:
 
 ```shell
@@ -128,6 +132,26 @@ $ ./venv/bin/activate
 
 (venv) $ python src/app/main.py
 ```
+
+#### Start the node in the terminal
+
+On servers with no GUI, you could start the Crynux server and access the Web UI from the browser.
+
+Activate the server's venv, and start from the server module:
+
+```shell
+# In the root folder of the project
+
+# Use ./venv/Scripts/Activate.ps1 on Windows
+$ ./venv/bin/activate
+
+(venv) $ python -m crynux_server.main run
+```
+
+After the server is started, you could visit [http://127.0.0.1:7412](http://127.0.0.1:7412) in the browser to control the node.
+
+If you are in a docker environment, or visiting the node from a remote machine, remember to expose the ```7412``` port
+and use the correct IP address.
 
 
 ## Build the Docker image from the source code
