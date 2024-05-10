@@ -15,6 +15,17 @@ Start a Crynux Node to share the spared local GPU to others in exchange for toke
 
 ## Start the node from source code
 
+### Prerequisite
+
+Make sure you have the following tools installed and accessible in the path
+
+* Python 3.10
+* Git
+* Golang 1.21
+* Nodejs
+* Yarn
+
+
 ### Prepare the config file
 
 Copy ```config/config.yml.shell_example``` to ```config/config.yml```. And adjust the file content according to your need:
