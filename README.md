@@ -15,6 +15,16 @@ Start a Crynux Node to share the spared local GPU to others in exchange for toke
 
 ## Start the node from source code
 
+**SECURITY: DO NOT use the Web UI to set the private key if you're accessing the Web UI from a remote machine!**
+
+
+If you're using HTTP protocol to access the WebUI, the connection is not encrypted. The private key might be intercepted by malicious middle man
+if transferred through the HTTP connection.
+
+
+Instead, set the private key in the config file directly. Or secure the connection using HTTPS.
+
+
 ### Prerequisite
 
 Make sure you have the following tools installed and accessible in the path
@@ -173,13 +183,6 @@ After the server is started, you could visit [http://127.0.0.1:7412](http://127.
 
 If you are in a docker environment, or visiting the node from a remote machine, remember to expose the ```7412``` port
 and use the correct IP address.
-
-**SECURITY: DO NOT use the Web UI to set the private key if you're accessing the Web UI from a remote machine!**
-If you're using HTTP protocol to access the WebUI, the connection is not encrypted. The private key might be intercepted by malicious middle man
-if transferred through the HTTP connection.
-
-
-Instead, set the private key in the config file directly. Or secure the connection using HTTPS.
 
 
 ## Build the Docker image from the source code
