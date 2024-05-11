@@ -19,7 +19,7 @@ Start a Crynux Node to share the spared local GPU to others in exchange for toke
 
 Make sure you have the following tools installed and accessible in the path
 
-* Python 3.10
+* Python 3.10 (you might need the dev package such as python3.10-dev on Ubuntu)
 * Git
 * Golang 1.21
 * Nodejs
@@ -53,6 +53,8 @@ $ ./venv/bin/activate
 
 # Use requirements_macos.txt on Mac
 (venv) $ pip install -r ./requirements_docker.txt
+
+# Compile the project and install it as a pip dependency. Make sure no error is reported during this step.
 (venv) $ pip install .
 ```
 
@@ -96,6 +98,8 @@ $ ./venv/bin/activate
 
 ## Use requirements_macos.txt on Mac
 (venv) $ pip install -r requirements_cuda.txt
+
+# Compile the module and install it as a pip dependency. Make sure no error is reported during this step.
 (venv) $ pip install .
 
 # Install the gpt-task package
@@ -103,6 +107,8 @@ $ ./venv/bin/activate
 
 # Use requirements_macos.txt on Mac
 (venv) $ pip install -r requirements_cuda.txt
+
+# Compile the module and install it as a pip dependency. Make sure no error is reported during this step.
 (venv) $ pip install .
 ```
 ### Prepare the WebUI
