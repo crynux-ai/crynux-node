@@ -1,13 +1,8 @@
 # -*- mode: python ; coding: utf-8 -*-
 from PyInstaller.utils.hooks import collect_data_files
-import argparse
-
-parser = argparse.ArgumentParser()
-parser.add_argument("--identity", action="store")
-options = parser.parse_args()
 
 a = Analysis(
-    ['crynux-node/src/app/main.py'],
+    ['crynux-node/src/crynux_server/run.py'],
     pathex=[],
     binaries=[
         ('dist/crynux_worker_process', '.'),
@@ -43,13 +38,10 @@ exe = EXE(
     bootloader_ignore_signals=False,
     strip=False,
     upx=True,
-    console=False,
+    console=True,
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,
-    codesign_identity=options.identity,
-    entitlements_file='entitlements.plist',
-    icon=['res/icon.icns'],
 )
 
 coll = COLLECT(
@@ -60,13 +52,4 @@ coll = COLLECT(
     upx=True,
     upx_exclude=[],
     name='crynux_node',
-)
-app = BUNDLE(
-    coll,
-    name='Crynux Node.app',
-    icon='res/icon.icns',
-    bundle_identifier='ai.crynux.node',
-    info_plist={
-        'CFBundleShortVersionString': '2.0.5',
-    },
 )
