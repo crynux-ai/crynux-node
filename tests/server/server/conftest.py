@@ -32,7 +32,7 @@ from crynux_server.task import (
     set_task_system,
 )
 from crynux_server.watcher import EventWatcher, MemoryBlockNumberCache, set_watcher
-from crynux_server.faucet import MockFaucet
+from crynux_server.faucet import MockFaucet, set_faucet
 
 @pytest.fixture
 def tx_option():
@@ -225,9 +225,10 @@ async def managers(
         await state_cache.set_node_state(models.NodeStatus.Stopped)
 
         faucet = MockFaucet()
+        set_faucet(faucet)
 
         state_manager = NodeStateManager(
-            state_cache=state_cache, contracts=contracts, faucet=faucet
+            state_cache=state_cache, contracts=contracts
         )
         if i == 0:
             set_node_state_manager(state_manager)

@@ -18,7 +18,7 @@ from crynux_server import models
 from crynux_server.config import Config, wait_privkey
 from crynux_server.contracts import Contracts, set_contracts
 from crynux_server.event_queue import DbEventQueue, EventQueue, set_event_queue
-from crynux_server.faucet import Faucet, WebFaucet
+from crynux_server.faucet import Faucet, WebFaucet, set_faucet
 from crynux_server.relay import Relay, WebRelay, set_relay
 from crynux_server.task import (DbTaskStateCache, InferenceTaskRunner,
                                 TaskStateCache, TaskSystem,
@@ -109,18 +109,18 @@ def _make_task_system(
 
 
 def _make_faucet(faucet_url: str) -> Faucet:
-    return WebFaucet(url=faucet_url)
+    faucet = WebFaucet(url=faucet_url)
+    set_faucet(faucet)
+    return faucet
 
 
 def _make_node_state_manager(
     state_cache: ManagerStateCache,
     contracts: Contracts,
-    faucet: Faucet,
 ):
     state_manager = NodeStateManager(
         state_cache=state_cache,
         contracts=contracts,
-        faucet=faucet,
     )
     set_node_state_manager(state_manager)
     return state_manager
@@ -168,6 +168,8 @@ class NodeManager(object):
         self._event_queue = event_queue
         self._contracts = contracts
         self._relay = relay
+        if faucet is None:
+            faucet = _make_faucet(self.config.faucet_url)
         self._faucet = faucet
         self._node_state_manager = node_state_manager
         self._watcher = watcher
@@ -187,6 +189,9 @@ class NodeManager(object):
 
     async def _init_components(self):
         _logger.info("Initializing node manager components.")
+        if self._faucet is None:
+            self._faucet = _make_faucet(self.config.faucet_url)
+
         if self._contracts is None or self._relay is None:
             if self._privkey is None:
                 if self.config.headless:
@@ -210,14 +215,10 @@ class NodeManager(object):
             if self._relay is None:
                 self._relay = _make_relay(self._privkey, self.config.relay_url)
 
-        if self._faucet is None:
-            self._faucet = _make_faucet(self.config.faucet_url)
-
         if self._node_state_manager is None:
             self._node_state_manager = _make_node_state_manager(
                 state_cache=self.state_cache,
                 contracts=self._contracts,
-                faucet=self._faucet,
             )
 
         if self._watcher is None or self._task_system is None:
