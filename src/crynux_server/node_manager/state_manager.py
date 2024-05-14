@@ -4,9 +4,11 @@ from typing import Optional
 
 from anyio import CancelScope, fail_after, get_cancelled_exc_class, sleep
 from web3 import Web3
+from tenacity import AsyncRetrying, before_sleep_log, wait_fixed, stop_after_attempt, stop_never
 
 from crynux_server import models
 from crynux_server.contracts import Contracts, TxOption, TxRevertedError
+from crynux_server.faucet import Faucet
 
 from .state_cache import ManagerStateCache
 
@@ -18,9 +20,11 @@ class NodeStateManager(object):
         self,
         state_cache: ManagerStateCache,
         contracts: Contracts,
+        faucet: Optional[Faucet] = None,
     ):
         self.state_cache = state_cache
         self.contracts = contracts
+        self.faucet = faucet
         self._cancel_scope: Optional[CancelScope] = None
 
     async def _get_node_status(self):
@@ -107,7 +111,7 @@ class NodeStateManager(object):
             raise
 
     async def try_start(
-        self, gpu_name: str, gpu_vram: int, interval: float = 5, *, option: "Optional[TxOption]" = None
+        self, gpu_name: str, gpu_vram: int, interval: float = 5, retry: bool = True, *, option: "Optional[TxOption]" = None
     ):
         _logger.info("Trying to join the network automatically...")
         while True:
@@ -134,8 +138,13 @@ class NodeStateManager(object):
                 balance = await self.contracts.get_balance(
                     self.contracts.account
                 )
-                if balance < node_amount:
-                    raise ValueError("Node token balance is not enough to join.")
+                if balance == 0:
+                    if self.faucet is not None:
+                        success = await self.faucet.request_token(self.contracts.account)
+                        if not success:
+                            raise ValueError("Cannot request tokens from faucet")
+                elif balance < node_amount:
+                    raise ValueError("Node token balance is not enough to join")
                 waiter = await self.contracts.node_contract.join(
                     gpu_name=gpu_name,
                     gpu_vram=gpu_vram,

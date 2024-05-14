@@ -13,8 +13,7 @@ async def test_get_account_empty(client: TestClient):
     resp.raise_for_status()
     resp_data = resp.json()
     assert resp_data["address"] == ""
-    assert resp_data["eth_balance"] == 0
-    assert resp_data["cnx_balance"] == 0
+    assert resp_data["balance"] == 0
 
 
 async def test_create_account(running_client: TestClient):
@@ -82,4 +81,4 @@ async def test_get_account(running_client: TestClient, accounts, privkeys):
     resp.raise_for_status()
     resp_data = resp.json()
     assert resp_data["address"] == accounts[0]
-    assert resp_data["eth_balance"] > 0
+    assert resp_data["balance"] > 0
