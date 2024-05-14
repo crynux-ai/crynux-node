@@ -32,7 +32,7 @@ from crynux_server.task import (
     set_task_system,
 )
 from crynux_server.watcher import EventWatcher, MemoryBlockNumberCache, set_watcher
-
+from crynux_server.faucet import MockFaucet
 
 @pytest.fixture
 def tx_option():
@@ -104,6 +104,7 @@ def config():
             "task_dir": "task",
             "db": "",
             "relay_url": "",
+            "faucet_url": "",
             "celery": {"broker": "", "backend": ""},
             "distributed": False,
             "headless": True,
@@ -223,8 +224,10 @@ async def managers(
         # set init state to stopped to bypass prefetch stage
         await state_cache.set_node_state(models.NodeStatus.Stopped)
 
+        faucet = MockFaucet()
+
         state_manager = NodeStateManager(
-            state_cache=state_cache, contracts=contracts
+            state_cache=state_cache, contracts=contracts, faucet=faucet
         )
         if i == 0:
             set_node_state_manager(state_manager)
@@ -238,6 +241,7 @@ async def managers(
             event_queue=queue,
             contracts=contracts,
             relay=relay,
+            faucet=faucet,
             watcher=watcher,
             task_system=system,
             node_state_manager=state_manager,

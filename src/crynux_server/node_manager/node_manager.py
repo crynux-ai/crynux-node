@@ -1,28 +1,30 @@
 from __future__ import annotations
 
-from datetime import datetime
 import json
 import logging
 import os
+from datetime import datetime
 from typing import List, Optional, Type, cast
 
-from anyio import (Event, TASK_STATUS_IGNORED, create_task_group, fail_after,
+from anyio import (TASK_STATUS_IGNORED, Event, create_task_group, fail_after,
                    get_cancelled_exc_class, move_on_after, to_thread)
 from anyio.abc import TaskGroup, TaskStatus
+from tenacity import (AsyncRetrying, before_sleep_log, stop_after_attempt,
+                      stop_never, wait_fixed)
 from web3 import Web3
 from web3.types import EventData
-from tenacity import AsyncRetrying, before_sleep_log, wait_fixed, stop_after_attempt, stop_never
 
 from crynux_server import models
 from crynux_server.config import Config, wait_privkey
 from crynux_server.contracts import Contracts, set_contracts
 from crynux_server.event_queue import DbEventQueue, EventQueue, set_event_queue
+from crynux_server.faucet import Faucet, WebFaucet
 from crynux_server.relay import Relay, WebRelay, set_relay
 from crynux_server.task import (DbTaskStateCache, InferenceTaskRunner,
-                           TaskStateCache, TaskSystem, set_task_state_cache,
-                           set_task_system)
+                                TaskStateCache, TaskSystem,
+                                set_task_state_cache, set_task_system)
 from crynux_server.watcher import (BlockNumberCache, DbBlockNumberCache,
-                              EventWatcher, set_watcher)
+                                   EventWatcher, set_watcher)
 
 from .state_cache import (DbNodeStateCache, DbTxStateCache, ManagerStateCache,
                           StateCache, set_manager_state_cache)
@@ -46,7 +48,7 @@ async def _make_contracts(
         task_contract_address=task_contract_address,
         qos_contract_address=qos_contract_address,
         task_queue_contract_address=task_queue_contract_address,
-        netstats_contract_address=netstats_contract_address
+        netstats_contract_address=netstats_contract_address,
     )
     await set_contracts(contracts)
     return contracts
@@ -69,9 +71,7 @@ def _make_watcher(
     queue: EventQueue,
     block_number_cache_cls: Type[BlockNumberCache],
 ):
-    watcher = EventWatcher.from_contracts(
-        contracts
-    )
+    watcher = EventWatcher.from_contracts(contracts)
 
     block_cache = block_number_cache_cls()
     watcher.set_blocknumber_cache(block_cache)
@@ -91,25 +91,36 @@ def _make_watcher(
 
 
 def _make_task_system(
-    queue: EventQueue, distributed: bool, retry: bool, task_state_cache_cls: Type[TaskStateCache]
+    queue: EventQueue,
+    distributed: bool,
+    retry: bool,
+    task_state_cache_cls: Type[TaskStateCache],
 ) -> TaskSystem:
     cache = task_state_cache_cls()
     set_task_state_cache(cache)
 
-    system = TaskSystem(state_cache=cache, queue=queue, distributed=distributed, retry=retry)
+    system = TaskSystem(
+        state_cache=cache, queue=queue, distributed=distributed, retry=retry
+    )
     system.set_runner_cls(runner_cls=InferenceTaskRunner)
 
     set_task_system(system)
     return system
 
 
+def _make_faucet(faucet_url: str) -> Faucet:
+    return WebFaucet(url=faucet_url)
+
+
 def _make_node_state_manager(
     state_cache: ManagerStateCache,
     contracts: Contracts,
+    faucet: Faucet,
 ):
     state_manager = NodeStateManager(
         state_cache=state_cache,
         contracts=contracts,
+        faucet=faucet,
     )
     set_node_state_manager(state_manager)
     return state_manager
@@ -131,6 +142,7 @@ class NodeManager(object):
         event_queue: Optional[EventQueue] = None,
         contracts: Optional[Contracts] = None,
         relay: Optional[Relay] = None,
+        faucet: Optional[Faucet] = None,
         node_state_manager: Optional[NodeStateManager] = None,
         watcher: Optional[EventWatcher] = None,
         task_system: Optional[TaskSystem] = None,
@@ -156,6 +168,7 @@ class NodeManager(object):
         self._event_queue = event_queue
         self._contracts = contracts
         self._relay = relay
+        self._faucet = faucet
         self._node_state_manager = node_state_manager
         self._watcher = watcher
         self._task_system = task_system
@@ -197,10 +210,14 @@ class NodeManager(object):
             if self._relay is None:
                 self._relay = _make_relay(self._privkey, self.config.relay_url)
 
+        if self._faucet is None:
+            self._faucet = _make_faucet(self.config.faucet_url)
+
         if self._node_state_manager is None:
             self._node_state_manager = _make_node_state_manager(
                 state_cache=self.state_cache,
                 contracts=self._contracts,
+                faucet=self._faucet,
             )
 
         if self._watcher is None or self._task_system is None:
@@ -226,9 +243,9 @@ class NodeManager(object):
         if not self.config.distributed:
 
             ### Prefetech ###
+            from crynux_worker.inference import inference
             from crynux_worker.models import ModelConfig, ProxyConfig
             from crynux_worker.prefetch import prefetch
-            from crynux_worker.inference import inference
 
             assert (
                 self.config.task_config is not None
@@ -293,8 +310,8 @@ class NodeManager(object):
                     "safety_checker": False,
                     "cfg": 7,
                     "seed": 99975892,
-                    "steps": 40
-                }
+                    "steps": 40,
+                },
             }
             current_ts = int(datetime.now().timestamp())
             try:
@@ -302,7 +319,9 @@ class NodeManager(object):
                     await to_thread.run_sync(
                         inference,
                         json.dumps(sd_inference_args),
-                        os.path.join(self.config.task_config.output_dir, f"_sd_init_{current_ts}"),
+                        os.path.join(
+                            self.config.task_config.output_dir, f"_sd_init_{current_ts}"
+                        ),
                         self.config.task_config.hf_cache_dir,
                         self.config.task_config.external_cache_dir,
                         self.config.task_config.script_dir,
@@ -313,8 +332,10 @@ class NodeManager(object):
                         cancellable=True,
                     )
             except TimeoutError as e:
-                msg = ("The initial inference task exceeded the timeout limit(5 min). Maybe your device does not meet "
-                       "the lowest hardware requirements")
+                msg = (
+                    "The initial inference task exceeded the timeout limit(5 min). Maybe your device does not meet "
+                    "the lowest hardware requirements"
+                )
                 raise ValueError(msg) from e
 
         _logger.info("Node manager initializing complete.")
@@ -338,7 +359,10 @@ class NodeManager(object):
         task = await self._contracts.task_contract.get_task(task_id=task_id)
         round = task.selected_nodes.index(self._contracts.account)
         state = models.TaskState(
-            task_id=task_id, round=round, timeout=task.timeout, status=models.TaskStatus.Pending
+            task_id=task_id,
+            round=round,
+            timeout=task.timeout,
+            status=models.TaskStatus.Pending,
         )
 
         events = []
@@ -407,11 +431,13 @@ class NodeManager(object):
                     with fail_after(5, shield=True):
                         await self.state_cache.set_node_state(
                             status=models.NodeStatus.Error,
-                            message="Node manager running error: cannot sync node state from chain."
+                            message="Node manager running error: cannot sync node state from chain.",
                         )
                     raise
 
-    async def _watch_events(self, *, task_status: TaskStatus[None] = TASK_STATUS_IGNORED):
+    async def _watch_events(
+        self, *, task_status: TaskStatus[None] = TASK_STATUS_IGNORED
+    ):
         assert self._watcher is not None
 
         # call task_status.started() only once
@@ -438,7 +464,7 @@ class NodeManager(object):
                     with fail_after(5, shield=True):
                         await self.state_cache.set_node_state(
                             status=models.NodeStatus.Error,
-                            message="Node manager running error: cannot watch events from chain."
+                            message="Node manager running error: cannot watch events from chain.",
                         )
                     raise
 
@@ -484,22 +510,32 @@ class NodeManager(object):
                 # start watcher after the joining operation will cause missing the TaskStarted event.
                 await tg.start(self._watch_events)
 
+                if not self.config.headless:
+                    tg.start_soon(self._sync_state)
+
                 assert self._node_state_manager is not None
+
                 try:
-                    await self._node_state_manager.try_start(self.gpu_name, self.gpu_vram)
-                except Exception as e:
-                    if self.config.headless:
-                        raise e
-                    else:
-                        _logger.warning(e)
-                        _logger.info("Cannot auto join the network")
+                    async for attemp in AsyncRetrying(
+                        stop=stop_never if self._retry else stop_after_attempt(1),
+                        wait=wait_fixed(self._retry_delay),
+                        before_sleep=before_sleep_log(_logger, logging.INFO),
+                        reraise=True,
+                    ):
+                        with attemp:
+                            try:
+                                await self._node_state_manager.try_start(
+                                    self.gpu_name, self.gpu_vram
+                                )
+                            except Exception as e:
+                                _logger.warning(e)
+                                _logger.info("Cannot auto join the network")
+                                raise e
                 finally:
                     tx_status = (await self.state_cache.get_tx_state()).status
                     if tx_status == models.TxStatus.Pending:
                         await self.state_cache.set_tx_state(models.TxStatus.Success)
 
-                if not self.config.headless:
-                    tg.start_soon(self._sync_state)
         finally:
             self._tg = None
 
@@ -528,6 +564,9 @@ class NodeManager(object):
             with fail_after(2, shield=True):
                 await self._relay.close()
             self._relay = None
+        if self._faucet is not None:
+            await self._faucet.close()
+            self._faucet = None
         if self._watcher is not None:
             self._watcher.stop()
             self._watcher = None

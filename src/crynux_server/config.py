@@ -150,6 +150,7 @@ class Config(BaseSettings):
     db: str
     task_dir: str
     relay_url: str
+    faucet_url: str
 
     celery: Optional[CeleryConfig] = None
 
