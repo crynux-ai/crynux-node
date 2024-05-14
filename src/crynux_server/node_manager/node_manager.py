@@ -189,9 +189,6 @@ class NodeManager(object):
 
     async def _init_components(self):
         _logger.info("Initializing node manager components.")
-        if self._faucet is None:
-            self._faucet = _make_faucet(self.config.faucet_url)
-
         if self._contracts is None or self._relay is None:
             if self._privkey is None:
                 if self.config.headless:
@@ -214,6 +211,20 @@ class NodeManager(object):
                 )
             if self._relay is None:
                 self._relay = _make_relay(self._privkey, self.config.relay_url)
+
+        assert self._faucet is not None
+        balance = await self._contracts.get_balance(self._contracts.account)
+        if balance == 0:
+            try:
+                success = await self._faucet.request_token(self._contracts.account)
+                if success:
+                    _logger.info("Requesting token from faucet succeed")
+                else:
+                    _logger.info(
+                        "Requesting token from faucet fails, this address already has token or has requested before"
+                    )
+            except Exception as e:
+                _logger.error(f"Request token from faucet error: {e}")
 
         if self._node_state_manager is None:
             self._node_state_manager = _make_node_state_manager(
