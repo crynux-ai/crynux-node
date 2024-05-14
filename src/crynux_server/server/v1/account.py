@@ -7,9 +7,10 @@ from fastapi import APIRouter, Body, HTTPException
 from pydantic import BaseModel, Field, Json, SecretStr
 from typing_extensions import Annotated
 
-from crynux_server.config import set_privkey, get_privkey
+from crynux_server.config import get_privkey, set_privkey
 from crynux_server.contracts import wait_contracts
 
+from ..depends import FaucetDep
 from .utils import CommonResponse
 
 _logger = logging.getLogger(__name__)
@@ -54,19 +55,26 @@ class PrivkeyInput(BaseModel):
 
 
 @router.put("", response_model=CommonResponse)
-async def set_account(input: Annotated[PrivkeyInput, Body()]):
+async def set_account(input: Annotated[PrivkeyInput, Body()], *, faucet: FaucetDep):
     if input.type == "private_key":
         await set_privkey(input.private_key)
-    if input.type == "keystore":
+        privkey = input.private_key
+    else:
         try:
-            privkey = await to_thread.run_sync(
-                Account.decrypt, input.keystore, input.passphrase.get_secret_value()
-            )
+            privkey = (
+                await to_thread.run_sync(
+                    Account.decrypt, input.keystore, input.passphrase.get_secret_value()
+                )
+            ).hex()
         except get_cancelled_exc_class():
             raise
         except Exception as e:
             raise HTTPException(400, str(e))
-        await set_privkey(privkey.hex())
+        await set_privkey(privkey)
+
+    acct = Account.from_key(privkey)
+    address = acct.address
+    await faucet.request_token(address)
 
     return CommonResponse()
 
@@ -77,10 +85,11 @@ class AccountWithKey(BaseModel):
 
 
 @router.post("", response_model=AccountWithKey)
-async def create_account():
+async def create_account(*, faucet: FaucetDep):
     acct = Account.create()
     address: str = acct.address
     privkey: str = acct.key.hex()
     await set_privkey(privkey=privkey)
+    await faucet.request_token(address)
 
     return AccountWithKey(address=address, key=privkey)
