@@ -6,7 +6,7 @@ from crynux_server.contracts import Contracts
 from crynux_server.node_manager import NodeStateManager, ManagerStateCache
 from crynux_server.node_manager.state_cache import MemoryNodeStateCache, MemoryTxStateCache
 from crynux_server.stop import _stop
-
+from crynux_server.faucet import MockFaucet
 
 @pytest.fixture
 def tx_option():
@@ -29,6 +29,7 @@ def test_config():
             "task_dir": "task",
             "db": "",
             "relay_url": "",
+            "faucet_url": "",
             "celery": {"broker": "", "backend": ""},
             "distributed": False,
             "task_config": {
