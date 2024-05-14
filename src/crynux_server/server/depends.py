@@ -13,7 +13,6 @@ from crynux_server.node_manager import (
     get_node_state_manager,
 )
 from crynux_server.task import TaskStateCache, get_task_state_cache
-from crynux_server.faucet import get_faucet, Faucet
 
 __all__ = [
     "ConfigDep",
@@ -21,7 +20,6 @@ __all__ = [
     "TaskStateCacheDep",
     "ContractsDep",
     "EventQueueDep",
-    "FaucetDep"
 ]
 
 
@@ -32,9 +30,6 @@ async def _get_config():
 async def _get_manager_state_cache():
     return get_manager_state_cache()
 
-
-async def _get_faucet():
-    return get_faucet()
 
 async def _get_node_state_manager():
     try:
@@ -78,4 +73,3 @@ NodeStateManagerDep = Annotated[Optional[NodeStateManager], Depends(_get_node_st
 EventQueueDep = Annotated[Optional[EventQueue], Depends(_get_event_queue)]
 TaskStateCacheDep = Annotated[Optional[TaskStateCache], Depends(_get_task_state_cache)]
 ContractsDep = Annotated[Optional[Contracts], Depends(_get_contracts)]
-FaucetDep = Annotated[Faucet, Depends(_get_faucet)]
