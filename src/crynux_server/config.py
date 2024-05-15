@@ -168,7 +168,7 @@ class Config(BaseSettings):
 
     model_config = YamlSettingsConfigDict(
         env_nested_delimiter="__",
-        yaml_file=os.getenv("CRYNUX_SERVER_CONFIG", "config/server_config.yaml"),
+        yaml_file=os.getenv("CRYNUX_SERVER_CONFIG", "config/config.yml"),
         env_file=".env",
     )
 
