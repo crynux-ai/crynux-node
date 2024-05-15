@@ -1,9 +1,10 @@
-import os
-import sys
-import platform
 import logging
-
-from typing import List
+import os
+import platform
+import re
+import subprocess
+import sys
+from typing import Dict, List, Tuple
 
 _logger = logging.getLogger(__name__)
 
@@ -13,18 +14,26 @@ def _osx_bundle_exe_head(job: str) -> List[str]:
         os.path.join(
             os.path.dirname(os.path.dirname(sys.executable)),
             "Resources",
-            "crynux_worker_process"))
+            "crynux_worker_process",
+        )
+    )
     _logger.debug("Execute Crynux worker from: ", exe)
     return [exe, job]
 
 
 def _windows_bundle_exe_head(job: str) -> List[str]:
-    exe = os.path.abspath(os.path.join(os.path.dirname(sys.executable), "crynux_worker_process", "crynux_worker_process.exe"))
+    exe = os.path.abspath(
+        os.path.join(
+            os.path.dirname(sys.executable),
+            "crynux_worker_process",
+            "crynux_worker_process.exe",
+        )
+    )
     _logger.debug("Execute Crynux worker from: ", exe)
     return [exe, job]
 
 
-def _script_cmd_head(job: str, script_dir: str="") -> List[str]:
+def _script_cmd_head(job: str, script_dir: str = "") -> List[str]:
     exe = "python"
     worker_venv = os.path.abspath(os.path.join(script_dir, "venv"))
     if os.path.exists(worker_venv):
@@ -40,7 +49,7 @@ def _script_cmd_head(job: str, script_dir: str="") -> List[str]:
     return [exe, script_file, job]
 
 
-def get_exe_head(job: str, script_dir: str="") -> List[str]:
+def get_exe_head(job: str, script_dir: str = "") -> List[str]:
     if getattr(sys, "frozen", False):
         system_name = platform.system()
         if system_name == "Darwin":
@@ -54,3 +63,24 @@ def get_exe_head(job: str, script_dir: str="") -> List[str]:
 
     else:
         return _script_cmd_head(job, script_dir)
+
+
+def _is_task_success(stdout: str) -> bool:
+    pattern = re.compile(r"crynux worker process error")
+    return pattern.search(stdout) is None
+
+
+def run_worker(args: List[str], envs: Dict[str, str]) -> Tuple[bool, str]:
+    res = subprocess.run(
+        args,
+        env=envs,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        encoding="utf-8",
+    )
+
+    output = res.stdout
+    success = _is_task_success(output)
+    if not success:
+        _logger.error(f"crynux worker error, \nargs: {args}\n, \noutput: {output}\n")
+    return success, output

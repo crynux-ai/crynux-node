@@ -1,9 +1,7 @@
 from __future__ import annotations
 
-import json
 import logging
 import os
-import subprocess
 from typing import List
 
 from crynux_worker import config, utils
@@ -34,7 +32,9 @@ def call_prefetch_script(
         proxy,
     )
     _logger.info("Start prefetching models")
-    subprocess.check_call(args, env=envs)
+    success, _ = utils.run_worker(args=args, envs=envs)
+    if not success:
+        raise ValueError("prefetch failed")
     _logger.info("Prefetching models complete")
 
 

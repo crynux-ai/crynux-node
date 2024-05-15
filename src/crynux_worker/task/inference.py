@@ -5,12 +5,11 @@ import logging
 import os
 import re
 import shutil
-import subprocess
 from typing import cast
 
 from crynux_worker.config import get_config
 from crynux_worker.models import ProxyConfig
-from crynux_worker.utils import get_exe_head
+from crynux_worker.utils import get_exe_head, run_worker
 
 from . import utils
 from .error import TaskError, TaskInvalid
@@ -19,9 +18,7 @@ _logger = logging.getLogger(__name__)
 
 
 def match_error(stdout: str) -> bool:
-    pattern = re.compile(
-        r"Task args validation error|Task execution error|Task model not found"
-    )
+    pattern = re.compile(r"Task args invalid|Task execution error|Task model invalid")
     return pattern.search(stdout) is not None
 
 
@@ -88,11 +85,13 @@ def inference(
     log_file = os.path.join(inference_logs_dir, f"{task_id}.log")
 
     args = get_exe_head("inference", script_dir)
-    args.extend([
-        str(task_type),
-        result_dir,
-        f"{task_args}",
-    ])
+    args.extend(
+        [
+            str(task_type),
+            result_dir,
+            f"{task_args}",
+        ]
+    )
 
     envs = os.environ.copy()
     envs.update(
@@ -106,18 +105,11 @@ def inference(
 
     _logger.info("Start inference task.")
     with open(log_file, mode="w", encoding="utf-8") as f:
-        res = subprocess.run(
-            args,
-            env=envs,
-            stdout=f,
-            stderr=subprocess.STDOUT,
-            encoding="utf-8",
-        )
-    if res.returncode == 0:
-        _logger.info("Inference task success.")
+        success, output = run_worker(args=args, envs=envs)
+        f.write(output)
+    if success:
+        _logger.info("Inference task success")
     else:
-        with open(log_file, mode="r", encoding="utf-8") as f:
-            output = f.read()
         if match_error(output):
             raise TaskInvalid
         else:
@@ -127,7 +119,9 @@ def inference(
         result_files = sorted(os.listdir(result_dir))
         result_paths = [os.path.join(result_dir, file) for file in result_files]
 
-        utils.upload_result(task_type, result_url + f"/v1/tasks/{task_id}/result", result_paths)
+        utils.upload_result(
+            task_type, result_url + f"/v1/tasks/{task_id}/result", result_paths
+        )
         _logger.info("Upload inference task result.")
 
 
@@ -204,5 +198,7 @@ def mock_inference(
             json.dump(res, f, ensure_ascii=False)
 
     if distributed:
-        utils.upload_result(task_type, result_url + f"/v1/tasks/{task_id}/result", ["test.png"])
+        utils.upload_result(
+            task_type, result_url + f"/v1/tasks/{task_id}/result", ["test.png"]
+        )
         _logger.info("Upload inference task result.")
