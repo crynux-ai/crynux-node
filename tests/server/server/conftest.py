@@ -1,7 +1,7 @@
 from typing import List
 
 import pytest
-from anyio import create_task_group
+from anyio import create_task_group, sleep
 from eth_account import Account
 from fastapi.testclient import TestClient
 from web3 import Web3
@@ -261,6 +261,7 @@ async def running_client(managers):
     async with create_task_group() as tg:
         for manager in managers:
             tg.start_soon(manager.run, False)
+        await sleep(0.1)
         yield client
         for manager in managers:
             await manager.finish()
