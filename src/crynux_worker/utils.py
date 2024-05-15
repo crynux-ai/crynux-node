@@ -76,7 +76,7 @@ def run_worker(args: List[str], envs: Dict[str, str]) -> Tuple[bool, str]:
         env=envs,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
-        encoding="utf-8",
+        text=True,
     )
 
     output = res.stdout
