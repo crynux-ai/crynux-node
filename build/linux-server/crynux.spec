@@ -4,15 +4,8 @@ from PyInstaller.utils.hooks import collect_data_files
 a = Analysis(
     ['crynux-node/src/crynux_server/run.py'],
     pathex=[],
-    binaries=[
-        ('dist/crynux_worker_process', '.'),
-    ],
-    datas=[
-        ('config/*', 'config/'),
-        ('data', 'data'),
-        ('res', 'res'),
-        ('webui', 'webui'),
-    ] + collect_data_files('crynux_server.contracts.abi'),
+    binaries=[],
+    datas=[] + collect_data_files('crynux_server.contracts.abi'),
     hiddenimports=['aiosqlite', "crynux_server.contracts.abi"],
     collect_submodules=["crynux_server.contracts.abi"],
     collect_data=["crynux_server.contracts.abi"],
