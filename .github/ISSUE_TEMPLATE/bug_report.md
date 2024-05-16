@@ -1,12 +1,17 @@
 ---
 name: Bug report
 about: Create a report to help us identify the problem
-title: Error message from the logs, or error message from the WebUI, or describe the
-  problem in details
+title: ''
 labels: ''
 assignees: ''
 
 ---
+
+## Problem Description
+
+> Describe the problem in details
+
+
 
 ## Device Position
 
@@ -45,9 +50,3 @@ assignees: ''
 > Please provide the full stack trace of the error
 > Attach the log file
 > Tutorial: [Locate the Error Message](https://docs.crynux.ai/troubleshooting/locate-the-error-message)
-
-
-
-## Problem Description
-
-> Describe the problem in details
