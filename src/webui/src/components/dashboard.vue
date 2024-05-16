@@ -306,7 +306,7 @@ const copyText = async (text) => {
       ></a-alert>
       <a-alert
         type="error"
-        message="Not enough tokens in the wallet. At least 400.01 test CNXs are required."
+        message="Waiting for tokens. At least 400.01 test CNXs are required."
         class="top-alert"
         v-if="
           (nodeStatus.status === nodeAPI.NODE_STATUS_STOPPED || nodeStatus.status === nodeAPI.NODE_STATUS_INITIALIZING) &&
@@ -323,7 +323,7 @@ const copyText = async (text) => {
       </a-alert>
       <a-alert
         type="error"
-        message="Not enough tokens in the wallet. At least 0.01 test CNXs are required for the gas fee."
+        message="Waiting for tokens. At least 0.01 test CNXs are required for the gas fee."
         class="top-alert"
         v-if="
           nodeStatus.status !== nodeAPI.NODE_STATUS_STOPPED &&

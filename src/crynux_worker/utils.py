@@ -23,6 +23,10 @@ def _windows_bundle_exe_head(job: str) -> List[str]:
     _logger.debug("Execute Crynux worker from: ", exe)
     return [exe, job]
 
+def _linux_bundle_exe_head(job: str) -> List[str]:
+    exe = os.path.abspath(os.path.join(os.path.dirname(sys.executable), "crynux_worker_process", "crynux_worker_process"))
+    _logger.debug("Execute Crynux worker from: ", exe)
+    return [exe, job]
 
 def _script_cmd_head(job: str, script_dir: str="") -> List[str]:
     exe = "python"
@@ -47,6 +51,8 @@ def get_exe_head(job: str, script_dir: str="") -> List[str]:
             return _osx_bundle_exe_head(job)
         elif system_name == "Windows":
             return _windows_bundle_exe_head(job)
+        elif system_name == "Linux":
+            return _linux_bundle_exe_head(job)
         else:
             error = RuntimeError(f"Unsupported platform: {system_name}")
             _logger.error(error)

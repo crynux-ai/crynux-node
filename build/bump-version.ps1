@@ -18,3 +18,6 @@ Write-Output "Bumping version number to: $VERSION"
 
 ## Update build/macos/crynux.spec
 (Get-Content "build/macos/crynux.spec") -replace "'CFBundleShortVersionString': '[0-9].[0-9].[0-9]'", "'CFBundleShortVersionString': '$VERSION'" | Set-Content "build/macos/crynux.spec"
+
+## Update build/linux-server/package.sh
+(Get-Content "build/linux-server/package.sh") -replace "VERSION=[0-9].[0-9].[0-9]", "VERSION=$VERSION" | Set-Content "build/linux-server/package.sh"
