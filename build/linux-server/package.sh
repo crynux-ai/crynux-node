@@ -39,4 +39,4 @@ RELEASE_NAME="crynux_node_helium_v${VERSION}_linux_bin_x64"
 mv dist/crynux_node "dist/$RELEASE_NAME"
 
 ## Generate the tar file
-tar -czvf -C dist "$RELEASE_NAME.tar.gz" "$RELEASE_NAME"
+tar -czf "dist/$RELEASE_NAME.tar.gz" -C dist "$RELEASE_NAME"
