@@ -1,5 +1,6 @@
 #!/bin/bash
 # Example call: ./package.sh
+VERSION=2.0.5
 
 ## Package the worker
 source worker/venv/bin/activate
@@ -33,5 +34,9 @@ cp -r "webui/dist" "dist/crynux_node/webui/"
 ## Copy the resources
 cp -r "res" "dist/crynux_node/"
 
+RELEASE_NAME="crynux_node_helium_v${VERSION}_linux_bin_x64"
+
+mv dist/crynux_node "dist/$RELEASE_NAME"
+
 ## Generate the tar file
-tar -czvf crynux_node.tar.gz "dist/crynux_node"
+tar -czvf "dist/$RELEASE_NAME.tar.gz" "dist/$RELEASE_NAME"
