@@ -1,10 +1,8 @@
 from __future__ import annotations
 
 from datetime import datetime
-import json
 import logging
 import os
-import subprocess
 from typing import List
 
 from crynux_worker import config, utils
@@ -39,7 +37,9 @@ def call_inference_script(
     args.extend(["0", output_dir, task_args_str])
 
     _logger.info(f"Start inference models, save in {output_dir}")
-    subprocess.check_call(args, env=envs)
+    success, _ = utils.run_worker(args=args, envs=envs)
+    if not success:
+        raise ValueError("inference models failed")
     complete_ts = datetime.now()
     _logger.info(f"Inference models complete: {str(complete_ts - start_ts)}")
 

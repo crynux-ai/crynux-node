@@ -1,5 +1,6 @@
 import argparse
 import json
+import logging
 import os
 import sys
 from datetime import datetime
@@ -12,14 +13,23 @@ from sd_task.inference_task_runner.inference_task import run_task as sd_run_task
 from sd_task.prefetch import prefetch_models
 
 
+_logger = logging.getLogger(__name__)
+dt_fmt = "%Y-%m-%d %H:%M:%S"
+formatter = logging.Formatter(
+    "[{asctime}] [{levelname:<8}] {name}: {message}", dt_fmt, style="{"
+)
+handler = logging.StreamHandler()
+handler.setFormatter(formatter)
+_logger.addHandler(handler)
+_logger.setLevel(logging.INFO)
+
+
 def sd_inference(output_dir: str, task_args_str: str):
-    print(f"Inference task starts at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     task_args = InferenceTaskArgs.model_validate_json(task_args_str)
     imgs = sd_run_task(task_args)
     for i, img in enumerate(imgs):
         dst = os.path.join(output_dir, f"{i}.png")
         img.save(dst)
-    print(f"Inference task finishes at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
 
 def gpt_inference(output_dir: str, task_args_str: str):
@@ -37,7 +47,7 @@ def _inference(args):
     task_args_str: str = args.task_args
 
     try:
-        print(
+        _logger.info(
             f"Inference task starts at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
         )
 
@@ -50,11 +60,11 @@ def _inference(args):
         else:
             raise ValueError(f"unknown task type {task_type}")
 
-        print(
+        _logger.info(
             f"Inference task finishes at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
         )
     except pydantic.ValidationError:
-        print("Task args invalid")
+        _logger.info("Task args invalid")
         raise
 
 
@@ -75,10 +85,15 @@ def main(argv=None):
     args = parser.parse_args(argv)
     job = args.job
 
-    if job == "prefetch":
-        prefetch_models()
-    else:
-        _inference(args)
+    try:
+        if job == "prefetch":
+            prefetch_models()
+        else:
+            _inference(args)
+    except Exception as e:
+        _logger.exception(e)
+        _logger.error("crynux worker process error")
+
 
 if __name__ == "__main__":
     main()
