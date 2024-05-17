@@ -34,6 +34,7 @@ Make sure you have the following tools installed and accessible in the path
 * Golang 1.21
 * Nodejs
 * Yarn
+* C Compiler (gcc is usually installed by default on Linux. on Windows, you should install a C compiler manually, such as [MinGW](https://www.mingw-w64.org/) and [TDM-GCC](https://jmeubank.github.io/tdm-gcc/))
 
 
 ### Prepare the config file
