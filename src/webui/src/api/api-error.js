@@ -1,6 +1,12 @@
 class ApiError extends Error {
   constructor(type, data) {
-    super(type + ': ' + JSON.stringify(data))
+
+      if (typeof data !== 'string') {
+          super(type)
+      } else {
+          super(type + ': ' + JSON.stringify(data))
+      }
+
     this.type = type
     this.data = data
   }

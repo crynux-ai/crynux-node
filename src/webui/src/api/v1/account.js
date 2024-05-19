@@ -1,31 +1,36 @@
 import BaseAPI from '../base-api'
-import v1 from './v1'
+import V1Client from '@/api/v1/v1'
+import config from '@/config.json'
 
 class AccountAPI extends BaseAPI {
-  getAccountInfo() {
-    return v1.get('/account')
-  }
 
-  updatePrivateKey(privateKey) {
-    return v1.put('/account', {
-      type: 'private_key',
-      private_key: privateKey
-    })
-  }
+    constructor(){
+        super()
+        this.setHttpClient(new V1Client(config.base_url))
+    }
 
-  updateKeystore(keystore, passphrase) {
-    return v1.put('/account', {
-      type: 'keystore',
-      keystore: keystore,
-      passphrase: passphrase
-    })
-  }
+    getAccountInfo() {
+        return this.getHttpClient().get('/account')
+    }
 
-  createAccount() {
-    return v1.post('/account', {})
-  }
+    updatePrivateKey(privateKey) {
+        return this.getHttpClient().put('/account', {
+            type: 'private_key',
+            private_key: privateKey
+        })
+    }
+
+    updateKeystore(keystore, passphrase) {
+        return this.getHttpClient().put('/account', {
+            type: 'keystore',
+            keystore: keystore,
+            passphrase: passphrase
+        })
+    }
+
+    createAccount() {
+        return this.getHttpClient().post('/account', {})
+    }
 }
 
-const accountAPI = new AccountAPI()
-
-export default accountAPI
+export default AccountAPI

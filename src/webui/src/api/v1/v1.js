@@ -1,11 +1,23 @@
 import axios from 'axios'
 import ApiError from '../api-error'
-import config from '@/config.json'
 import jsonBig from 'json-bigint'
 
 const jsonBigNative = jsonBig({
   useNativeBigInt: true
 })
+
+
+const V1ClientPrototype = {
+    apiForbiddenErrorHandler: () => {
+        console.error("request forbidden")
+    },
+    apiServerErrorHandler: (msg) => {
+        console.error(msg)
+    },
+    apiUnknownErrorHandler: () => {
+        console.error("request unknown error")
+    }
+}
 
 class V1Client {
   constructor(baseUrl) {
@@ -57,10 +69,6 @@ class V1Client {
         }
       }
     )
-
-    this.apiForbiddenErrorHandler = null
-    this.apiServerErrorHandler = null
-    this.apiUnknownErrorHandler = null
   }
 
   getBaseURL() {
@@ -119,6 +127,6 @@ class V1Client {
   }
 }
 
-const v1 = new V1Client(config.base_url)
+Object.setPrototypeOf(V1Client, V1ClientPrototype)
 
-export default v1
+export default V1Client

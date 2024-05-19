@@ -1,9 +1,11 @@
 <script setup>
 import { ref } from 'vue'
-import accountAPI from '../api/v1/account'
+import AccountAPI from '../api/v1/account'
 import { CopyOutlined, SmileTwoTone } from '@ant-design/icons-vue'
 import config from '../config.json'
 import logger from '../log/log'
+
+const accountAPI = new AccountAPI()
 
 const props = defineProps(['oldWalletExists', 'accountStatus']);
 const emits = defineEmits(['startCreateWallet', 'closeCreateWallet']);

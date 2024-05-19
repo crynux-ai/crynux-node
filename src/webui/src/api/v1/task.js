@@ -1,12 +1,17 @@
 import BaseAPI from '../base-api'
-import v1 from './v1'
+import V1Client from '@/api/v1/v1'
+import config from '@/config.json'
 
 class TaskAPI extends BaseAPI {
-  getTaskRunningStatus() {
-    return v1.get('/tasks')
-  }
+
+    constructor() {
+        super()
+        this.setHttpClient(new V1Client(config.base_url))
+    }
+
+    getTaskRunningStatus() {
+        return this.getHttpClient().get('/tasks')
+    }
 }
 
-const taskAPI = new TaskAPI()
-
-export default taskAPI
+export default TaskAPI
