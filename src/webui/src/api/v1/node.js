@@ -1,5 +1,7 @@
 import BaseAPI from '../base-api'
-import v1 from './v1'
+import V1Client from '@/api/v1/v1'
+import config from '@/config.json'
+
 
 class NodeAPI extends BaseAPI {
   constructor() {
@@ -16,19 +18,19 @@ class NodeAPI extends BaseAPI {
     this.TX_STATUS_ERROR = 'error'
     this.TX_STATUS_PENDING = 'pending'
     this.TX_STATUS_NONE = ''
+
+      this.setHttpClient(new V1Client(config.base_url))
   }
 
   getNodeStatus() {
-    return v1.get('/node')
+    return this.getHttpClient().get('/node')
   }
 
   sendNodeAction(action) {
-    return v1.post('/node', {
+    return this.getHttpClient().post('/node', {
       action: action
     })
   }
 }
 
-const nodeAPI = new NodeAPI()
-
-export default nodeAPI
+export default NodeAPI

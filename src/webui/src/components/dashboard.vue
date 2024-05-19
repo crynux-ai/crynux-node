@@ -11,14 +11,19 @@ import { Grid, Modal } from 'ant-design-vue'
 import EditAccount from './edit-account.vue'
 import GithubButton from 'vue-github-button'
 
-import systemAPI from '../api/v1/system'
-import nodeAPI from '../api/v1/node'
-import taskAPI from '../api/v1/task'
-import accountAPI from '../api/v1/account'
+import SystemAPI from '../api/v1/system'
+import NodeAPI from '../api/v1/node'
+import TaskAPI from '../api/v1/task'
+import AccountAPI from '../api/v1/account'
 import config from "../config.json"
 import logger from "../log/log"
 
 const appVersion = APP_VERSION
+
+const accountAPI = new AccountAPI()
+const nodeAPI = new NodeAPI()
+const systemAPI = new SystemAPI()
+const taskAPI = new TaskAPI()
 
 const accountEditor = ref(null)
 
@@ -63,6 +68,40 @@ const taskStatus = reactive({
   num_today: 0,
   num_total: 0
 })
+
+let apiContinuousErrorCount = reactive({
+    'account': 0,
+    'node': 0,
+    'system': 0,
+    'task': 0
+})
+
+const apiErrorHandler = (apiName) => {
+    return () => {
+        apiContinuousErrorCount[apiName]++
+        console.error("API Error: ", apiName)
+    }
+}
+
+const accountAPIErrorHandler = apiErrorHandler('account')
+accountAPI.getHttpClient().apiServerErrorHandler = accountAPIErrorHandler
+accountAPI.getHttpClient().apiUnknownErrorHandler = accountAPIErrorHandler
+accountAPI.getHttpClient().apiForbiddenErrorHandler = accountAPIErrorHandler
+
+const nodeAPIErrorHandler = apiErrorHandler('node')
+nodeAPI.getHttpClient().apiServerErrorHandler = nodeAPIErrorHandler
+nodeAPI.getHttpClient().apiUnknownErrorHandler = nodeAPIErrorHandler
+nodeAPI.getHttpClient().apiForbiddenErrorHandler = nodeAPIErrorHandler
+
+const systemAPIErrorHandler = apiErrorHandler('system')
+systemAPI.getHttpClient().apiServerErrorHandler = systemAPIErrorHandler
+systemAPI.getHttpClient().apiUnknownErrorHandler = systemAPIErrorHandler
+systemAPI.getHttpClient().apiForbiddenErrorHandler = systemAPIErrorHandler
+
+const taskAPIErrorHandler = apiErrorHandler('task')
+taskAPI.getHttpClient().apiServerErrorHandler = taskAPIErrorHandler
+taskAPI.getHttpClient().apiUnknownErrorHandler = taskAPIErrorHandler
+taskAPI.getHttpClient().apiForbiddenErrorHandler = taskAPIErrorHandler
 
 const shortAddress = computed(() => {
   if (accountStatus.address === '') {
@@ -111,7 +150,12 @@ const privateKeyUpdated = async () => {
 let uiUpdateInterval = null
 let uiUpdateCurrentTicket = null
 onMounted(async () => {
-    await updateUI()
+
+    try {
+        await updateUI()
+    } catch (e) {
+        console.error("First time UI update failed")
+    }
 
     if (uiUpdateInterval != null) {
         clearInterval(uiUpdateInterval)
@@ -160,6 +204,8 @@ const updateAccountInfo = async (ticket) => {
 
     logger.debug("[" + ticket + "] Retrieved account address: " + accountResp.address)
 
+    apiContinuousErrorCount['account'] = 0
+
     if(ticket === uiUpdateCurrentTicket) {
         logger.debug("[" + ticket + "] Ticket is latest. Update the data.")
         Object.assign(accountStatus, accountResp)
@@ -171,12 +217,14 @@ const updateAccountInfo = async (ticket) => {
 const updateNetworkInfo = async (ticket) => {
 
     const nodeResp = await nodeAPI.getNodeStatus()
+    apiContinuousErrorCount['node'] = 0
 
     if(ticket === uiUpdateCurrentTicket) {
         Object.assign(nodeStatus, nodeResp)
     }
 
     const taskResp = await taskAPI.getTaskRunningStatus()
+    apiContinuousErrorCount['task'] = 0
 
     if(ticket === uiUpdateCurrentTicket) {
         Object.assign(taskStatus, taskResp)
@@ -185,6 +233,8 @@ const updateNetworkInfo = async (ticket) => {
 
 const updateSystemInfo = async (ticket) => {
     const systemResp = await systemAPI.getSystemInfo()
+    apiContinuousErrorCount['system'] = 0
+
     if(ticket === uiUpdateCurrentTicket) {
         Object.assign(systemInfo, systemResp)
     }
@@ -282,6 +332,30 @@ const copyText = async (text) => {
         :message="nodeStatus.message + ' Retrying...'"
         class="top-alert"
         v-if="nodeStatus.status === nodeAPI.NODE_STATUS_ERROR && /cannot watch events from chain/.test(nodeStatus.message)"
+      ></a-alert>
+      <a-alert
+        type="error"
+        :message="'Cannot get account info from node due to network error, retrying...'"
+        class="top-alert"
+        v-if="apiContinuousErrorCount['account'] >= 3"
+      ></a-alert>
+      <a-alert
+        type="error"
+        :message="'Cannot get node status from node due to network error, retrying...'"
+        class="top-alert"
+        v-if="apiContinuousErrorCount['node'] >= 3"
+      ></a-alert>
+      <a-alert
+        type="error"
+        :message="'Cannot get system info from node due to network error, retrying...'"
+        class="top-alert"
+        v-if="apiContinuousErrorCount['system'] >= 3"
+      ></a-alert>
+      <a-alert
+        type="error"
+        :message="'Cannot get task info from node due to network error, retrying...'"
+        class="top-alert"
+        v-if="apiContinuousErrorCount['task'] >= 3"
       ></a-alert>
       <a-alert
         type="error"

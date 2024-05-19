@@ -1,9 +1,11 @@
 <script setup>
 import { computed, ref } from 'vue'
-import accountAPI from '../api/v1/account'
+import AccountAPI from '../api/v1/account'
 import createAccount from './create-account.vue';
 import config from '../config.json';
 import logger from '../log/log';
+
+const accountAPI = new AccountAPI()
 
 const modalVisible = ref(false)
 const activeImportType = ref('private-key')
