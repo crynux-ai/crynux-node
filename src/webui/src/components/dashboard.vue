@@ -319,6 +319,11 @@ const copyText = async (text) => {
     <a-row>
         <a-col :span="14" :offset="5">
             <a-alert
+                message="System is initializing..."
+                class="top-alert"
+                v-if="nodeStatus.status === nodeAPI.NODE_STATUS_INITIALIZING && nodeStatus.init_message === ''"
+            ></a-alert>
+            <a-alert
                 :message="nodeStatus.init_message"
                 class="top-alert"
                 v-if="nodeStatus.status === nodeAPI.NODE_STATUS_INITIALIZING && nodeStatus.init_message !== ''"
