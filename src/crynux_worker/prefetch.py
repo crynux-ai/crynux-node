@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import List
+import re
+from typing import Callable, List
 
 from crynux_worker import config, utils
 from crynux_worker.config import ModelConfig, ProxyConfig
-
 
 _logger = logging.getLogger(__name__)
 
@@ -19,8 +19,11 @@ def call_prefetch_script(
     controlnet_models: List[ModelConfig] | None = None,
     vae_models: List[ModelConfig] | None = None,
     proxy: ProxyConfig | None = None,
+    progress_callback: Callable[[int, int], None] | None = None,
 ):
-    _logger.info(f"Start worker process: {script_dir}, {hf_cache_dir}, {external_cache_dir}")
+    _logger.info(
+        f"Start worker process: {script_dir}, {hf_cache_dir}, {external_cache_dir}"
+    )
 
     args = utils.get_exe_head("prefetch", script_dir)
     envs = config.set_env(
@@ -32,7 +35,27 @@ def call_prefetch_script(
         proxy,
     )
     _logger.info("Start prefetching models")
-    success, _ = utils.run_worker(args=args, envs=envs)
+
+    total_models = 0
+    if base_models is not None:
+        total_models += len(base_models)
+    if controlnet_models is not None:
+        total_models += len(controlnet_models)
+    if vae_models is not None:
+        total_models += len(vae_models)
+
+    current_models = 0
+    progress_pattern = re.compile(r"Preloading")
+
+    def line_callback(line: str):
+        nonlocal current_models
+
+        if progress_pattern.search(line) is not None:
+            current_models += 1
+            if progress_callback is not None:
+                progress_callback(current_models, total_models)
+
+    success, _ = utils.run_worker(args=args, envs=envs, line_callback=line_callback)
     if not success:
         raise ValueError("prefetch failed")
     _logger.info("Prefetching models complete")
@@ -46,6 +69,7 @@ def prefetch(
     controlnet_models: List[ModelConfig] | None = None,
     vae_models: List[ModelConfig] | None = None,
     proxy: ProxyConfig | None = None,
+    progress_callback: Callable[[int, int], None] | None = None,
 ):
     if not os.path.exists(hf_cache_dir):
         os.makedirs(hf_cache_dir, exist_ok=True)
@@ -62,6 +86,7 @@ def prefetch(
             controlnet_models=controlnet_models,
             vae_models=vae_models,
             proxy=proxy,
+            progress_callback=progress_callback,
         )
     except Exception as e:
         _logger.exception(e)

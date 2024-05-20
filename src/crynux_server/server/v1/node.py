@@ -18,6 +18,7 @@ class State(BaseModel):
     message: str
     tx_status: models.TxStatus
     tx_error: str
+    init_message: str = ""
 
 @router.get("", response_model=State)
 async def get_node_state(*, state_cache: ManagerStateCacheDep) -> State:
@@ -27,7 +28,8 @@ async def get_node_state(*, state_cache: ManagerStateCacheDep) -> State:
         status=node_state.status,
         message=node_state.message,
         tx_status=tx_state.status,
-        tx_error=tx_state.error
+        tx_error=tx_state.error,
+        init_message=node_state.init_message,
     )
 
 

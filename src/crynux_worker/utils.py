@@ -1,10 +1,12 @@
+from __future__ import annotations
+
 import logging
 import os
 import platform
 import re
 import subprocess
 import sys
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Callable
 
 _logger = logging.getLogger(__name__)
 
@@ -71,22 +73,31 @@ def get_exe_head(job: str, script_dir: str = "") -> List[str]:
         return _script_cmd_head(job, script_dir)
 
 
-def _is_task_success(stdout: str) -> bool:
+def is_task_error(stdout: str) -> bool:
     pattern = re.compile(r"crynux worker process error")
-    return pattern.search(stdout) is None
+    return pattern.search(stdout) is not None
 
 
-def run_worker(args: List[str], envs: Dict[str, str]) -> Tuple[bool, str]:
-    res = subprocess.run(
-        args,
+def run_worker(args: List[str], envs: Dict[str, str], line_callback: Callable[[str], None] | None = None) -> Tuple[bool, str]:
+    output = ""
+    success = True
+    with subprocess.Popen(
+        args=args,
         env=envs,
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
         text=True,
-    )
+        bufsize=1,
+    ) as sp:
+        assert sp.stdout is not None
+        for line in sp.stdout:
+            print(line, flush=True)
+            output += line
+            if line_callback is not None:
+                line_callback(line)
+            if is_task_error(line):
+                success = False
 
-    output = res.stdout
-    success = _is_task_success(output)
     if not success:
-        _logger.error(f"crynux worker error, \nargs: {args}\n, \noutput: {output}\n")
+        _logger.error("crynux worker error")
     return success, output

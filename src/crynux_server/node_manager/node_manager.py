@@ -3,11 +3,12 @@ from __future__ import annotations
 import json
 import logging
 import os
+from functools import partial
 from datetime import datetime
 from typing import List, Optional, Type, cast
 
 from anyio import (TASK_STATUS_IGNORED, Event, create_task_group, fail_after,
-                   get_cancelled_exc_class, move_on_after, to_thread)
+                   get_cancelled_exc_class, move_on_after, to_thread, from_thread)
 from anyio.abc import TaskGroup, TaskStatus
 from tenacity import (AsyncRetrying, before_sleep_log, stop_after_attempt,
                       stop_never, wait_fixed)
@@ -288,6 +289,14 @@ class NodeManager(object):
                 proxy = None
 
             # retry prefetch for 3 times
+            def prefetch_process_callback(current_models: int, total_models: int):
+                func = partial(
+                    self.state_cache.set_node_state,
+                    status=models.NodeStatus.Init,
+                    init_message=f"Downloading models............ ({current_models}/{total_models})"
+                )
+                from_thread.run(func)
+
             async for attemp in AsyncRetrying(
                 stop=stop_after_attempt(3) if self._retry else stop_after_attempt(1),
                 wait=wait_fixed(self._retry_delay),
@@ -304,6 +313,7 @@ class NodeManager(object):
                         controlnet_models,
                         vae_models,
                         proxy,
+                        prefetch_process_callback,
                         cancellable=True,
                     )
 
@@ -328,6 +338,10 @@ class NodeManager(object):
             current_ts = int(datetime.now().timestamp())
             try:
                 with fail_after(300):
+                    await self.state_cache.set_node_state(
+                        status=models.NodeStatus.Init,
+                        init_message="Running local evaluation task"
+                    )
                     await to_thread.run_sync(
                         inference,
                         json.dumps(sd_inference_args),
@@ -490,14 +504,15 @@ class NodeManager(object):
                 self._tg = tg
                 try:
                     async with create_task_group() as init_tg:
-                        init_tg.start_soon(self._init_components)
-                        if prefetch:
-                            init_tg.start_soon(self._init)
-
                         await self.state_cache.set_node_state(models.NodeStatus.Init)
                         # clear tx error when restart
                         # set tx status to pending to forbid user to control node from web
                         await self.state_cache.set_tx_state(models.TxStatus.Success)
+
+                        init_tg.start_soon(self._init_components)
+                        if prefetch:
+                            init_tg.start_soon(self._init)
+
                 except get_cancelled_exc_class():
                     _logger.exception(f"Node manager init error: init task cancelled")
                     raise
@@ -528,6 +543,10 @@ class NodeManager(object):
                 assert self._node_state_manager is not None
 
                 try:
+                    await self.state_cache.set_node_state(
+                        status=models.NodeStatus.Init,
+                        init_message="Joining the network"
+                    )
                     async for attemp in AsyncRetrying(
                         stop=stop_never if self._retry else stop_after_attempt(1),
                         wait=wait_fixed(self._retry_delay),
