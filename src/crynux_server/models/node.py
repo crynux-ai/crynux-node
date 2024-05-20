@@ -57,3 +57,4 @@ def convert_node_status(chain_status: ChainNodeStatus) -> NodeStatus:
 class NodeState(BaseModel):
     status: NodeStatus
     message: str = ""
+    init_message: str = ""

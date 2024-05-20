@@ -23,12 +23,13 @@ class DbNodeStateCache(StateCache[NodeState]):
             db_state = (await sess.execute(q)).scalar_one_or_none()
             if db_state is None:
                 db_state = db.models.NodeState(
-                    status=state.status, message=state.message
+                    status=state.status, message=state.message, init_message=state.init_message
                 )
                 sess.add(db_state)
             else:
                 db_state.status = state.status
                 db_state.message = state.message
+                db_state.init_message = state.init_message
             await sess.commit()
 
 
