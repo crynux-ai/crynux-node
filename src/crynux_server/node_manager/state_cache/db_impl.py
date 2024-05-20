@@ -15,7 +15,11 @@ class DbNodeStateCache(StateCache[NodeState]):
             if state is None:
                 return NodeState(status=NodeStatus.Init)
             else:
-                return NodeState(status=state.status, message=state.message)
+                return NodeState(
+                    status=state.status,
+                    message=state.message,
+                    init_message=state.init_message,
+                )
 
     async def set(self, state: NodeState):
         async with db.session_scope() as sess:
@@ -23,7 +27,9 @@ class DbNodeStateCache(StateCache[NodeState]):
             db_state = (await sess.execute(q)).scalar_one_or_none()
             if db_state is None:
                 db_state = db.models.NodeState(
-                    status=state.status, message=state.message, init_message=state.init_message
+                    status=state.status,
+                    message=state.message,
+                    init_message=state.init_message,
                 )
                 sess.add(db_state)
             else:
