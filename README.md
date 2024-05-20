@@ -36,6 +36,24 @@ Make sure you have the following tools installed and accessible in the path
 * Yarn
 * C Compiler (gcc is usually installed by default on Linux. on Windows, you should install a C compiler manually, such as [MinGW](https://www.mingw-w64.org/) and [TDM-GCC](https://jmeubank.github.io/tdm-gcc/))
 
+### Clone the project
+
+```shell
+# git clone --recurse-submodules https://github.com/crynux-ai/crynux-node.git
+```
+
+Or if you are pulling the latest updates from a repo cloned earlier, use the following command:
+
+```shell
+# git pull
+# git submodule update --remote --merge
+```
+
+### Go to the root folder of the project
+
+```shell
+# cd crynux-node
+```
 
 ### Prepare the config file
 
@@ -198,7 +216,7 @@ Or if you are pulling the latest updates from a repo cloned earlier, use the fol
 
 ```shell
 # git pull
-# git submodule update --recursive
+# git submodule update --remote --merge
 ```
 
 2. Go to the root folder of the project
