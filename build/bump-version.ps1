@@ -21,3 +21,6 @@ Write-Output "Bumping version number to: $VERSION"
 
 ## Update build/linux-server/package.sh
 (Get-Content "build/linux-server/package.sh") -replace "VERSION=[0-9].[0-9].[0-9]", "VERSION=$VERSION" | Set-Content "build/linux-server/package.sh"
+
+## Update build/windows/package.ps1
+(Get-Content "build/windows/package.ps1") -replace "\`$VERSION = `"[0-9].[0-9].[0-9]`"", "`$VERSION = `"$VERSION`"" | Set-Content "build/windows/package.ps1"

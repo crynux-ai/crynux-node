@@ -321,7 +321,7 @@ const copyText = async (text) => {
             <a-alert
                 :message="nodeStatus.init_message"
                 class="top-alert"
-                v-if="nodeStatus.status === nodeAPI.NODE_STATUS_INITIALIZING"
+                v-if="nodeStatus.status === nodeAPI.NODE_STATUS_INITIALIZING && nodeStatus.init_message !== ''"
             ></a-alert>
             <a-alert
                 type="error"
