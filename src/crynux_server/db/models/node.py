@@ -13,3 +13,4 @@ class NodeState(Base, BaseMixin):
         sa.Enum(NodeStatus), index=True, nullable=False
     )
     message: Mapped[str] = mapped_column(default="", index=False, nullable=False)
+    init_message: Mapped[str] = mapped_column(default="", index=False, nullable=False)
