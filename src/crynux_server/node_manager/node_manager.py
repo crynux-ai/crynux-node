@@ -537,9 +537,6 @@ class NodeManager(object):
                 # start watcher after the joining operation will cause missing the TaskStarted event.
                 await tg.start(self._watch_events)
 
-                if not self.config.headless:
-                    tg.start_soon(self._sync_state)
-
                 assert self._node_state_manager is not None
 
                 try:
@@ -566,6 +563,9 @@ class NodeManager(object):
                     tx_status = (await self.state_cache.get_tx_state()).status
                     if tx_status == models.TxStatus.Pending:
                         await self.state_cache.set_tx_state(models.TxStatus.Success)
+
+                if not self.config.headless:
+                    tg.start_soon(self._sync_state)
 
         finally:
             self._tg = None
