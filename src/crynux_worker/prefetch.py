@@ -57,7 +57,7 @@ def call_prefetch_script(
 
     success, _ = utils.run_worker(args=args, envs=envs, line_callback=line_callback)
     if not success:
-        raise ValueError("prefetch failed")
+        raise ValueError("Failed to download models due to network issue")
     _logger.info("Prefetching models complete")
 
 
