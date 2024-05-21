@@ -91,7 +91,6 @@ def run_worker(args: List[str], envs: Dict[str, str], line_callback: Callable[[s
     ) as sp:
         assert sp.stdout is not None
         for line in sp.stdout:
-            print(line, flush=True)
             output += line
             if line_callback is not None:
                 line_callback(line)
@@ -99,5 +98,5 @@ def run_worker(args: List[str], envs: Dict[str, str], line_callback: Callable[[s
                 success = False
 
     if not success:
-        _logger.error("crynux worker error")
+        _logger.error(f"crynux worker error \nargs: {args} \nlogs: \n{output}")
     return success, output
