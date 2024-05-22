@@ -53,4 +53,4 @@ jobs:
 
       # Runs a single command using the runners shell
       - name: Build
-        run: ./build/macos/build.sh -s ${{ secrets.APPLE_DEVELOPER_IDENTITY }} -u ${{ secrets.APPLE_USER }} -p ${{ secrets.APPLE_PASS }} -t ${{ secrets.APPLE_TEAM_ID }}
+        run: ./build/macos/build.sh -s "${{ secrets.APPLE_DEVELOPER_IDENTITY }}" -u "${{ secrets.APPLE_USER }}" -p "${{ secrets.APPLE_PASS }}" -t "${{ secrets.APPLE_TEAM_ID }}"
