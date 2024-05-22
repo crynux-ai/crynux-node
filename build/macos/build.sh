@@ -51,3 +51,7 @@ if [ "$IDENTITY" ]; then
     --team "$APPLE_TEAM_ID" \
     --password "$APPLE_PASS"
 fi
+
+VERSION=2.0.5
+
+mv "dist/Crynux Node.dmg" "dist/crynux-node-helium-v${VERSION}-mac-arm64-signed.dmg"
