@@ -10,7 +10,7 @@ on:
       - '*'
 
 env:
-  RELEASE_VERSION: 2.1.8
+  RELEASE_VERSION: 2.1.9
 
 # A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
@@ -129,9 +129,9 @@ jobs:
 
       - name: Generate the changelog
         run: |
-          sed -i 's^RELEASE_VERSION^${{ env.RELEASE_VERSION }}^g' build/changelog-template.txt
-          sed -i 's^WINDOWS_LINK^${{ needs.build-the-windows-binary.google-drive-link-content }}^g' build/changelog-template.txt
-          sed -i 's^LINUX_SERVER_LINK^${{ needs.build-the-linux-binary.google-drive-link-content }}^g' build/changelog-template.txt
+          sed -i 's^RELEASE_VERSION^${{ env.RELEASE_VERSION }}^g' build/changelog-template.md
+          sed -i 's^WINDOWS_LINK^${{ needs.build-the-windows-binary.google-drive-link-content }}^g' build/changelog-template.md
+          sed -i 's^LINUX_SERVER_LINK^${{ needs.build-the-linux-binary.google-drive-link-content }}^g' build/changelog-template.md
 
       - name: Release
         uses: softprops/action-gh-release@v2
