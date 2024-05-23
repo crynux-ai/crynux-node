@@ -8,6 +8,7 @@ from anyio import (
     TASK_STATUS_IGNORED,
     create_task_group,
     move_on_after,
+    sleep,
     Event,
 )
 from anyio.abc import TaskStatus, TaskGroup
@@ -33,8 +34,17 @@ class CrynuxRunner(object):
         self._tg: Optional[TaskGroup] = None
 
         self._shutdown_event: Optional[Event] = None
+        self._should_shutdown = False
         signal.signal(signal.SIGINT, self._set_shutdown_event)
         signal.signal(signal.SIGTERM, self._set_shutdown_event)
+
+    def _shutdown_signal_handler(self, *args):
+        self._should_shutdown = True
+
+    async def _check_should_shutdown(self):
+        while not self._should_shutdown:
+            await sleep(0.1)
+        self._set_shutdown_event()
 
     def _set_shutdown_event(self, *args):
         if self._shutdown_event is not None:
@@ -77,6 +87,7 @@ class CrynuxRunner(object):
             async with create_task_group() as tg:
                 self._tg = tg
 
+                tg.start_soon(self._check_should_shutdown)
                 tg.start_soon(self._wait_for_shutdown)
 
                 tg.start_soon(self._node_manager.run)
