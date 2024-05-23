@@ -68,7 +68,8 @@ jobs:
       - name: Run the build script
         run: ./build/windows/build.ps1
 
-      - name: Upload to gdrive
+      - id: gdrive
+        name: Upload to gdrive
         uses: hoatruongdev09/google-drive-file-upload-github-action@v1.1
         with:
           service-account-json: ${{ secrets.GOOGLE_DRIVE_GSA_CREDENTIALS_BASE64 }}
@@ -76,6 +77,9 @@ jobs:
           upload-name: "crynux-node-helium-${{ github.ref_name }}-windows-x64.zip"
           upload-to-folder-id: ${{ secrets.GOOGLE_DRIVE_FOLDER_ID }}
           overwrite: true
+    outputs:
+      google-drive-link-content: ${{ steps.gdrive.outputs.web-content-link }}
+      google-drive-link-view: ${{ steps.gdrive.outputs.web-view-link }}
 
   build-the-linux-binary:
     runs-on: ubuntu-22.04
@@ -88,7 +92,8 @@ jobs:
       - name: Run the build script
         run: ./build/linux-server/build.sh
 
-      - name: Upload to gdrive
+      - id: gdrive
+        name: Upload to gdrive
         uses: hoatruongdev09/google-drive-file-upload-github-action@v1.1
         with:
           service-account-json: ${{ secrets.GOOGLE_DRIVE_GSA_CREDENTIALS_BASE64 }}
@@ -96,6 +101,9 @@ jobs:
           upload-name: "crynux-node-helium-${{ github.ref_name }}-linux-bin-x64.tar.gz"
           upload-to-folder-id: ${{ secrets.GOOGLE_DRIVE_FOLDER_ID }}
           overwrite: true
+    outputs:
+      google-drive-link-content: ${{ steps.gdrive.outputs.web-content-link }}
+      google-drive-link-view: ${{ steps.gdrive.outputs.web-view-link }}
 
   publish-release:
     runs-on: ubuntu-22.04
@@ -104,6 +112,13 @@ jobs:
       - build-the-windows-binary
       - build-the-mac-binary
     steps:
+      - name: Print the Google Drive links
+        run: |
+          echo "windows content link: ${needs.build-the-windows-binary.google-drive-link-content}"
+          echo "windows view link: ${needs.build-the-windows-binary.google-drive-link-view}"
+          echo "linux content link: ${needs.build-the-linux-binary.google-drive-link-content}"
+          echo "linux view link: ${needs.build-the-linux-binary.google-drive-link-view}"
+
       - name: Download mac app
         uses: actions/download-artifact@v4
         with:
