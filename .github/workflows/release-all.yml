@@ -10,7 +10,7 @@ on:
       - '*'
 
 env:
-  RELEASE_VERSION: 2.1.0
+  RELEASE_VERSION: 2.1.1
 
 # A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
@@ -114,10 +114,10 @@ jobs:
     steps:
       - name: Print the Google Drive links
         run: |
-          echo "windows content link: ${needs.build-the-windows-binary.google-drive-link-content}"
-          echo "windows view link: ${needs.build-the-windows-binary.google-drive-link-view}"
-          echo "linux content link: ${needs.build-the-linux-binary.google-drive-link-content}"
-          echo "linux view link: ${needs.build-the-linux-binary.google-drive-link-view}"
+          echo "windows content link: ${{ needs.build-the-windows-binary.google-drive-link-content }}"
+          echo "windows view link: ${{ needs.build-the-windows-binary.google-drive-link-view }}"
+          echo "linux content link: ${{ needs.build-the-linux-binary.google-drive-link-content }}"
+          echo "linux view link: ${{ needs.build-the-linux-binary.google-drive-link-view }}"
 
       - name: Download mac app
         uses: actions/download-artifact@v4
@@ -127,8 +127,8 @@ jobs:
       - name: Generate the changelog
         run: |
           sed -i 's^RELEASE_VERSION^${{ env.RELEASE_VERSION }}^g' build/changelog-template.txt
-          sed -i 's^WINDOWS_LINK^${needs.build-the-windows-binary.google-drive-link-content}^g' build/changelog-template.txt
-          sed -i 's^LINUX_SERVER_LINK^${needs.build-the-linux-binary.google-drive-link-content}^g' build/changelog-template.txt
+          sed -i 's^WINDOWS_LINK^${{ needs.build-the-windows-binary.google-drive-link-content }}^g' build/changelog-template.txt
+          sed -i 's^LINUX_SERVER_LINK^${{ needs.build-the-linux-binary.google-drive-link-content }}^g' build/changelog-template.txt
 
       - name: Release
         uses: softprops/action-gh-release@v2
