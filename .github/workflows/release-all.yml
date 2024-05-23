@@ -10,7 +10,7 @@ on:
       - '*'
 
 env:
-  RELEASE_VERSION: 2.1.9
+  RELEASE_VERSION: 2.2.0
 
 # A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
@@ -127,6 +127,10 @@ jobs:
         with:
           name: mac-app
 
+      - name: Print the workspace
+        run: |
+          ls -l
+
       - name: Generate the changelog
         run: |
           sed -i 's^RELEASE_VERSION^${{ env.RELEASE_VERSION }}^g' build/changelog-template.md
@@ -137,5 +141,5 @@ jobs:
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/')
         with:
-          body_path: build/changelog-template.txt
+          body_path: build/changelog-template.md
           files: crynux-node-helium-v${{ env.RELEASE_VERSION }}-mac-arm64-signed.dmg
