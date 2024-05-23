@@ -1,6 +1,6 @@
 #!/bin/bash
 # Example call: ./package.sh
-VERSION=2.1.4
+VERSION=2.1.5
 
 ## Package the worker
 source worker/venv/bin/activate
