@@ -48,7 +48,7 @@ jobs:
           security list-keychain -d user -s $KEYCHAIN_PATH
 
       - name: Build
-        run: ./build/macos/build.sh -s ${{ secrets.APPLE_DEVELOPER_IDENTITY }} -u ${{ secrets.APPLE_USER }} -p ${{ secrets.APPLE_PASS }} -t ${{ secrets.APPLE_TEAM_ID }}
+        run: ./build/macos/build.sh -s "${{ secrets.APPLE_DEVELOPER_IDENTITY }}" -u "${{ secrets.APPLE_USER }}" -p "${{ secrets.APPLE_PASS }}" -t "${{ secrets.APPLE_TEAM_ID }}"
 
       - name: Upload the artifact
         uses: actions/upload-artifact@v4
