@@ -76,7 +76,6 @@ jobs:
           file-path: "build/crynux_node/dist/crynux-node-helium-${{ github.ref_name }}-windows-x64.zip"
           upload-name: "crynux-node-helium-${{ github.ref_name }}-windows-x64.zip"
           upload-to-folder-id: ${{ secrets.GOOGLE_DRIVE_FOLDER_ID }}
-          overwrite: true
     outputs:
       google-drive-link-content: ${{ steps.gdrive.outputs.web-content-link }}
       google-drive-link-view: ${{ steps.gdrive.outputs.web-view-link }}
@@ -100,7 +99,6 @@ jobs:
           file-path: "build/crynux_node/dist/crynux-node-helium-${{ github.ref_name }}-windows-x64.zip"
           upload-name: "crynux-node-helium-${{ github.ref_name }}-linux-bin-x64.tar.gz"
           upload-to-folder-id: ${{ secrets.GOOGLE_DRIVE_FOLDER_ID }}
-          overwrite: true
     outputs:
       google-drive-link-content: ${{ steps.gdrive.outputs.web-content-link }}
       google-drive-link-view: ${{ steps.gdrive.outputs.web-view-link }}
