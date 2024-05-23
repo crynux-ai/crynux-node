@@ -10,7 +10,7 @@ on:
       - '*'
 
 env:
-  RELEASE_VERSION: 2.0.9
+  RELEASE_VERSION: 2.1.0
 
 # A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
@@ -98,7 +98,7 @@ jobs:
         uses: hoatruongdev09/google-drive-file-upload-github-action@v1.1
         with:
           service-account-json: ${{ secrets.GOOGLE_DRIVE_GSA_CREDENTIALS_BASE64 }}
-          file-path: "build/crynux_node/dist/crynux-node-helium-v${{ env.RELEASE_VERSION }}-windows-x64.zip"
+          file-path: "build/crynux_node/dist/crynux-node-helium-v${{ env.RELEASE_VERSION }}-linux-bin-x64.tar.gz"
           upload-name: "crynux-node-helium-v${{ env.RELEASE_VERSION }}-linux-bin-x64.tar.gz"
           upload-to-folder-id: ${{ secrets.GOOGLE_DRIVE_FOLDER_ID }}
     outputs:
@@ -124,8 +124,15 @@ jobs:
         with:
           name: mac-app
 
+      - name: Generate the changelog
+        run: |
+          sed -i 's^RELEASE_VERSION^${{ env.RELEASE_VERSION }}^g' build/changelog-template.txt
+          sed -i 's^WINDOWS_LINK^${needs.build-the-windows-binary.google-drive-link-content}^g' build/changelog-template.txt
+          sed -i 's^LINUX_SERVER_LINK^${needs.build-the-linux-binary.google-drive-link-content}^g' build/changelog-template.txt
+
       - name: Release
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/')
         with:
+          body_path: build/changelog-template.txt
           files: crynux-node-helium-v${{ env.RELEASE_VERSION }}-mac-arm64-signed.dmg

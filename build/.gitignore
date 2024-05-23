@@ -3,4 +3,6 @@
 !windows/
 !linux-server/
 !Dockerfile
+!bump-version.ps1
+!changelog-template.md
 *
