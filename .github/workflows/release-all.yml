@@ -10,7 +10,7 @@ on:
       - '*'
 
 env:
-  RELEASE_VERSION: 2.1.7
+  RELEASE_VERSION: 2.1.8
 
 # A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
@@ -72,14 +72,12 @@ jobs:
 
       - id: gdrive
         name: Upload to gdrive
-        uses: crynux-ai/google-drive-file-upload-github-action@v1.0.5
+        uses: hoatruongdev09/google-drive-file-upload-github-action@v1.1
         with:
           service-account-json: ${{ secrets.GOOGLE_DRIVE_GSA_CREDENTIALS_BASE64 }}
           file-path: "build/crynux_node/dist/crynux-node-helium-v${{ env.RELEASE_VERSION }}-windows-x64.zip"
           upload-name: "crynux-node-helium-v${{ env.RELEASE_VERSION }}-windows-x64.zip"
           upload-to-folder-id: ${{ secrets.GOOGLE_DRIVE_FOLDER_ID }}
-          impersonate-user: ${{ secrets.GOOGLE_DRIVE_IMPERSONATE_USER }}
-          overwrite: true
     outputs:
       google-drive-link-content: ${{ steps.gdrive.outputs.web-content-link }}
       google-drive-link-view: ${{ steps.gdrive.outputs.web-view-link }}
@@ -97,14 +95,12 @@ jobs:
 
       - id: gdrive
         name: Upload to gdrive
-        uses: crynux-ai/google-drive-file-upload-github-action@v1.0.5
+        uses: hoatruongdev09/google-drive-file-upload-github-action@v1.1
         with:
           service-account-json: ${{ secrets.GOOGLE_DRIVE_GSA_CREDENTIALS_BASE64 }}
           file-path: "build/crynux_node/dist/crynux-node-helium-v${{ env.RELEASE_VERSION }}-linux-bin-x64.tar.gz"
           upload-name: "crynux-node-helium-v${{ env.RELEASE_VERSION }}-linux-bin-x64.tar.gz"
           upload-to-folder-id: ${{ secrets.GOOGLE_DRIVE_FOLDER_ID }}
-          impersonate-user: ${{ secrets.GOOGLE_DRIVE_IMPERSONATE_USER }}
-          overwrite: true
     outputs:
       google-drive-link-content: ${{ steps.gdrive.outputs.web-content-link }}
       google-drive-link-view: ${{ steps.gdrive.outputs.web-view-link }}
