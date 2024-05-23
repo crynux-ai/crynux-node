@@ -34,7 +34,7 @@ Copy-Item -Recurse "webui/dist" "dist/Crynux Node/webui/dist"
 Copy-Item -Recurse "res" "dist/Crynux Node/res"
 
 # Create the archive file
-$VERSION = "2.1.6"
+$VERSION = "2.1.7"
 $RELEASE_NAME = "crynux-node-helium-v${VERSION}-windows-x64"
 
 Move-Item -Path "dist/Crynux Node" "dist/$RELEASE_NAME"
