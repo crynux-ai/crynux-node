@@ -10,7 +10,7 @@ on:
       - '*'
 
 env:
-  RELEASE_VERSION: 2.1.1
+  RELEASE_VERSION: 2.1.2
 
 # A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
@@ -118,6 +118,9 @@ jobs:
           echo "windows view link: ${{ needs.build-the-windows-binary.google-drive-link-view }}"
           echo "linux content link: ${{ needs.build-the-linux-binary.google-drive-link-content }}"
           echo "linux view link: ${{ needs.build-the-linux-binary.google-drive-link-view }}"
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
       - name: Download mac app
         uses: actions/download-artifact@v4
