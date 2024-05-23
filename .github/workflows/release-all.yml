@@ -9,6 +9,8 @@ on:
     tags:
       - '*'
 
+env:
+  RELEASE_VERSION: 2.0.8
 
 # A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
@@ -55,7 +57,7 @@ jobs:
         with:
           if-no-files-found: error
           name: mac-app
-          path: build/crynux_node/dist/crynux-node-helium-${{ github.ref_name }}-mac-arm64-signed.dmg
+          path: build/crynux_node/dist/crynux-node-helium-v${{ RELEASE_VERSION }}-mac-arm64-signed.dmg
 
   build-the-windows-binary:
     runs-on: windows-latest
@@ -73,8 +75,8 @@ jobs:
         uses: hoatruongdev09/google-drive-file-upload-github-action@v1.1
         with:
           service-account-json: ${{ secrets.GOOGLE_DRIVE_GSA_CREDENTIALS_BASE64 }}
-          file-path: "build/crynux_node/dist/crynux-node-helium-${{ github.ref_name }}-windows-x64.zip"
-          upload-name: "crynux-node-helium-${{ github.ref_name }}-windows-x64.zip"
+          file-path: "build/crynux_node/dist/crynux-node-helium-v${{ RELEASE_VERSION }}-windows-x64.zip"
+          upload-name: "crynux-node-helium-v${{ RELEASE_VERSION }}-windows-x64.zip"
           upload-to-folder-id: ${{ secrets.GOOGLE_DRIVE_FOLDER_ID }}
     outputs:
       google-drive-link-content: ${{ steps.gdrive.outputs.web-content-link }}
@@ -96,8 +98,8 @@ jobs:
         uses: hoatruongdev09/google-drive-file-upload-github-action@v1.1
         with:
           service-account-json: ${{ secrets.GOOGLE_DRIVE_GSA_CREDENTIALS_BASE64 }}
-          file-path: "build/crynux_node/dist/crynux-node-helium-${{ github.ref_name }}-windows-x64.zip"
-          upload-name: "crynux-node-helium-${{ github.ref_name }}-linux-bin-x64.tar.gz"
+          file-path: "build/crynux_node/dist/crynux-node-helium-v${{ RELEASE_VERSION }}-windows-x64.zip"
+          upload-name: "crynux-node-helium-v${{ RELEASE_VERSION }}-linux-bin-x64.tar.gz"
           upload-to-folder-id: ${{ secrets.GOOGLE_DRIVE_FOLDER_ID }}
     outputs:
       google-drive-link-content: ${{ steps.gdrive.outputs.web-content-link }}
@@ -126,4 +128,4 @@ jobs:
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/')
         with:
-          files: crynux-node-helium-${{ github.ref_name }}-mac-arm64-signed.dmg
+          files: crynux-node-helium-v${{ RELEASE_VERSION }}-mac-arm64-signed.dmg
