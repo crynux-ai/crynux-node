@@ -10,7 +10,7 @@ on:
       - '*'
 
 env:
-  RELEASE_VERSION: 2.1.5
+  RELEASE_VERSION: 2.1.6
 
 # A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
@@ -72,7 +72,7 @@ jobs:
 
       - id: gdrive
         name: Upload to gdrive
-        uses: crynux-ai/google-drive-file-upload-github-action@v1.0.3
+        uses: crynux-ai/google-drive-file-upload-github-action@v1.0.4
         with:
           service-account-json: ${{ secrets.GOOGLE_DRIVE_GSA_CREDENTIALS_BASE64 }}
           file-path: "build/crynux_node/dist/crynux-node-helium-v${{ env.RELEASE_VERSION }}-windows-x64.zip"
@@ -97,7 +97,7 @@ jobs:
 
       - id: gdrive
         name: Upload to gdrive
-        uses: crynux-ai/google-drive-file-upload-github-action@v1.0.3
+        uses: crynux-ai/google-drive-file-upload-github-action@v1.0.4
         with:
           service-account-json: ${{ secrets.GOOGLE_DRIVE_GSA_CREDENTIALS_BASE64 }}
           file-path: "build/crynux_node/dist/crynux-node-helium-v${{ env.RELEASE_VERSION }}-linux-bin-x64.tar.gz"
