@@ -31,7 +31,7 @@ def _process_resp(resp: httpx.Response, method: str):
                     message = resp.text
             except Exception:
                 pass
-        raise RelayError(resp.status_code, method, message)
+        raise RelayError(resp.status_code, method, message) from e
 
 
 class WebRelay(Relay):

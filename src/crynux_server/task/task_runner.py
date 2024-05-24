@@ -431,7 +431,6 @@ class InferenceTaskRunner(TaskRunner):
             stop=stop_after_delay(1800),
             wait=wait_chain(*[wait_fixed(1) for _ in range(30)] + [wait_fixed(10)]),
             retry=retry_if_exception(should_retry),
-            before_sleep=before_sleep_log(_logger, logging.ERROR, exc_info=True),
             reraise=True,
         )
         async def get_task():
