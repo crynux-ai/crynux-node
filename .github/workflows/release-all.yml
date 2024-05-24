@@ -10,7 +10,7 @@ on:
       - '*'
 
 env:
-  RELEASE_VERSION: 2.2.2
+  RELEASE_VERSION: 2.2.3
 
 # A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
@@ -112,8 +112,8 @@ jobs:
       - build-the-windows-binary
       - build-the-mac-binary
     env:
-      WINDOWS_LINK: ${{ needs.build-the-windows-binary.google-drive-link-content }}
-      LINUX_LINK: ${{ needs.build-the-linux-binary.google-drive-link-content }}
+      WINDOWS_LINK: ${{ needs.build-the-windows-binary.outputs.google-drive-link-content }}
+      LINUX_LINK: ${{ needs.build-the-linux-binary.outputs.google-drive-link-content }}
     steps:
       - name: Print the Google Drive links
         run: |
