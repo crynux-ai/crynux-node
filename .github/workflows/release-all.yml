@@ -9,6 +9,8 @@ on:
     tags:
       - '*'
 
+env:
+  RELEASE_VERSION: 2.0.6
 
 # A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
@@ -48,14 +50,14 @@ jobs:
           security list-keychain -d user -s $KEYCHAIN_PATH
 
       - name: Build
-        run: ./build/macos/build.sh -s ${{ secrets.APPLE_DEVELOPER_IDENTITY }} -u ${{ secrets.APPLE_USER }} -p ${{ secrets.APPLE_PASS }} -t ${{ secrets.APPLE_TEAM_ID }}
+        run: ./build/macos/build.sh -s "${{ secrets.APPLE_DEVELOPER_IDENTITY }}" -u "${{ secrets.APPLE_USER }}" -p "${{ secrets.APPLE_PASS }}" -t "${{ secrets.APPLE_TEAM_ID }}"
 
       - name: Upload the artifact
         uses: actions/upload-artifact@v4
         with:
           if-no-files-found: error
           name: mac-app
-          path: build/crynux_node/dist/crynux-node-helium-${{ github.ref_name }}-mac-arm64-signed.dmg
+          path: build/crynux_node/dist/crynux-node-helium-v${{ env.RELEASE_VERSION }}-mac-arm64-signed.dmg
 
   build-the-windows-binary:
     runs-on: windows-latest
@@ -68,14 +70,17 @@ jobs:
       - name: Run the build script
         run: ./build/windows/build.ps1
 
-      - name: Upload to gdrive
+      - id: gdrive
+        name: Upload to gdrive
         uses: hoatruongdev09/google-drive-file-upload-github-action@v1.1
         with:
           service-account-json: ${{ secrets.GOOGLE_DRIVE_GSA_CREDENTIALS_BASE64 }}
-          file-path: "build/crynux_node/dist/crynux-node-helium-${{ github.ref_name }}-windows-x64.zip"
-          upload-name: "crynux-node-helium-${{ github.ref_name }}-windows-x64.zip"
+          file-path: "build/crynux_node/dist/crynux-node-helium-v${{ env.RELEASE_VERSION }}-windows-x64.zip"
+          upload-name: "crynux-node-helium-v${{ env.RELEASE_VERSION }}-windows-x64.zip"
           upload-to-folder-id: ${{ secrets.GOOGLE_DRIVE_FOLDER_ID }}
-          overwrite: true
+    outputs:
+      google-drive-link-content: ${{ steps.gdrive.outputs.web-content-link }}
+      google-drive-link-view: ${{ steps.gdrive.outputs.web-view-link }}
 
   build-the-linux-binary:
     runs-on: ubuntu-22.04
@@ -88,14 +93,17 @@ jobs:
       - name: Run the build script
         run: ./build/linux-server/build.sh
 
-      - name: Upload to gdrive
+      - id: gdrive
+        name: Upload to gdrive
         uses: hoatruongdev09/google-drive-file-upload-github-action@v1.1
         with:
           service-account-json: ${{ secrets.GOOGLE_DRIVE_GSA_CREDENTIALS_BASE64 }}
-          file-path: "build/crynux_node/dist/crynux-node-helium-${{ github.ref_name }}-windows-x64.zip"
-          upload-name: "crynux-node-helium-${{ github.ref_name }}-linux-bin-x64.tar.gz"
+          file-path: "build/crynux_node/dist/crynux-node-helium-v${{ env.RELEASE_VERSION }}-linux-bin-x64.tar.gz"
+          upload-name: "crynux-node-helium-v${{ env.RELEASE_VERSION }}-linux-bin-x64.tar.gz"
           upload-to-folder-id: ${{ secrets.GOOGLE_DRIVE_FOLDER_ID }}
-          overwrite: true
+    outputs:
+      google-drive-link-content: ${{ steps.gdrive.outputs.web-content-link }}
+      google-drive-link-view: ${{ steps.gdrive.outputs.web-view-link }}
 
   publish-release:
     runs-on: ubuntu-22.04
@@ -103,14 +111,60 @@ jobs:
       - build-the-linux-binary
       - build-the-windows-binary
       - build-the-mac-binary
+    env:
+      WINDOWS_LINK: ${{ needs.build-the-windows-binary.outputs.google-drive-link-content }}
+      LINUX_LINK: ${{ needs.build-the-linux-binary.outputs.google-drive-link-content }}
     steps:
+      - name: Print the Google Drive links
+        run: |
+          echo "windows content link: ${{ env.WINDOWS_LINK }}"
+          echo "linux content link: ${{ env.LINUX_LINK }}"
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
       - name: Download mac app
         uses: actions/download-artifact@v4
         with:
           name: mac-app
 
-      - name: Release
+      - name: Print the workspace
+        run: |
+          ls -l
+
+      - name: Generate the changelog
+        run: |
+          windows_link_escaped=$(printf '%s\n' "${{ env.WINDOWS_LINK }}" | sed -e 's/[\/&]/\\&/g')
+          linux_link_escaped=$(printf '%s\n' "${{ env.LINUX_LINK }}" | sed -e 's/[\/&]/\\&/g')
+          sed -i "s/RELEASE_VERSION/${{ env.RELEASE_VERSION }}/g" build/changelog-template.md
+          sed -i "s/WINDOWS_LINK/$windows_link_escaped/g" build/changelog-template.md
+          sed -i "s/LINUX_SERVER_LINK/$linux_link_escaped/g" build/changelog-template.md
+
+      - id: release
+        name: Release
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/')
         with:
-          files: crynux-node-helium-${{ github.ref_name }}-mac-arm64-signed.dmg
+          body_path: build/changelog-template.md
+          files: crynux-node-helium-v${{ env.RELEASE_VERSION }}-mac-arm64-signed.dmg
+    outputs:
+      windows-link: ${{ env.WINDOWS_LINK }}
+      linux-link: ${{ env.LINUX_LINK }}
+      mac-link: ${{ fromJSON(steps.release.outputs.assets)[0].browser_download_url }}
+
+  update-documentation:
+    runs-on: ubuntu-22.04
+    needs:
+      - publish-release
+    env:
+      WINDOWS_LINK: ${{ needs.publish-release.outputs.windows-link }}
+      LINUX_LINK: ${{ needs.publish-release.outputs.linux-link }}
+      MAC_LINK: ${{ needs.publish-release.outputs.mac-link }}
+    steps:
+      - name: Dispatch event to the documentation repository
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          token: ${{ secrets.PAT }}
+          repository: ${{ github.repository_owner }}/documentation
+          event-type: node-released
+          client-payload: '{"windows-link": "${{ env.WINDOWS_LINK }}", "linux-link": "${{ env.LINUX_LINK }}", "mac-link": "${{ env.MAC_LINK }}", "release-version": "${{ env.RELEASE_VERSION }}"}'

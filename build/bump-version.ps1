@@ -27,3 +27,6 @@ Write-Output "Bumping version number to: $VERSION"
 
 ## Update build/windows/package.ps1
 (Get-Content "build/windows/package.ps1") -replace "\`$VERSION = `"[0-9].[0-9].[0-9]`"", "`$VERSION = `"$VERSION`"" | Set-Content "build/windows/package.ps1"
+
+## Update github action
+(Get-Content ".github/workflows/release-all.yml") -replace "RELEASE_VERSION: [0-9].[0-9].[0-9]", "RELEASE_VERSION: $VERSION" | Set-Content ".github/workflows/release-all.yml"
