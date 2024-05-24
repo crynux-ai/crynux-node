@@ -28,7 +28,7 @@ dependencies = [
     "psutil~=5.9.8",
     "eth-rlp==1.0.1",
 ]
-version = "2.2.3"
+version = "2.2.4"
 
 [tool.setuptools.packages.find]
 where = ["src"]

@@ -10,7 +10,7 @@ on:
       - '*'
 
 env:
-  RELEASE_VERSION: 2.2.3
+  RELEASE_VERSION: 2.2.4
 
 # A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
@@ -134,13 +134,37 @@ jobs:
 
       - name: Generate the changelog
         run: |
-          sed -i 's^RELEASE_VERSION^${{ env.RELEASE_VERSION }}^g' build/changelog-template.md
-          sed -i 's^WINDOWS_LINK^${{ env.WINDOWS_LINK }}^g' build/changelog-template.md
-          sed -i 's^LINUX_SERVER_LINK^${{ env.LINUX_LINK }}^g' build/changelog-template.md
+          windows_link_escaped=$(printf '%s\n' "${{ env.WINDOWS_LINK }}" | sed -e 's/[\/&]/\\&/g')
+          linux_link_escaped=$(printf '%s\n' "${{ env.LINUX_LINK }}" | sed -e 's/[\/&]/\\&/g')
+          sed -i "s/RELEASE_VERSION/${{ env.RELEASE_VERSION }}/g" build/changelog-template.md
+          sed -i "s/WINDOWS_LINK/$windows_link_escaped/g" build/changelog-template.md
+          sed -i "s/LINUX_SERVER_LINK/$linux_link_escaped/g" build/changelog-template.md
 
-      - name: Release
+      - id: release
+        name: Release
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/')
         with:
           body_path: build/changelog-template.md
           files: crynux-node-helium-v${{ env.RELEASE_VERSION }}-mac-arm64-signed.dmg
+    outputs:
+      windows-link: ${{ env.WINDOWS_LINK }}
+      linux-link: ${{ env.LINUX_LINK }}
+      mac-link: ${{ fromJSON(steps.release.outputs.assets)[0].browser_download_url }}
+
+  update-documentation:
+    runs-on: ubuntu-22.04
+    needs:
+      - publish-release
+    env:
+      WINDOWS_LINK: ${{ needs.publish-release.outputs.windows-link }}
+      LINUX_LINK: ${{ needs.publish-release.outputs.linux-link }}
+      MAC_LINK: ${{ needs.publish-release.outputs.mac-link }}
+    steps:
+      - name: Dispatch event to the documentation repository
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          token: ${{ secrets.PAT }}
+          repository: ${{ github.repository_owner }}/documentation
+          event-type: node-released
+          client-payload: '{"windows-link": "${{ env.WINDOWS_LINK }}", "linux-link": "${{ env.LINUX_LINK }}", "mac-link": "${{ env.MAC_LINK }}", "release-version": "${{ env.RELEASE_VERSION }}"}'
