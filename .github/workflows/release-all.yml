@@ -10,7 +10,7 @@ on:
       - '*'
 
 env:
-  RELEASE_VERSION: 2.2.4
+  RELEASE_VERSION: 2.2.5
 
 # A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
