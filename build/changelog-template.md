@@ -1,5 +1,3 @@
-## Crynux Node Binary Releases
-
 ### Windows
 
 [crynux-node-helium-vRELEASE_VERSION-windows-x64.zip](WINDOWS_LINK)
