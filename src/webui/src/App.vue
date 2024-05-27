@@ -1,8 +1,8 @@
 <script setup>
 import { RouterView } from 'vue-router'
 import V1Client from '@/api/v1/v1'
-import { message } from 'ant-design-vue'
-import { onBeforeUnmount, onMounted, ref, h } from 'vue'
+import { Grid, message } from 'ant-design-vue'
+import { onBeforeUnmount, onMounted, ref, h, computed } from 'vue'
 import { BulbOutlined } from '@ant-design/icons-vue'
 
 const [messageApi, contextHolder] = message.useMessage()
@@ -52,6 +52,19 @@ const stopWaves = () => {
     }
 }
 
+const useBreakpoint = Grid.useBreakpoint
+const screens = useBreakpoint()
+const screenClasses = computed(() => {
+    let classes = ['content-container']
+    for (let v in screens.value) {
+        if (screens.value[v]) {
+            classes.push(v)
+        }
+    }
+
+    return classes
+})
+
 onMounted(() => {
     startWaves()
 })
@@ -62,23 +75,35 @@ onBeforeUnmount(() => {
 
 <template>
     <div id="bg-container" ref="vantaRef">
-        <div id="content-container">
-            <div id="toolbar">
-                <a-button size="large" type="text" :icon="h(BulbOutlined)" @click="toggleWaves" ghost
-                          :style="{'color': 'white'}" />
+        <div id="content-scroll-wrapper">
+            <div id="content-container" :class="screenClasses">
+                <div id="toolbar">
+                    <a-button size="large" type="text" :icon="h(BulbOutlined)" @click="toggleWaves" ghost
+                              :style="{'color': 'white'}" />
+                </div>
+                <context-holder />
+                <RouterView />
             </div>
-            <context-holder />
-            <RouterView />
         </div>
     </div>
 </template>
 
 <style lang="stylus" scoped>
-#bg-container,
-#content-container
+#bg-container
     position relative
     width 100%
     height 100%
+
+#content-scroll-wrapper
+    position absolute
+    width 100%
+    height 100%
+    overflow-x hidden
+    overflow-y auto
+
+#content-container
+    position relative
+    width 100%
 
 #toolbar
     position absolute
