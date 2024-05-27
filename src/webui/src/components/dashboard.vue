@@ -148,9 +148,28 @@ const privateKeyUpdated = async () => {
     await updateUI()
 }
 
+let fixedBottomBar = ref(false)
+
+const windowResized = () => {
+    const bottomBar = document.getElementById("bottom-bar")
+    if(!bottomBar)
+        return
+
+    const windowHeight = window.innerHeight
+    const contentHeight = document.getElementById("content-container").offsetHeight
+    const bottomBarHeight = bottomBar.offsetHeight
+
+    const threshold = fixedBottomBar.value ? contentHeight + bottomBarHeight + 68 : contentHeight
+    fixedBottomBar.value = windowHeight > threshold
+}
+
+
 let uiUpdateInterval = null
 let uiUpdateCurrentTicket = null
 onMounted(async () => {
+
+    windowResized()
+    addEventListener("resize", windowResized);
 
     try {
         await updateUI()
@@ -310,17 +329,6 @@ const doSendNodeAction = async (action) => {
 const useBreakpoint = Grid.useBreakpoint
 const screens = useBreakpoint()
 
-const topRowClasses = computed(() => {
-    let classes = ['top-row']
-    for (let v in screens.value) {
-        if (screens.value[v]) {
-            classes.push(v)
-        }
-    }
-
-    return classes
-})
-
 const getPercent = (num) => {
     if (num >= 100) {
         return 99
@@ -336,9 +344,16 @@ const copyText = async (text) => {
 </script>
 
 <template>
-    <a-row :class="topRowClasses"></a-row>
+    <a-row class="top-row"></a-row>
     <a-row>
-        <a-col :span="14" :offset="5">
+        <a-col
+            :xs="{ span: 22, offset: 1, order: 1 }"
+            :sm="{ span: 22, offset: 1, order: 1 }"
+            :md="{ span: 22, offset: 1, order: 1 }"
+            :lg="{ span: 14, offset: 5, order: 1 }"
+            :xl="{ span: 14, offset: 5, order: 1 }"
+            :xxl="{ span: 14, offset: 5, order: 1 }"
+        >
             <a-alert
                 message="System is initializing..."
                 class="top-alert"
@@ -601,9 +616,9 @@ const copyText = async (text) => {
                     <a-col :span="12">
                         <a-tooltip>
                             <template #title>{{ accountStatus.address }}</template>
-                            <a-statistic title="Address">
+                            <a-statistic title="Address" class="wallet-address">
                                 <template #formatter>
-                                    {{ shortAddress }}
+                                    <span>{{ shortAddress }}</span>
                                     <a-button @click="copyText(accountStatus.address)">
                                         <template #icon>
                                             <CopyOutlined />
@@ -614,7 +629,7 @@ const copyText = async (text) => {
                         </a-tooltip>
                     </a-col>
                     <a-col :span="6">
-                        <a-statistic title="Staked (Test CNX)" class="wallet-value">
+                        <a-statistic title="Staked" class="wallet-value">
                             <template #formatter>
                                 <a-typography-link
                                     v-if="nodeStatus.status === nodeAPI.NODE_STATUS_RUNNING || nodeStatus.status === nodeAPI.NODE_STATUS_PENDING_PAUSE || nodeStatus.status === nodeAPI.NODE_STATUS_PENDING_STOP"
@@ -851,26 +866,31 @@ const copyText = async (text) => {
             </a-card>
         </a-col>
     </a-row>
-    <div class="bottom-bar">
-        <a-space class="footer-links" align="center">
+    <div id="bottom-bar" :class="{'bottom-bar': true, 'fixed-bottom-bar': fixedBottomBar}">
+        <a-space class="footer-links" align="center" :direction="screens['xs'] ? 'vertical' : 'horizontal'">
             <a-typography-link href="https://crynux.ai" target="_blank">Home</a-typography-link>
-            &nbsp;|&nbsp;
+            <span class="bottom-bar-divider">&nbsp;|&nbsp;</span>
             <a-typography-link href="https://docs.crynux.ai" target="_blank">Docs</a-typography-link>
-            &nbsp;|&nbsp;
+            <span class="bottom-bar-divider">&nbsp;|&nbsp;</span>
             <a-typography-link href="https://blog.crynux.ai" target="_blank">Blog</a-typography-link>
-            &nbsp;|&nbsp;
+            <span class="bottom-bar-divider">&nbsp;|&nbsp;</span>
             <a-typography-link href="https://twitter.com/crynuxai" target="_blank"
             >Twitter
             </a-typography-link
             >
-            &nbsp;|&nbsp;
+            <span class="bottom-bar-divider">&nbsp;|&nbsp;</span>
             <a-typography-link :href="config.discord_link" target="_blank"
             >Discord
             </a-typography-link
             >
-            &nbsp;|&nbsp;
+            <span class="bottom-bar-divider">&nbsp;|&nbsp;</span>
+            <a-typography-link href="https://netstats.crynux.ai" target="_blank"
+            >Netstats
+            </a-typography-link
+            >
+            <span class="bottom-bar-divider">&nbsp;|&nbsp;</span>
             <a-typography-text :style="{'color':'white'}">v{{ appVersion }}</a-typography-text>
-            &nbsp;|&nbsp;
+            <span class="bottom-bar-divider">&nbsp;|&nbsp;</span>
             <!-- Place this tag where you want the button to render. -->
             <github-button
                 href="https://github.com/crynux-ai/crynux-node"
@@ -896,19 +916,32 @@ const copyText = async (text) => {
     color black
     text-decoration none
 
+.xs .wallet-value a,
+.xs .wallet-value span,
+.xs .wallet-address span
+    font-size 16px
+
 .wallet-value a:hover
     color #1677ff
 
 .top-alert
     margin-bottom 16px
 
-.bottom-bar
+.fixed-bottom-bar.bottom-bar
     position fixed
-    width 100%
-    height 60px
     bottom 0
     left 0
+    margin-top 0
+
+.bottom-bar
+    position relative
+    width 100%
+    height 60px
     padding 0 32px
+    margin-top 68px
+
+.xs .bottom-bar .bottom-bar-divider
+    display none
 
 .footer-links
     color #fff
@@ -921,26 +954,23 @@ const copyText = async (text) => {
         &:hover
             text-decoration underline
 
+.xs .footer-links
+    line-height 24px
+
 .footer-logo
     opacity 0.8
     float right
 
-.top-row
-    &.xs
-        height 16px
-
-    &.sm
-        height 20px
-
-    &.md
-        height 40px
-
-    &.lg
-        height 40px
-
-    &.xl
-        height 80px
-
-    &.xxl
-        height 100px
+.xs .top-row
+    height 64px
+.sm .top-row
+    height 64px
+.md .top-row
+    height 64px
+.lg .top-row
+    height 64px
+.xl .top-row
+    height 80px
+.xxl .top-row
+    height 100px
 </style>
