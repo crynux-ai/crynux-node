@@ -109,9 +109,9 @@ const shortAddress = computed(() => {
         return 'N/A'
     } else {
         return (
-            accountStatus.address.substring(0, 8) +
+            accountStatus.address.substring(0, 7) +
             '...' +
-            accountStatus.address.substring(accountStatus.address.length - 6)
+            accountStatus.address.substring(accountStatus.address.length - 5)
         )
     }
 })
@@ -598,7 +598,7 @@ const copyText = async (text) => {
                     ></edit-account>
                 </template>
                 <a-row>
-                    <a-col :span="18">
+                    <a-col :span="12">
                         <a-tooltip>
                             <template #title>{{ accountStatus.address }}</template>
                             <a-statistic title="Address">
@@ -614,7 +614,26 @@ const copyText = async (text) => {
                         </a-tooltip>
                     </a-col>
                     <a-col :span="6">
-                        <a-statistic title="Test CNX" :value="toEtherValue(accountStatus.balance)"></a-statistic>
+                        <a-statistic title="Staked (Test CNX)" class="wallet-value">
+                            <template #formatter>
+                                <a-typography-link
+                                    v-if="nodeStatus.status === nodeAPI.NODE_STATUS_RUNNING || nodeStatus.status === nodeAPI.NODE_STATUS_PENDING_PAUSE || nodeStatus.status === nodeAPI.NODE_STATUS_PENDING_STOP"
+                                    :href="config.block_explorer + '/address/' + accountStatus.address"
+                                    target="_blank">{{ toEtherValue(BigInt(400e18)) }}</a-typography-link>
+                                <a-typography-text v-else>0</a-typography-text>
+                            </template>
+                        </a-statistic>
+                    </a-col>
+                    <a-col :span="6">
+                        <a-statistic title="Balance (Test CNX)" class="wallet-value">
+                            <template #formatter>
+                                <a-typography-link
+                                    v-if="accountStatus.address !== ''"
+                                    :href="config.block_explorer + '/address/' + accountStatus.address"
+                                    target="_blank">{{ toEtherValue(accountStatus.balance) }}</a-typography-link>
+                                <a-typography-text v-else>0</a-typography-text>
+                            </template>
+                        </a-statistic>
                     </a-col>
                 </a-row>
             </a-card>
@@ -871,6 +890,15 @@ const copyText = async (text) => {
     margin-right 0 !important
 </style>
 <style scoped lang="stylus">
+.wallet-value a,
+    .wallet-value span
+    font-size 24px
+    color black
+    text-decoration none
+
+.wallet-value a:hover
+    color #1677ff
+
 .top-alert
     margin-bottom 16px
 
