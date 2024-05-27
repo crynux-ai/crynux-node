@@ -4,8 +4,11 @@ import V1Client from '@/api/v1/v1'
 import { Grid, message } from 'ant-design-vue'
 import { onBeforeUnmount, onMounted, ref, h, computed } from 'vue'
 import { BulbOutlined } from '@ant-design/icons-vue'
+import { useSystemStore } from '@/stores/system'
 
 const [messageApi, contextHolder] = message.useMessage()
+
+const systemStore = useSystemStore()
 
 const defaultErrorHandler = (msg) => {
     if (!/ContractError/.test(msg)) {
@@ -28,8 +31,10 @@ let wavesEffect = null
 const toggleWaves = () => {
     if (wavesEffect === null) {
         startWaves()
+        systemStore.setShowWaveBg(true)
     } else {
         stopWaves()
+        systemStore.setShowWaveBg(false)
     }
 }
 
@@ -66,7 +71,9 @@ const screenClasses = computed(() => {
 })
 
 onMounted(() => {
-    startWaves()
+    if (systemStore.showWaveBg) {
+        startWaves()
+    }
 })
 onBeforeUnmount(() => {
     stopWaves()
