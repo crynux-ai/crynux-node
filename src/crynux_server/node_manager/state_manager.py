@@ -79,7 +79,9 @@ class NodeStateManager(object):
 
                 while True:
                     local_status = await self._get_node_status()
-                    await self.state_cache.set_node_state(local_status)
+                    current_status = (await self.state_cache.get_node_state()).status
+                    if local_status != current_status:
+                        await self.state_cache.set_node_state(local_status)
                     await sleep(interval)
         finally:
             self._cancel_scope = None
