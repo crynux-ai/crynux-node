@@ -80,7 +80,7 @@ let apiContinuousErrorCount = reactive({
 const apiErrorHandler = (apiName) => {
     return () => {
         apiContinuousErrorCount[apiName]++
-        console.error('API Error: ', apiName)
+        logger.error('API Error: ', apiName)
     }
 }
 
@@ -144,7 +144,7 @@ const ethEnough = () => {
 }
 
 const privateKeyUpdated = async () => {
-    console.log('received privateKeyUpdated')
+    logger.debug('received privateKeyUpdated')
     await updateUI()
 }
 
@@ -155,7 +155,7 @@ onMounted(async () => {
     try {
         await updateUI()
     } catch (e) {
-        console.error('First time UI update failed')
+        logger.error('First time UI update failed')
     }
 
     if (uiUpdateInterval != null) {
@@ -172,7 +172,27 @@ onBeforeUnmount(() => {
 
 const updateUI = async () => {
     uiUpdateCurrentTicket = Date.now()
-    await updateUIWithTicket(uiUpdateCurrentTicket)
+
+    try {
+        await updateTaskStats(uiUpdateCurrentTicket)
+    } catch (e) {
+        logger.error("Updating task stats failed:")
+        logger.error(e)
+    }
+
+    try {
+        await updateUIWithTicket(uiUpdateCurrentTicket)
+    } catch (e) {
+        logger.error("Updating UI failed:")
+        logger.error(e)
+    }
+
+    try {
+        await updateSystemInfo(uiUpdateCurrentTicket)
+    } catch (e) {
+        logger.error("Updating system info failed:")
+        logger.error(e)
+    }
 }
 
 const updateUIWithTicket = async (ticket) => {
@@ -193,7 +213,6 @@ const updateUIWithTicket = async (ticket) => {
     } else {
         logger.debug('[' + ticket + '] Account address is not empty. Continue updating network info.')
         await updateNetworkInfo(ticket)
-        await updateSystemInfo(ticket)
     }
 }
 
@@ -223,13 +242,6 @@ const updateNetworkInfo = async (ticket) => {
     if (ticket === uiUpdateCurrentTicket) {
         Object.assign(nodeStatus, nodeResp)
     }
-
-    const taskResp = await taskAPI.getTaskRunningStatus()
-    apiContinuousErrorCount['task'] = 0
-
-    if (ticket === uiUpdateCurrentTicket) {
-        Object.assign(taskStatus, taskResp)
-    }
 }
 
 const updateSystemInfo = async (ticket) => {
@@ -238,6 +250,15 @@ const updateSystemInfo = async (ticket) => {
 
     if (ticket === uiUpdateCurrentTicket) {
         Object.assign(systemInfo, systemResp)
+    }
+}
+
+const updateTaskStats = async (ticket) => {
+    const taskResp = await taskAPI.getTaskRunningStatus()
+    apiContinuousErrorCount['task'] = 0
+
+    if (ticket === uiUpdateCurrentTicket) {
+        Object.assign(taskStatus, taskResp)
     }
 }
 
