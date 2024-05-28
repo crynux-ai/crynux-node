@@ -6,6 +6,7 @@ from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
 from anyio import fail_after
+from sqlalchemy.pool import NullPool
 from sqlalchemy.ext.asyncio import (AsyncEngine, AsyncSession,
                                     async_sessionmaker, create_async_engine)
 
@@ -44,7 +45,8 @@ async def init(db: str | None = None):
     engine = create_async_engine(
         db,
         pool_pre_ping=True,
-        connect_args={"check_same_thread": False},
+        connect_args={"check_same_thread": False, "timeout": 5},
+        poolclass=NullPool
         # echo=True,
     )
     session = async_sessionmaker(engine, autoflush=False, expire_on_commit=False)

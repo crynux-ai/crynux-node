@@ -69,7 +69,6 @@ def _make_event_queue(queue_cls: Type[EventQueue]) -> EventQueue:
 
 def _make_watcher(
     contracts: Contracts,
-    queue: EventQueue,
     block_number_cache_cls: Type[BlockNumberCache],
 ):
     watcher = EventWatcher.from_contracts(contracts)
@@ -77,16 +76,6 @@ def _make_watcher(
     block_cache = block_number_cache_cls()
     watcher.set_blocknumber_cache(block_cache)
 
-    async def _push_event(event_data: EventData):
-        event = models.load_event_from_contracts(event_data)
-        await queue.put(event)
-
-    watcher.watch_event(
-        "task",
-        "TaskStarted",
-        callback=_push_event,
-        filter_args={"selectedNode": contracts.account},
-    )
     set_watcher(watcher)
     return watcher
 
@@ -239,7 +228,6 @@ class NodeManager(object):
             if self._watcher is None:
                 self._watcher = _make_watcher(
                     contracts=self._contracts,
-                    queue=self._event_queue,
                     block_number_cache_cls=self.block_number_cache_cls,
                 )
             if self._task_system is None:
@@ -465,6 +453,54 @@ class NodeManager(object):
         self, *, task_status: TaskStatus[None] = TASK_STATUS_IGNORED
     ):
         assert self._watcher is not None
+        assert self._event_queue is not None
+        assert self._contracts is not None
+
+        queue = self._event_queue
+        account = self._contracts.account
+        
+
+        async def _push_event(event_data: EventData):
+            event = models.load_event_from_contracts(event_data)
+            await queue.put(event)
+
+        self._watcher.watch_event(
+            "task",
+            "TaskStarted",
+            callback=_push_event,
+            filter_args={"selectedNode": account},
+        )
+
+        async def _node_kicked_out(event_data: EventData):
+            address = event_data["args"]["nodeAddress"]
+            if address == account:
+                _logger.info("Node is kicked out")
+                await self.state_cache.set_node_state(
+                    status=models.NodeStatus.Stopped,
+                    message="Node is kicked out"
+                )
+
+        self._watcher.watch_event(
+            "node",
+            "NodeKickedOut",
+            callback=_node_kicked_out
+        )
+
+        async def _node_slashed(event_data: EventData):
+            address = event_data["args"]["nodeAddress"]
+            if address == account:
+                _logger.info("Node is slashed")
+                await self.state_cache.set_node_state(
+                    status=models.NodeStatus.Stopped,
+                    message="Node is slashed"
+                )
+
+        self._watcher.watch_event(
+            "node",
+            "NodeSlashed",
+            callback=_node_slashed
+        )
+
 
         # call task_status.started() only once
         task_status_set = False
