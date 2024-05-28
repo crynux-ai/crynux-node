@@ -169,7 +169,6 @@ class CrynuxApp(QWidget):
         _logger.debug("Application UI initialized")
 
     def init_ui(self):
-        os.environ["QTWEBENGINE_REMOTE_DEBUGGING"] = "7788"
 
         stack = QStackedLayout(self)
         self.webview = QWebEngineView()
