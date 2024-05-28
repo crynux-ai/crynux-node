@@ -1,11 +1,14 @@
 <script setup>
 import { RouterView } from 'vue-router'
 import V1Client from '@/api/v1/v1'
-import { Grid, message } from 'ant-design-vue'
-import { onBeforeUnmount, onMounted, ref, h, computed } from 'vue'
-import { BulbOutlined } from '@ant-design/icons-vue'
+import { Grid, message, Modal } from 'ant-design-vue'
+import { onBeforeUnmount, onMounted, ref, h, computed, createVNode } from 'vue'
+import { BulbOutlined, ExclamationCircleOutlined } from '@ant-design/icons-vue'
+import { useSystemStore } from '@/stores/system'
 
 const [messageApi, contextHolder] = message.useMessage()
+
+const systemStore = useSystemStore()
 
 const defaultErrorHandler = (msg) => {
     if (!/ContractError/.test(msg)) {
@@ -28,8 +31,10 @@ let wavesEffect = null
 const toggleWaves = () => {
     if (wavesEffect === null) {
         startWaves()
+        systemStore.setShowWaveBg(true)
     } else {
         stopWaves()
+        systemStore.setShowWaveBg(false)
     }
 }
 
@@ -65,8 +70,32 @@ const screenClasses = computed(() => {
     return classes
 })
 
+// This one is only called from the Python side
+const closeWindow = () => {
+    if(systemStore.showMinimizedNotification) {
+        Modal.confirm({
+            title: 'Node will be minimized',
+            icon: createVNode(ExclamationCircleOutlined),
+            content: "Crynux Node will still be running in the background. Use the system tray to exit it.",
+            onOk() {
+                systemStore.setShowMinimizedNotification(false)
+                window.qtBackend.hide_window()
+            },
+            onCancel() {}
+        })
+    } else {
+        window.qtBackend.hide_window()
+    }
+}
+
+defineExpose({
+  closeWindow,
+})
+
 onMounted(() => {
-    startWaves()
+    if (systemStore.showWaveBg) {
+        startWaves()
+    }
 })
 onBeforeUnmount(() => {
     stopWaves()

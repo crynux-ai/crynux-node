@@ -62,10 +62,11 @@ _logger.info(f"Start Crynux Node from: {config_file_path}")
 import asyncio
 import sys
 from PyQt6.QtGui import QDesktopServices, QIcon, QAction, QPixmap
-from PyQt6.QtCore import QUrl, Qt, qInstallMessageHandler, QtMsgType
+from PyQt6.QtCore import QUrl, Qt, qInstallMessageHandler, QtMsgType, QSettings, QObject, pyqtSlot
 from PyQt6.QtWidgets import QWidget, QApplication, QSplashScreen, QStackedLayout, QSystemTrayIcon, QMenu
 from PyQt6.QtWebEngineWidgets import QWebEngineView
 from PyQt6.QtWebEngineCore import QWebEnginePage, QWebEngineSettings
+from PyQt6.QtWebChannel import QWebChannel
 import qasync
 
 from anyio import Event, create_task_group, sleep
@@ -126,20 +127,58 @@ class CustomWebEnginePage(QWebEnginePage):
         page.deleteLater()
 
 
+class WebUICallable(QObject):
+    def __init__(self, crynux_app):
+        super().__init__()
+        self.crynux_app = crynux_app
+        self.settings = QSettings("crynux.ai", "crynux_node")
+
+    @pyqtSlot(str, result="QString")
+    def get_settings_item(self, key):
+        _logger.debug("reading settings item: " + key)
+        self.settings.beginGroup("NodeWindow")
+        value = self.settings.value(key, "")
+        self.settings.endGroup()
+        _logger.debug(value)
+
+        return value
+
+    @pyqtSlot(str, str)
+    def set_settings_item(self, key, value):
+        _logger.debug("writing settings item: " + key + ": " + str(value))
+        self.settings.beginGroup("NodeWindow")
+        self.settings.setValue(key, value)
+        self.settings.endGroup()
+
+    @pyqtSlot()
+    def hide_window(self):
+        self.crynux_app.hide()
+
+
 class CrynuxApp(QWidget):
 
     def __init__(self):
         super().__init__()
+        self.webpage = None
+        self.webview = None
+        self.webui_callable = WebUICallable(self)
+
         _logger.debug("Initializing Application UI...")
         self.initializing = True
         self.init_ui()
         _logger.debug("Application UI initialized")
 
     def init_ui(self):
+        os.environ["QTWEBENGINE_REMOTE_DEBUGGING"] = "7788"
+
         stack = QStackedLayout(self)
         self.webview = QWebEngineView()
         self.webpage = CustomWebEnginePage()
         self.webview.setPage(self.webpage)
+
+        web_channel = QWebChannel(self)
+        web_channel.registerObject("backend", self.webui_callable)
+        self.webpage.setWebChannel(web_channel)
 
         settings = self.webpage.settings()
         settings.setAttribute(
@@ -165,8 +204,8 @@ class CrynuxApp(QWidget):
         self.activateWindow()
 
     def closeEvent(self, event):
-        self.hide()
-        event.accept()
+        self.webpage.runJavaScript("window.appVM.closeWindow()")
+        event.ignore()
 
 
 def main():
