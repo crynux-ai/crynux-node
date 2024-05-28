@@ -105,8 +105,10 @@ class CrynuxRunner(object):
                 await db.close()
             self._shutdown_event = None
             self._tg = None
+            _logger.info("Crynux server stopped")
 
     async def _stop(self):
+        _logger.info("Stopping crynux server")
         if self._tg is None:
             return
 
