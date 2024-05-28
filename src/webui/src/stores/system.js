@@ -12,6 +12,5 @@ export const useSystemStore = defineStore('system', {
         setShowMinimizedNotification(show) {
             this.showMinimizedNotification = show
         }
-    },
-    persist: true
+    }
 })
