@@ -8,11 +8,10 @@ from contextlib import asynccontextmanager
 from typing import Awaitable, Callable, Deque, List, Optional, Tuple
 
 from anyio import (CancelScope, Condition, create_task_group, fail_after,
-                   get_cancelled_exc_class, sleep_until, to_thread)
-from celery.result import AsyncResult
+                   get_cancelled_exc_class, sleep_until, to_process, to_thread)
 from hexbytes import HexBytes
-from tenacity import (before_sleep_log, retry, retry_if_exception,
-                      stop_after_delay, wait_chain, wait_fixed)
+from tenacity import (retry, retry_if_exception, stop_after_delay, wait_chain,
+                      wait_fixed)
 from web3.types import EventData
 
 from crynux_server import models
@@ -26,7 +25,8 @@ from crynux_server.watcher import EventWatcher, get_watcher
 from crynux_worker.task.error import TaskInvalid
 
 from .state_cache import TaskStateCache, get_task_state_cache
-from .utils import make_result_commitments
+from .utils import (make_result_commitments, run_distributed_task,
+                    run_local_task)
 
 _logger = logging.getLogger(__name__)
 
@@ -439,73 +439,29 @@ class InferenceTaskRunner(TaskRunner):
         task = await get_task()
 
         if self.distributed:
-
-            def run_distributed_task():
-                from crynux_server.celery_app import get_celery
-
-                celery = get_celery()
-                kwargs = {
-                    "task_id": task.task_id,
-                    "task_type": int(event.task_type),
-                    "task_args": task.task_args,
-                    "distributed": True,
-                }
-                res: AsyncResult = celery.send_task(
-                    self.task_name,
-                    kwargs=kwargs,
-                )
-                res.get()
-
-            await to_thread.run_sync(run_distributed_task, cancellable=True)
+            await to_process.run_sync(
+                run_distributed_task,
+                self.task_name,
+                task.task_id,
+                event.task_type,
+                task.task_args,
+                cancellable=True,
+            )
             async with self.state_context():
                 self.state.status = models.TaskStatus.Executing
 
         else:
-
-            def run_local_task():
-                import crynux_worker.task as h_task
-                from crynux_worker.task.utils import (get_gpt_resp_hash,
-                                                      get_image_hash)
-
-                assert self.local_config is not None
-                proxy = None
-                if self.local_config.proxy is not None:
-                    proxy = self.local_config.proxy.model_dump()
-
-                task_func = getattr(h_task, self.task_name)
-                kwargs = dict(
-                    task_id=task.task_id,
-                    task_type=int(event.task_type),
-                    task_args=task.task_args,
-                    distributed=False,
-                    result_url="",
-                    output_dir=self.local_config.output_dir,
-                    hf_cache_dir=self.local_config.hf_cache_dir,
-                    external_cache_dir=self.local_config.external_cache_dir,
-                    script_dir=self.local_config.script_dir,
-                    inference_logs_dir=self.local_config.inference_logs_dir,
-                    proxy=proxy,
-                )
-
-                task_func(**kwargs)
-
-                result_dir = os.path.join(
-                    self.local_config.output_dir, str(task.task_id)
-                )
-                result_files = sorted(os.listdir(result_dir))
-                result_paths = [os.path.join(result_dir, file) for file in result_files]
-                if event.task_type == models.TaskType.SD:
-                    hashes = [get_image_hash(path) for path in result_paths]
-                else:
-                    hashes = [get_gpt_resp_hash(path) for path in result_paths]
-                return models.TaskResultReady(
-                    task_id=self.task_id,
-                    hashes=hashes,
-                    files=result_paths,
-                )
-
             try:
-                next_event = await to_thread.run_sync(run_local_task, cancellable=True)
+                assert self.local_config is not None
+                next_event = await to_process.run_sync(
+                    run_local_task,
+                    self.task_name,
+                    task.task_id,
+                    event.task_type,
+                    task.task_args,
+                    self.local_config,
+                    cancellable=True,
+                )
                 async with self.state_context():
                     self.state.status = models.TaskStatus.Executing
                 await self.queue.put(next_event)
@@ -537,7 +493,9 @@ class InferenceTaskRunner(TaskRunner):
                     _logger.info(f"Submit commitment of task {self.task_id}")
                 except TxRevertedError as e:
                     # all other nodes report error
-                    _logger.error(f"SubmitTaskResultCommitment failed due to {e.reason}")
+                    _logger.error(
+                        f"SubmitTaskResultCommitment failed due to {e.reason}"
+                    )
                     if "Task is aborted" in e.reason:
                         with fail_after(60, shield=True):
                             await self._report_error()

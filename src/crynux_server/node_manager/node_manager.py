@@ -8,7 +8,7 @@ from datetime import datetime
 from typing import List, Optional, Type, cast
 
 from anyio import (TASK_STATUS_IGNORED, Event, create_task_group, fail_after,
-                   get_cancelled_exc_class, move_on_after, to_thread, from_thread)
+                   get_cancelled_exc_class, move_on_after, to_thread, from_thread, to_process)
 from anyio.abc import TaskGroup, TaskStatus
 from tenacity import (AsyncRetrying, before_sleep_log, stop_after_attempt,
                       stop_never, wait_fixed)
@@ -330,7 +330,7 @@ class NodeManager(object):
                         status=models.NodeStatus.Init,
                         init_message="Running local evaluation task"
                     )
-                    await to_thread.run_sync(
+                    await to_process.run_sync(
                         inference,
                         json.dumps(sd_inference_args),
                         os.path.join(

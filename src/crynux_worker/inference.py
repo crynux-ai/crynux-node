@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 import logging
 import os
+import shutil
 from typing import List
 
 from crynux_worker import config, utils
@@ -80,3 +81,6 @@ def inference(
         _logger.exception(e)
         _logger.error("Inference error")
         raise
+    finally:
+        if os.path.exists(output_dir):
+            shutil.rmtree(output_dir)
