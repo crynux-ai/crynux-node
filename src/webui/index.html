@@ -22,7 +22,7 @@
 <script src="/vanta.waves.min.js"></script>
 <script src="qrc:///qtwebchannel/qwebchannel.js"></script>
 <script>
-    if(QWebChannel) {
+    if(typeof(QWebChannel) !== 'undefined') {
         new QWebChannel(qt.webChannelTransport, function (channel) {
             window.qtBackend = channel.objects.backend;
         });

@@ -16,7 +16,9 @@ watch(
   pinia.state,
   async (state) => {
     // persist the whole state to the local storage whenever it changes
-    return localStorageAndPythonStorage.setItem('piniaState', JSON.stringify(state))
+      if (state) {
+          return localStorageAndPythonStorage.setItem('piniaState', JSON.stringify(state))
+      }
   },
   { deep: true }
 )
@@ -26,7 +28,7 @@ app.use(router)
 app.use(Antd)
 
 localStorageAndPythonStorage.getItem('piniaState').then((state) => {
-    if(state !== "") {
+    if(state) {
         try {
             pinia.state.value = JSON.parse(state)
         } catch (e) {
