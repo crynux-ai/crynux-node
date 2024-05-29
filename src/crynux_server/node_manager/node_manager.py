@@ -179,6 +179,17 @@ class NodeManager(object):
 
     async def _init_components(self):
         _logger.info("Initializing node manager components.")
+        if self._event_queue is None:
+            self._event_queue = _make_event_queue(self.event_queue_cls)
+
+        if self._task_system is None:
+                self._task_system = _make_task_system(
+                    queue=self._event_queue,
+                    distributed=self.config.distributed,
+                    retry=self._retry,
+                    task_state_cache_cls=self.task_state_cache_cls,
+                )
+
         if self._contracts is None or self._relay is None:
             if self._privkey is None:
                 if self.config.headless:
@@ -222,20 +233,11 @@ class NodeManager(object):
                 contracts=self._contracts,
             )
 
-        if self._watcher is None or self._task_system is None:
-            if self._event_queue is None:
-                self._event_queue = _make_event_queue(self.event_queue_cls)
+        if self._watcher is None:
             if self._watcher is None:
                 self._watcher = _make_watcher(
                     contracts=self._contracts,
                     block_number_cache_cls=self.block_number_cache_cls,
-                )
-            if self._task_system is None:
-                self._task_system = _make_task_system(
-                    queue=self._event_queue,
-                    distributed=self.config.distributed,
-                    retry=self._retry,
-                    task_state_cache_cls=self.task_state_cache_cls,
                 )
         _logger.info("Node manager components initializing complete.")
 
