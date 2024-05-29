@@ -36,7 +36,7 @@ def call_prefetch_script(
         vae_models,
         proxy,
     )
-    _logger.info("Start prefetching models")
+    _logger.info("Start downloading models")
 
     total_models = 0
     if sd_base_models is not None:
@@ -62,7 +62,7 @@ def call_prefetch_script(
     success, _ = utils.run_worker(args=args, envs=envs, line_callback=line_callback)
     if not success:
         raise ValueError("Failed to download models due to network issue")
-    _logger.info("Prefetching models complete")
+    _logger.info("Downloading models complete")
 
 
 def prefetch(
@@ -96,5 +96,5 @@ def prefetch(
         )
     except Exception as e:
         _logger.exception(e)
-        _logger.error("Prefetch error")
+        _logger.error("Error downloading models")
         raise

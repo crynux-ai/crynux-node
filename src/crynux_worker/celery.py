@@ -28,7 +28,7 @@ def prefetch_after_setup(_, __, **kwargs):
     config = get_config()
     log.init(config)
 
-    _logger.info("Prefetch base models.")
+    _logger.info("Start downloading models")
     if config.task.preloaded_models is not None:
         preload_models = config.task.preloaded_models.model_dump()
         sd_base_models: List[ModelConfig] | None = preload_models.get("sd_base", None)
@@ -57,4 +57,4 @@ def prefetch_after_setup(_, __, **kwargs):
         vae_models=vae_models,
         proxy=proxy
     )
-    _logger.info("Prefetching base models complete.")
+    _logger.info("Downloading models complete")
