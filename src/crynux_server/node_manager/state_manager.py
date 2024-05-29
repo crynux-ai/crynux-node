@@ -168,6 +168,8 @@ class NodeStateManager(object):
             # and in headless mode the node status is useless
             await self.state_cache.set_tx_state(models.TxStatus.Success)
             _logger.info("Node leaves the network successfully.")
+        elif status == models.ChainNodeStatus.QUIT:
+            _logger.info("Node has already left the network.")
         else:
             _logger.info(
                 f"Node status is {models.convert_node_status(status)}, cannot leave the network automatically"
