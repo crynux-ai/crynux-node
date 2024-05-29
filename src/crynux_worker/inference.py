@@ -4,10 +4,9 @@ from datetime import datetime
 import logging
 import os
 import shutil
-from typing import List
 
-from crynux_worker import config, utils
-from crynux_worker.config import ModelConfig, ProxyConfig
+from crynux_worker import utils
+from crynux_worker.models import ProxyConfig
 
 
 _logger = logging.getLogger(__name__)
@@ -21,7 +20,7 @@ def call_inference_script(
     script_dir: str,
     proxy: ProxyConfig | None = None,
 ):
-    envs = config.set_env(
+    envs = utils.set_env(
         hf_cache_dir=hf_cache_dir,
         external_cache_dir=external_cache_dir,
         proxy=proxy,

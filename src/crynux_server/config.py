@@ -86,6 +86,7 @@ LogLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR", "FATAL", "CRITICAL"]
 class LogConfig(BaseModel):
     dir: str
     level: LogLevel
+    filename: str = "crynux-server.log"
 
 
 class Contract(BaseModel):

@@ -1,15 +1,15 @@
 from __future__ import annotations
 
 import logging
-from typing import cast, List
+from typing import List, cast
 
 from celery import Celery
 from celery.signals import celeryd_after_setup
 
 from crynux_worker import log
 from crynux_worker.config import get_config
-from crynux_worker.prefetch import prefetch, ModelConfig, ProxyConfig
-from crynux_worker.task import mock_inference, inference
+from crynux_worker.prefetch import ModelConfig, ProxyConfig, prefetch
+from crynux_worker.task import inference, mock_inference
 
 _logger = logging.getLogger(__name__)
 
@@ -26,7 +26,7 @@ celery.task(name="mock_inference", track_started=True)(mock_inference)
 @celeryd_after_setup.connect
 def prefetch_after_setup(_, __, **kwargs):
     config = get_config()
-    log.init(config)
+    log.init(config.log.dir, config.log.level, config.log.filename)
 
     _logger.info("Start downloading models")
     if config.task.preloaded_models is not None:

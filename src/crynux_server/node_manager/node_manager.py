@@ -8,7 +8,7 @@ from datetime import datetime
 from typing import List, Optional, Type, cast
 
 from anyio import (TASK_STATUS_IGNORED, Event, create_task_group, fail_after,
-                   get_cancelled_exc_class, move_on_after, to_thread, from_thread, to_process)
+                   get_cancelled_exc_class, move_on_after)
 from anyio.abc import TaskGroup, TaskStatus
 from tenacity import (AsyncRetrying, before_sleep_log, stop_after_attempt,
                       stop_never, wait_fixed)
@@ -30,6 +30,7 @@ from crynux_server.watcher import (BlockNumberCache, DbBlockNumberCache,
 from .state_cache import (DbNodeStateCache, DbTxStateCache, ManagerStateCache,
                           StateCache, set_manager_state_cache)
 from .state_manager import NodeStateManager, set_node_state_manager
+from .utils import inference_in_process, prefetch_in_thread
 
 _logger = logging.getLogger(__name__)
 
@@ -246,9 +247,7 @@ class NodeManager(object):
         if not self.config.distributed:
 
             ### Prefetech ###
-            from crynux_worker.inference import inference
             from crynux_worker.models import ModelConfig, ProxyConfig
-            from crynux_worker.prefetch import prefetch
 
             assert (
                 self.config.task_config is not None
@@ -281,14 +280,6 @@ class NodeManager(object):
                 proxy = None
 
             # retry prefetch for 3 times
-            def prefetch_process_callback(current_models: int, total_models: int):
-                func = partial(
-                    self.state_cache.set_node_state,
-                    status=models.NodeStatus.Init,
-                    init_message=f"Downloading models............ ({current_models}/{total_models})"
-                )
-                from_thread.run(func)
-
             async for attemp in AsyncRetrying(
                 stop=stop_after_attempt(3) if self._retry else stop_after_attempt(1),
                 wait=wait_fixed(self._retry_delay),
@@ -296,8 +287,8 @@ class NodeManager(object):
                 reraise=True,
             ):
                 with attemp:
-                    await to_thread.run_sync(
-                        prefetch,
+                    await prefetch_in_thread(
+                        self.state_cache,
                         self.config.task_config.hf_cache_dir,
                         self.config.task_config.external_cache_dir,
                         self.config.task_config.script_dir,
@@ -306,8 +297,6 @@ class NodeManager(object):
                         controlnet_models,
                         vae_models,
                         proxy,
-                        prefetch_process_callback,
-                        cancellable=True,
                     )
 
             ### Inference ###
@@ -330,13 +319,13 @@ class NodeManager(object):
             }
             current_ts = int(datetime.now().timestamp())
             try:
+                _logger.info("Start initial inference task")
                 with fail_after(300):
                     await self.state_cache.set_node_state(
                         status=models.NodeStatus.Init,
                         init_message="Running local evaluation task"
                     )
-                    await to_process.run_sync(
-                        inference,
+                    await inference_in_process(
                         json.dumps(sd_inference_args),
                         os.path.join(
                             self.config.task_config.output_dir, f"_sd_init_{current_ts}"
@@ -345,8 +334,8 @@ class NodeManager(object):
                         self.config.task_config.external_cache_dir,
                         self.config.task_config.script_dir,
                         proxy,
-                        cancellable=True,
                     )
+                _logger.info("Initial inference task success")
             except TimeoutError as e:
                 msg = (
                     "The initial inference task exceeded the timeout limit(5 min). Maybe your device does not meet "

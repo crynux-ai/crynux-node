@@ -440,29 +440,44 @@ class InferenceTaskRunner(TaskRunner):
         task = await get_task()
 
         if self.distributed:
-            await to_process.run_sync(
-                run_distributed_task,
+            _logger.info(
+                f"task id: {task.task_id},"
+                f"task type: {event.task_type},"
+                f"task_args: {task.task_args},"
+            )
+            _logger.info("Start inference task")
+            await run_distributed_task(
                 self.task_name,
                 task.task_id,
                 event.task_type,
                 task.task_args,
-                cancellable=True,
             )
+            _logger.info("Inference task success")
             async with self.state_context():
                 self.state.status = models.TaskStatus.Executing
-
         else:
             try:
                 assert self.local_config is not None
-                next_event = await to_process.run_sync(
-                    run_local_task,
+
+                _logger.info(
+                    f"task id: {task.task_id},"
+                    f"task type: {event.task_type},"
+                    f"task_args: {task.task_args},"
+                    f"output_dir: {self.local_config.output_dir},"
+                    f"hf_cache_dir: {self.local_config.hf_cache_dir},"
+                    f"external_cache_dir: {self.local_config.external_cache_dir},"
+                    f"script_dir: {self.local_config.script_dir},"
+                    f"inference_logs_dir: {self.local_config.inference_logs_dir},"
+                )
+                _logger.info("Start inference task")
+                next_event = await run_local_task(
                     self.task_name,
                     task.task_id,
                     event.task_type,
                     task.task_args,
                     self.local_config,
-                    cancellable=True,
                 )
+                _logger.info("Inference task success")
                 async with self.state_context():
                     self.state.status = models.TaskStatus.Executing
                 await self.queue.put(next_event)

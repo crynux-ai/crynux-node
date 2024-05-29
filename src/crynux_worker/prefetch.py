@@ -5,8 +5,8 @@ import os
 import re
 from typing import Callable, List
 
-from crynux_worker import config, utils
-from crynux_worker.config import ModelConfig, ProxyConfig
+from crynux_worker import utils
+from crynux_worker.models import ModelConfig, ProxyConfig
 
 _logger = logging.getLogger(__name__)
 
@@ -27,7 +27,7 @@ def call_prefetch_script(
     )
 
     args = utils.get_exe_head("prefetch", script_dir)
-    envs = config.set_env(
+    envs = utils.set_env(
         hf_cache_dir,
         external_cache_dir,
         sd_base_models,

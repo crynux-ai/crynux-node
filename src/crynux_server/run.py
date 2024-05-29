@@ -19,6 +19,7 @@ from crynux_server.node_manager import NodeManager, set_node_manager
 from crynux_server.server import Server, set_server
 
 import logging
+
 _logger = logging.getLogger(__name__)
 
 
@@ -26,7 +27,12 @@ class CrynuxRunner(object):
     def __init__(self) -> None:
         self.config = get_config()
 
-        log.init(self.config)
+        log.init(
+            self.config.log.dir,
+            self.config.log.level,
+            self.config.log.filename,
+            self.config.distributed,
+        )
         _logger.debug("Logger init completed.")
 
         self._server: Optional[Server] = None

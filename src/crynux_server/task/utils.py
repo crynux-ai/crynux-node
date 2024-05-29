@@ -2,6 +2,8 @@ import os
 import secrets
 from typing import List, Tuple
 
+from anyio import to_process
+
 from celery.result import AsyncResult
 from crynux_server.models import TaskType, TaskResultReady
 from crynux_server.config import TaskConfig
@@ -17,7 +19,7 @@ def make_result_commitments(result_hashes: List[str]) -> Tuple[bytes, bytes, byt
     return bs, commitment, nonce
 
 
-def run_distributed_task(
+def _run_distributed_task(
     task_name: str,
     task_id: int,
     task_type: TaskType,
@@ -39,7 +41,23 @@ def run_distributed_task(
     res.get()
 
 
-def run_local_task(
+async def run_distributed_task(
+    task_name: str,
+    task_id: int,
+    task_type: TaskType,
+    task_args: str,
+):
+    await to_process.run_sync(
+        _run_distributed_task,
+        task_name,
+        task_id,
+        task_type,
+        task_args,
+        cancellable=True
+    )
+
+
+def _run_local_task(
     task_name: str,
     task_id: int,
     task_type: TaskType,
@@ -84,4 +102,21 @@ def run_local_task(
         task_id=task_id,
         hashes=hashes,
         files=result_paths,
+    )
+
+
+async def run_local_task(
+    task_name: str,
+    task_id: int,
+    task_type: TaskType,
+    task_args: str,
+    task_config: TaskConfig,
+):
+    return await to_process.run_sync(
+        _run_local_task,
+        task_name,
+        task_id,
+        task_type,
+        task_args,
+        task_config,
     )
