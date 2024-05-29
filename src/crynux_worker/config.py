@@ -96,7 +96,8 @@ class ModelConfig(BaseModel):
 
 
 class PreloadedModelsConfig(BaseModel):
-    base: Optional[List[ModelConfig]] = None
+    sd_base: Optional[List[ModelConfig]] = None
+    gpt_base: Optional[List[ModelConfig]] = None
     controlnet: Optional[List[ModelConfig]] = None
     vae: Optional[List[ModelConfig]] = None
 
@@ -158,20 +159,26 @@ def set_config(config: Config):
 def set_env(
     hf_cache_dir: str,
     external_cache_dir: str,
-    base_models: List[ModelConfig] | None = None,
+    sd_base_models: List[ModelConfig] | None = None,
+    gpt_base_models: List[ModelConfig] | None = None,
     controlnet_models: List[ModelConfig] | None = None,
     vae_models: List[ModelConfig] | None = None,
     proxy: ProxyConfig | None = None
 ):
     envs = os.environ.copy()
-    envs["data_dir__models__huggingface"] = os.path.abspath(hf_cache_dir)
-    envs["data_dir__models__external"] = os.path.abspath(external_cache_dir)
-    if base_models is not None:
-        envs["preloaded_models__base"] = json.dumps(base_models)
+    envs["sd_data_dir__models__huggingface"] = os.path.abspath(hf_cache_dir)
+    envs["gpt_data_dir__models__huggingface"] = os.path.abspath(hf_cache_dir)
+    envs["sd_data_dir__models__external"] = os.path.abspath(external_cache_dir)
+    envs["gpt_data_dir__models__external"] = os.path.abspath(external_cache_dir)
+    if sd_base_models is not None:
+        envs["sd_preloaded_models__base"] = json.dumps(sd_base_models)
+    if gpt_base_models is not None:
+        envs["gpt_preloaded_models__base"] = json.dumps(gpt_base_models)
     if controlnet_models is not None:
-        envs["preloaded_models__controlnet"] = json.dumps(controlnet_models)
+        envs["sd_preloaded_models__controlnet"] = json.dumps(controlnet_models)
     if vae_models is not None:
-        envs["preloaded_models__vae"] = json.dumps(vae_models)
+        envs["sd_preloaded_models__vae"] = json.dumps(vae_models)
     if proxy is not None:
-        envs["proxy"] = json.dumps(proxy)
+        envs["sd_proxy"] = json.dumps(proxy)
+        envs["gpt_proxy"] = json.dumps(proxy)
     return envs

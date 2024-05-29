@@ -130,7 +130,8 @@ class ModelConfig(BaseModel):
 
 
 class PreloadedModelsConfig(BaseModel):
-    base: Optional[List[ModelConfig]] = None
+    sd_base: Optional[List[ModelConfig]] = None
+    gpt_base: Optional[List[ModelConfig]] = None
     controlnet: Optional[List[ModelConfig]] = None
     vae: Optional[List[ModelConfig]] = None
 

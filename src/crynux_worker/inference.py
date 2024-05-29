@@ -19,17 +19,11 @@ def call_inference_script(
     hf_cache_dir: str,
     external_cache_dir: str,
     script_dir: str,
-    base_models: List[ModelConfig] | None = None,
-    controlnet_models: List[ModelConfig] | None = None,
-    vae_models: List[ModelConfig] | None = None,
     proxy: ProxyConfig | None = None,
 ):
     envs = config.set_env(
         hf_cache_dir=hf_cache_dir,
         external_cache_dir=external_cache_dir,
-        base_models=base_models,
-        controlnet_models=controlnet_models,
-        vae_models=vae_models,
         proxy=proxy,
     )
 
@@ -51,9 +45,6 @@ def inference(
     hf_cache_dir: str,
     external_cache_dir: str,
     script_dir: str,
-    base_models: List[ModelConfig] | None = None,
-    controlnet_models: List[ModelConfig] | None = None,
-    vae_models: List[ModelConfig] | None = None,
     proxy: ProxyConfig | None = None,
 ):
     if not os.path.exists(hf_cache_dir):
@@ -72,9 +63,6 @@ def inference(
             hf_cache_dir=hf_cache_dir,
             external_cache_dir=external_cache_dir,
             script_dir=script_dir,
-            base_models=base_models,
-            controlnet_models=controlnet_models,
-            vae_models=vae_models,
             proxy=proxy,
         )
     except Exception as e:

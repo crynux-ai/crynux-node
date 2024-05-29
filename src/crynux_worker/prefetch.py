@@ -15,7 +15,8 @@ def call_prefetch_script(
     hf_cache_dir: str,
     external_cache_dir: str,
     script_dir: str,
-    base_models: List[ModelConfig] | None = None,
+    sd_base_models: List[ModelConfig] | None = None,
+    gpt_base_models: List[ModelConfig] | None = None,
     controlnet_models: List[ModelConfig] | None = None,
     vae_models: List[ModelConfig] | None = None,
     proxy: ProxyConfig | None = None,
@@ -29,7 +30,8 @@ def call_prefetch_script(
     envs = config.set_env(
         hf_cache_dir,
         external_cache_dir,
-        base_models,
+        sd_base_models,
+        gpt_base_models,
         controlnet_models,
         vae_models,
         proxy,
@@ -37,8 +39,10 @@ def call_prefetch_script(
     _logger.info("Start prefetching models")
 
     total_models = 0
-    if base_models is not None:
-        total_models += len(base_models)
+    if sd_base_models is not None:
+        total_models += len(sd_base_models)
+    if gpt_base_models is not None:
+        total_models += len(gpt_base_models)
     if controlnet_models is not None:
         total_models += len(controlnet_models)
     if vae_models is not None:
@@ -65,7 +69,8 @@ def prefetch(
     hf_cache_dir: str,
     external_cache_dir: str,
     script_dir: str,
-    base_models: List[ModelConfig] | None = None,
+    sd_base_models: List[ModelConfig] | None = None,
+    gpt_base_models: List[ModelConfig] | None = None,
     controlnet_models: List[ModelConfig] | None = None,
     vae_models: List[ModelConfig] | None = None,
     proxy: ProxyConfig | None = None,
@@ -82,7 +87,8 @@ def prefetch(
             hf_cache_dir=hf_cache_dir,
             external_cache_dir=external_cache_dir,
             script_dir=script_dir,
-            base_models=base_models,
+            sd_base_models=sd_base_models,
+            gpt_base_models=gpt_base_models,
             controlnet_models=controlnet_models,
             vae_models=vae_models,
             proxy=proxy,

@@ -257,13 +257,15 @@ class NodeManager(object):
                 and self.config.task_config.preloaded_models is not None
             ):
                 preload_models = self.config.task_config.preloaded_models.model_dump()
-                base_models: List[ModelConfig] | None = preload_models.get("base", None)
+                sd_base_models: List[ModelConfig] | None = preload_models.get("sd_base", None)
+                gpt_base_models: List[ModelConfig] | None = preload_models.get("gpt_base", None)
                 controlnet_models: List[ModelConfig] | None = preload_models.get(
                     "controlnet", None
                 )
                 vae_models: List[ModelConfig] | None = preload_models.get("vae", None)
             else:
-                base_models = None
+                sd_base_models = None
+                gpt_base_models = None
                 controlnet_models = None
                 vae_models = None
 
@@ -297,7 +299,8 @@ class NodeManager(object):
                         self.config.task_config.hf_cache_dir,
                         self.config.task_config.external_cache_dir,
                         self.config.task_config.script_dir,
-                        base_models,
+                        sd_base_models,
+                        gpt_base_models,
                         controlnet_models,
                         vae_models,
                         proxy,
@@ -339,9 +342,6 @@ class NodeManager(object):
                         self.config.task_config.hf_cache_dir,
                         self.config.task_config.external_cache_dir,
                         self.config.task_config.script_dir,
-                        base_models,
-                        controlnet_models,
-                        vae_models,
                         proxy,
                         cancellable=True,
                     )
