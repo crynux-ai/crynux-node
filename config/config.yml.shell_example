@@ -74,10 +74,13 @@ task_config:
   # Other models specified by the task
   # will be downloaded during the task execution
   preloaded_models:
-    base:
+    sd_base:
       - id: "runwayml/stable-diffusion-v1-5"
       - id: "emilianJR/chilloutmix_NiPrunedFp32Fix"
       - id: "stabilityai/stable-diffusion-xl-base-1.0"
+    gpt_base:
+      - id: "gpt2"
+      - id: "mistralai/Mistral-7B-v0.1"
     controlnet:
       - id: "lllyasviel/control_v11p_sd15_openpose"
       - id: "thibaud/controlnet-openpose-sdxl-1.0"
