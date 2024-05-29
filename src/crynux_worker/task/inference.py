@@ -96,8 +96,10 @@ def inference(
     envs = os.environ.copy()
     envs.update(
         {
-            "data_dir__models__huggingface": os.path.abspath(hf_cache_dir),
-            "data_dir__models__external": os.path.abspath(external_cache_dir),
+            "sd_data_dir__models__huggingface": os.path.abspath(hf_cache_dir),
+            "gpt_data_dir__models__huggingface": os.path.abspath(hf_cache_dir),
+            "sd_data_dir__models__external": os.path.abspath(external_cache_dir),
+            "gpt_data_dir__models__external": os.path.abspath(external_cache_dir),
         }
     )
     if proxy is not None:

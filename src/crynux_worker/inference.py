@@ -3,10 +3,10 @@ from __future__ import annotations
 from datetime import datetime
 import logging
 import os
-from typing import List
+import shutil
 
-from crynux_worker import config, utils
-from crynux_worker.config import ModelConfig, ProxyConfig
+from crynux_worker import utils
+from crynux_worker.models import ProxyConfig
 
 
 _logger = logging.getLogger(__name__)
@@ -18,17 +18,11 @@ def call_inference_script(
     hf_cache_dir: str,
     external_cache_dir: str,
     script_dir: str,
-    base_models: List[ModelConfig] | None = None,
-    controlnet_models: List[ModelConfig] | None = None,
-    vae_models: List[ModelConfig] | None = None,
     proxy: ProxyConfig | None = None,
 ):
-    envs = config.set_env(
+    envs = utils.set_env(
         hf_cache_dir=hf_cache_dir,
         external_cache_dir=external_cache_dir,
-        base_models=base_models,
-        controlnet_models=controlnet_models,
-        vae_models=vae_models,
         proxy=proxy,
     )
 
@@ -50,9 +44,6 @@ def inference(
     hf_cache_dir: str,
     external_cache_dir: str,
     script_dir: str,
-    base_models: List[ModelConfig] | None = None,
-    controlnet_models: List[ModelConfig] | None = None,
-    vae_models: List[ModelConfig] | None = None,
     proxy: ProxyConfig | None = None,
 ):
     if not os.path.exists(hf_cache_dir):
@@ -71,12 +62,12 @@ def inference(
             hf_cache_dir=hf_cache_dir,
             external_cache_dir=external_cache_dir,
             script_dir=script_dir,
-            base_models=base_models,
-            controlnet_models=controlnet_models,
-            vae_models=vae_models,
             proxy=proxy,
         )
     except Exception as e:
         _logger.exception(e)
         _logger.error("Inference error")
         raise
+    finally:
+        if os.path.exists(output_dir):
+            shutil.rmtree(output_dir)

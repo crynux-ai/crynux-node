@@ -26,7 +26,7 @@ async def _stop(
 ):
     config = get_config()
 
-    log.init(config)
+    log.init(config.log.dir, config.log.level, config.log.filename, config.distributed)
 
     if len(config.db) > 0:
         await db.init(config.db)
@@ -81,7 +81,7 @@ def stop(
             state_cache,
             node_state_cache_cls,
             tx_state_cache_cls,
-            option
+            option,
         )
     except KeyboardInterrupt:
         pass

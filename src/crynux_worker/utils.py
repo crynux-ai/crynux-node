@@ -1,12 +1,15 @@
 from __future__ import annotations
 
+import json
 import logging
 import os
 import platform
 import re
 import subprocess
 import sys
-from typing import Dict, List, Tuple, Callable
+from typing import Callable, Dict, List, Tuple
+
+from crynux_worker.models import ModelConfig, ProxyConfig
 
 _logger = logging.getLogger(__name__)
 
@@ -100,3 +103,31 @@ def run_worker(args: List[str], envs: Dict[str, str], line_callback: Callable[[s
     if not success:
         _logger.error(f"crynux worker error \nargs: {args} \nlogs: \n{output}")
     return success, output
+
+
+def set_env(
+    hf_cache_dir: str,
+    external_cache_dir: str,
+    sd_base_models: List[ModelConfig] | None = None,
+    gpt_base_models: List[ModelConfig] | None = None,
+    controlnet_models: List[ModelConfig] | None = None,
+    vae_models: List[ModelConfig] | None = None,
+    proxy: ProxyConfig | None = None
+):
+    envs = os.environ.copy()
+    envs["sd_data_dir__models__huggingface"] = os.path.abspath(hf_cache_dir)
+    envs["gpt_data_dir__models__huggingface"] = os.path.abspath(hf_cache_dir)
+    envs["sd_data_dir__models__external"] = os.path.abspath(external_cache_dir)
+    envs["gpt_data_dir__models__external"] = os.path.abspath(external_cache_dir)
+    if sd_base_models is not None:
+        envs["sd_preloaded_models__base"] = json.dumps(sd_base_models)
+    if gpt_base_models is not None:
+        envs["gpt_preloaded_models__base"] = json.dumps(gpt_base_models)
+    if controlnet_models is not None:
+        envs["sd_preloaded_models__controlnet"] = json.dumps(controlnet_models)
+    if vae_models is not None:
+        envs["sd_preloaded_models__vae"] = json.dumps(vae_models)
+    if proxy is not None:
+        envs["sd_proxy"] = json.dumps(proxy)
+        envs["gpt_proxy"] = json.dumps(proxy)
+    return envs

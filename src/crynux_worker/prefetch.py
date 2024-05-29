@@ -5,8 +5,8 @@ import os
 import re
 from typing import Callable, List
 
-from crynux_worker import config, utils
-from crynux_worker.config import ModelConfig, ProxyConfig
+from crynux_worker import utils
+from crynux_worker.models import ModelConfig, ProxyConfig
 
 _logger = logging.getLogger(__name__)
 
@@ -15,7 +15,8 @@ def call_prefetch_script(
     hf_cache_dir: str,
     external_cache_dir: str,
     script_dir: str,
-    base_models: List[ModelConfig] | None = None,
+    sd_base_models: List[ModelConfig] | None = None,
+    gpt_base_models: List[ModelConfig] | None = None,
     controlnet_models: List[ModelConfig] | None = None,
     vae_models: List[ModelConfig] | None = None,
     proxy: ProxyConfig | None = None,
@@ -26,19 +27,22 @@ def call_prefetch_script(
     )
 
     args = utils.get_exe_head("prefetch", script_dir)
-    envs = config.set_env(
+    envs = utils.set_env(
         hf_cache_dir,
         external_cache_dir,
-        base_models,
+        sd_base_models,
+        gpt_base_models,
         controlnet_models,
         vae_models,
         proxy,
     )
-    _logger.info("Start prefetching models")
+    _logger.info("Start downloading models")
 
     total_models = 0
-    if base_models is not None:
-        total_models += len(base_models)
+    if sd_base_models is not None:
+        total_models += len(sd_base_models)
+    if gpt_base_models is not None:
+        total_models += len(gpt_base_models)
     if controlnet_models is not None:
         total_models += len(controlnet_models)
     if vae_models is not None:
@@ -58,14 +62,15 @@ def call_prefetch_script(
     success, _ = utils.run_worker(args=args, envs=envs, line_callback=line_callback)
     if not success:
         raise ValueError("Failed to download models due to network issue")
-    _logger.info("Prefetching models complete")
+    _logger.info("Downloading models complete")
 
 
 def prefetch(
     hf_cache_dir: str,
     external_cache_dir: str,
     script_dir: str,
-    base_models: List[ModelConfig] | None = None,
+    sd_base_models: List[ModelConfig] | None = None,
+    gpt_base_models: List[ModelConfig] | None = None,
     controlnet_models: List[ModelConfig] | None = None,
     vae_models: List[ModelConfig] | None = None,
     proxy: ProxyConfig | None = None,
@@ -82,7 +87,8 @@ def prefetch(
             hf_cache_dir=hf_cache_dir,
             external_cache_dir=external_cache_dir,
             script_dir=script_dir,
-            base_models=base_models,
+            sd_base_models=sd_base_models,
+            gpt_base_models=gpt_base_models,
             controlnet_models=controlnet_models,
             vae_models=vae_models,
             proxy=proxy,
@@ -90,5 +96,5 @@ def prefetch(
         )
     except Exception as e:
         _logger.exception(e)
-        _logger.error("Prefetch error")
+        _logger.error("Error downloading models")
         raise

@@ -10,7 +10,8 @@ from gpt_task.inference import run_task as gpt_run_task
 from gpt_task.models import GPTTaskArgs
 from sd_task.inference_task_args.task_args import InferenceTaskArgs
 from sd_task.inference_task_runner.inference_task import run_task as sd_run_task
-from sd_task.prefetch import prefetch_models
+from sd_task.prefetch import prefetch_models as sd_prefetch_models
+from gpt_task.prefetch import prefetch_models as gpt_prefetch_models
 
 
 _logger = logging.getLogger(__name__)
@@ -87,7 +88,8 @@ def main(argv=None):
 
     try:
         if job == "prefetch":
-            prefetch_models()
+            sd_prefetch_models()
+            gpt_prefetch_models()
         else:
             _inference(args)
     except Exception as e:

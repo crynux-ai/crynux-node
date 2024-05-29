@@ -1,20 +1,14 @@
 import logging
 import os
 from logging.handlers import RotatingFileHandler
-from typing import Optional
-
-from crynux_server.config import Config, get_config
 
 
-def init(config: Optional[Config] = None, root: bool = False):
-    if config is None:
-        config = get_config()
-
+def init(log_dir: str, log_level: str, log_filename: str = "crynux-server.log", distributed: bool = False, root: bool = False):
     stream_handler = logging.StreamHandler()
 
-    if not os.path.exists(config.log.dir):
-        os.makedirs(config.log.dir, exist_ok=True)
-    log_file = os.path.join(config.log.dir, "crynux-server.log")
+    if not os.path.exists(log_dir):
+        os.makedirs(log_dir, exist_ok=True)
+    log_file = os.path.join(log_dir, log_filename)
     file_handler = RotatingFileHandler(
         log_file,
         encoding="utf-8",
@@ -36,11 +30,11 @@ def init(config: Optional[Config] = None, root: bool = False):
         logger_names.append(None)
     else:
         logger_names.append("crynux_server")
-        if not config.distributed:
+        if not distributed:
             logger_names.append("crynux_worker")
 
     for name in logger_names:
         logger = logging.getLogger(name)
         logger.addHandler(stream_handler)
         logger.addHandler(file_handler)
-        logger.setLevel(config.log.level)
+        logger.setLevel(log_level)
