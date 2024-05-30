@@ -1,6 +1,12 @@
 prefix = /usr/local
 all: linux_binary
 
+clean:
+	rm -rf ./build/crynux_node
+	rm -rf ./src/webui/dist
+	rm -rf ./src/webui/node_modules
+
+
 linux_binary:
 	./build/linux-server/build.sh
 
