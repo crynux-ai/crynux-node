@@ -1,5 +1,6 @@
 import os
 import shutil
+import time
 from typing import BinaryIO, Dict, List
 from tempfile import mkdtemp
 from contextlib import contextmanager
@@ -85,6 +86,9 @@ class MockRelay(Relay):
                     shutil.copyfileobj(src, dst)
 
             await to_thread.run_sync(_copy_file_obj)
+
+    async def now(self) -> int:
+        return int(time.time())
 
     async def close(self):
         if not self._closed:
