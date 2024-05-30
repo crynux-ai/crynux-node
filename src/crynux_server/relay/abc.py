@@ -22,5 +22,9 @@ class Relay(ABC):
         ...
 
     @abstractmethod
+    async def now(self) -> int:
+        ...
+
+    @abstractmethod
     async def close(self):
         ...

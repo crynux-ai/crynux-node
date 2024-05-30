@@ -103,5 +103,13 @@ class WebRelay(Relay):
             async for chunk in resp.aiter_bytes():
                 await async_dst.write(chunk)
 
+    async def now(self) -> int:
+        resp = await self.client.get("/v1/now")
+        resp = _process_resp(resp, "now")
+        content = resp.json()
+        data = content["data"]
+        now = data["now"]
+        return now
+
     async def close(self):
         await self.client.aclose()
