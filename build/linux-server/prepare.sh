@@ -42,6 +42,14 @@ echo "Workspace folder: $GIT_DIR"
 
 
 # 1. Prepare the WebUI dist
+if !command -v fnm &> /dev/null
+then
+    # installs fnm (Fast Node Manager)
+    curl -fsSL https://fnm.vercel.app/install | bash
+fi
+
+fnm use --install-if-missing 22
+
 if ! command -v yarn &> /dev/null
 then
     npm install -g yarn
