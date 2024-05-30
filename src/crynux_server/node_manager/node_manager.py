@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 import logging
 import os
-from functools import partial
 from datetime import datetime
 from typing import List, Optional, Type, cast
 
@@ -213,6 +212,12 @@ class NodeManager(object):
                 )
             if self._relay is None:
                 self._relay = _make_relay(self._privkey, self.config.relay_url)
+
+        remote_now = await self._relay.now()
+        now = int(datetime.now().timestamp())
+        diff = now - remote_now
+        if abs(diff) > 60:
+            raise ValueError(f"The difference between local time and server time is too large ({diff})")
 
         assert self._faucet is not None
         balance = await self._contracts.get_balance(self._contracts.account)
