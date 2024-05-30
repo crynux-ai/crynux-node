@@ -42,6 +42,11 @@ echo "Workspace folder: $GIT_DIR"
 
 
 # 1. Prepare the WebUI dist
+if ! command -v yarn &> /dev/null
+then
+    npm install -g yarn
+fi
+
 
 mkdir "$WORK_DIR/webui"
 
