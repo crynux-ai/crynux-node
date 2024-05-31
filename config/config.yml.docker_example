@@ -80,7 +80,7 @@ task_config:
       - id: "stabilityai/stable-diffusion-xl-base-1.0"
     gpt_base:
       - id: "gpt2"
-      - id: "mistralai/Mistral-7B-v0.1"
+      - id: "tiiuae/falcon-7b-instruct"
     controlnet:
       - id: "lllyasviel/control_v11p_sd15_openpose"
       - id: "thibaud/controlnet-openpose-sdxl-1.0"
