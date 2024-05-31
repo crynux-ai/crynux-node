@@ -213,26 +213,6 @@ class NodeManager(object):
             if self._relay is None:
                 self._relay = _make_relay(self._privkey, self.config.relay_url)
 
-        remote_now = await self._relay.now()
-        now = int(datetime.now().timestamp())
-        diff = now - remote_now
-        if abs(diff) > 60:
-            raise ValueError(f"The difference between local time and server time is too large ({diff})")
-
-        assert self._faucet is not None
-        balance = await self._contracts.get_balance(self._contracts.account)
-        if balance == 0:
-            try:
-                success = await self._faucet.request_token(self._contracts.account)
-                if success:
-                    _logger.info("Requesting token from faucet succeed")
-                else:
-                    _logger.info(
-                        "Requesting token from faucet fails, this address already has token or has requested before"
-                    )
-            except Exception as e:
-                _logger.error(f"Request token from faucet error: {e}")
-
         if self._node_state_manager is None:
             self._node_state_manager = _make_node_state_manager(
                 state_cache=self.state_cache,
@@ -429,7 +409,6 @@ class NodeManager(object):
         async for attemp in AsyncRetrying(
             stop=stop_never if self._retry else stop_after_attempt(1),
             wait=wait_fixed(self._retry_delay),
-            before_sleep=before_sleep_log(_logger, logging.ERROR, exc_info=True),
             reraise=True,
         ):
             with attemp:
@@ -437,7 +416,7 @@ class NodeManager(object):
                     await self._node_state_manager.start_sync()
                 except Exception as e:
                     _logger.exception(e)
-                    _logger.error("Cannot sync node state from chain")
+                    _logger.error("Cannot sync node state from chain, retrying")
                     with fail_after(5, shield=True):
                         await self.state_cache.set_node_state(
                             status=models.NodeStatus.Error,
@@ -504,7 +483,6 @@ class NodeManager(object):
         async for attemp in AsyncRetrying(
             stop=stop_never if self._retry else stop_after_attempt(1),
             wait=wait_fixed(self._retry_delay),
-            before_sleep=before_sleep_log(_logger, logging.ERROR, exc_info=True),
             reraise=True,
         ):
             with attemp:
@@ -518,13 +496,52 @@ class NodeManager(object):
                             await self._watcher.start()
                 except Exception as e:
                     _logger.exception(e)
-                    _logger.error("Cannot watch events from chain")
+                    _logger.error("Cannot watch events from chain, retrying")
                     with fail_after(5, shield=True):
                         await self.state_cache.set_node_state(
                             status=models.NodeStatus.Error,
                             message="Node manager running error: cannot watch events from chain.",
                         )
                     raise
+
+    async def _check_time(self):
+        assert self._relay is not None
+        remote_now = await self._relay.now()
+        now = int(datetime.now().timestamp())
+        diff = now - remote_now
+        if abs(diff) > 60:
+            raise ValueError(f"The difference between local time and server time is too large ({diff})")
+
+    async def _request_tokens(self):
+        assert self._faucet is not None
+        assert self._contracts is not None
+
+        async for attemp in AsyncRetrying(
+            stop=stop_never if self._retry else stop_after_attempt(1),
+            wait=wait_fixed(self._retry_delay),
+            reraise=True,
+        ):
+            with attemp:
+                balance = await self._contracts.get_balance(self._contracts.account)
+                if balance == 0:
+                    try:
+                        success = await self._faucet.request_token(self._contracts.account)
+                        if success:
+                            _logger.info("Requesting token from faucet succeed")
+                        else:
+                            _logger.info(
+                                "Requesting token from faucet fails, this address already has token or has requested before"
+                            )
+                    except Exception as e:
+                        _logger.exception(e)
+                        _logger.error(f"Cannot request token from faucet, retrying")
+                        with fail_after(5, shield=True):
+                            await self.state_cache.set_node_state(
+                                status=models.NodeStatus.Error,
+                                message="Node manager init error: cannot request token from faucet. Retrying",
+                            )
+                        raise
+
 
     async def _run(self, prefetch: bool = True):
         assert self._tg is None, "Node manager is running."
@@ -540,10 +557,13 @@ class NodeManager(object):
                         # clear tx error when restart
                         # set tx status to pending to forbid user to control node from web
                         await self.state_cache.set_tx_state(models.TxStatus.Success)
-
-                        init_tg.start_soon(self._init_components)
+                        
                         if prefetch:
                             init_tg.start_soon(self._init)
+                
+                        await self._init_components()
+                        await self._check_time()
+                        await self._request_tokens()
 
                 except get_cancelled_exc_class():
                     _logger.exception(f"Node manager init error: init task cancelled")
@@ -579,7 +599,6 @@ class NodeManager(object):
                     async for attemp in AsyncRetrying(
                         stop=stop_never if self._retry else stop_after_attempt(1),
                         wait=wait_fixed(self._retry_delay),
-                        before_sleep=before_sleep_log(_logger, logging.INFO),
                         reraise=True,
                     ):
                         with attemp:

@@ -3,8 +3,8 @@ from typing import Dict, Optional, Type, TypeVar
 
 from anyio import create_task_group, get_cancelled_exc_class
 from anyio.abc import TaskGroup
-from tenacity import (AsyncRetrying, before_sleep_log, stop_after_attempt,
-                      stop_never, wait_exponential)
+from tenacity import (AsyncRetrying, stop_after_attempt, stop_never,
+                      wait_exponential)
 
 from crynux_server.event_queue import EventQueue
 from crynux_server.models import TaskStatus
@@ -57,7 +57,6 @@ class TaskSystem(object):
             async for attemp in AsyncRetrying(
                 stop=stop_never if self._retry else stop_after_attempt(1),
                 wait=wait_exponential(multiplier=10),
-                before_sleep=before_sleep_log(_logger, logging.ERROR, exc_info=True),
                 reraise=True,
             ):
                 with attemp:
@@ -78,7 +77,7 @@ class TaskSystem(object):
             TaskStatus.Executing,
             TaskStatus.ResultUploaded,
             TaskStatus.Disclosed,
-            TaskStatus.ResultFileUploaded
+            TaskStatus.ResultFileUploaded,
         ]
         running_states = await self.state_cache.find(status=running_status)
         for state in running_states:
