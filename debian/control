@@ -3,7 +3,7 @@ Maintainer: lukew <lukew@crynux.ai>
 Section: misc
 Priority: optional
 Standards-Version: 4.6.2
-Build-Depends: debhelper-compat (= 13), python3.10-dev (>= 3.10.12)
+Build-Depends: debhelper-compat (= 13), python3.10-dev (>= 3.10.1)
 
 Package: crynux-node
 Architecture: any
