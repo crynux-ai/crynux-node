@@ -1,4 +1,4 @@
-crynux-node (2.0.6-1) UNRELEASED; urgency=medium
+crynux-node (2.0.6-1) jammy; urgency=medium
 
   * Initial release.
 
