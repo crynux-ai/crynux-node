@@ -1,4 +1,4 @@
-#!/bin/bash
+#! /bin/bash
 
 # Golang
 if !command -v go version &> /dev/null
@@ -9,7 +9,7 @@ then
     GOPATH=/usr/local/golib
     export GOPATH
     export PATH=$PATH:/usr/local/go/bin:$GOPATH/bin
-if
+fi
 
 # Nodejs
 if !command -v node --version &> /dev/null
