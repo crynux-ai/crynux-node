@@ -163,6 +163,8 @@ jobs:
     env:
       WINDOWS_LINK: ${{ needs.build-the-windows-binary.outputs.google-drive-link-content }}
       LINUX_LINK: ${{ needs.build-the-linux-binary.outputs.google-drive-link-content }}
+    permissions:
+        contents: write
     steps:
       - name: Print the Google Drive links
         run: |
