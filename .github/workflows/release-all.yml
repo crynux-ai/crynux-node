@@ -75,6 +75,21 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Setup Go 1.21.x
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21.x'
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.x'
+
       - name: Install the Apple certificate
         env:
           BUILD_CERTIFICATE_BASE64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
@@ -116,6 +131,21 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Setup Go 1.21.x
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21.x'
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.x'
+
       - name: Run the build script
         run: ./build/windows/build.ps1
 
@@ -139,6 +169,21 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Setup Go 1.21.x
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21.x'
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.x'
+
       - name: Run the build script
         run: ./build/linux-server/build.sh
 
@@ -161,8 +206,11 @@ jobs:
       - build-the-windows-binary
       - build-the-mac-binary
     env:
-      WINDOWS_LINK: ${{ needs.build-the-windows-binary.outputs.google-drive-link-content }}
-      LINUX_LINK: ${{ needs.build-the-linux-binary.outputs.google-drive-link-content }}
+      WINDOWS_DOWNLOAD_LINK: ${{ needs.build-the-windows-binary.outputs.google-drive-link-content }}
+      WINDOWS_PREVIEW_LINK: ${{ needs.build-the-windows-binary.outputs.google-drive-link-view }}
+      LINUX_DOWNLOAD_LINK: ${{ needs.build-the-linux-binary.outputs.google-drive-link-content }}
+      LINUX_PREVIEW_LINK: ${{ needs.build-the-linux-binary.outputs.google-drive-link-view }}
+
     permissions:
         contents: write
     steps:
@@ -199,8 +247,10 @@ jobs:
           body_path: build/changelog-template.md
           files: crynux-node-helium-v${{ env.RELEASE_VERSION }}-mac-arm64-signed.dmg
     outputs:
-      windows-link: ${{ env.WINDOWS_LINK }}
-      linux-link: ${{ env.LINUX_LINK }}
+      windows-download-link: ${{ env.WINDOWS_DOWNLOAD_LINK }}
+      windows-preview-link: ${{ env.WINDOWS_PREVIEW_LINK }}
+      linux-download-link: ${{ env.LINUX_DOWNLOAD_LINK }}
+      linux-preview-link: ${{ env.LINUX_PREVIEW_LINK }}
       mac-link: ${{ fromJSON(steps.release.outputs.assets)[0].browser_download_url }}
 
   update-documentation:
@@ -208,8 +258,10 @@ jobs:
     needs:
       - publish-release
     env:
-      WINDOWS_LINK: ${{ needs.publish-release.outputs.windows-link }}
-      LINUX_LINK: ${{ needs.publish-release.outputs.linux-link }}
+      WINDOWS_DOWNLOAD_LINK: ${{ needs.publish-release.outputs.windows-download-link }}
+      WINDOWS_PREVIEW_LINK: ${{ needs.publish-release.outputs.windows-preview-link }}
+      LINUX_DOWNLOAD_LINK: ${{ needs.publish-release.outputs.linux-download-link }}
+      LINUX_PREVIEW_LINK: ${{ needs.publish-release.outputs.linux-preview-link }}
       MAC_LINK: ${{ needs.publish-release.outputs.mac-link }}
     steps:
       - name: Dispatch event to the documentation repository
@@ -218,4 +270,4 @@ jobs:
           token: ${{ secrets.PAT }}
           repository: ${{ github.repository_owner }}/documentation
           event-type: node-released
-          client-payload: '{"windows-link": "${{ env.WINDOWS_LINK }}", "linux-link": "${{ env.LINUX_LINK }}", "mac-link": "${{ env.MAC_LINK }}", "release-version": "${{ env.RELEASE_VERSION }}"}'
+          client-payload: '{"windows-download-link": "${{ env.WINDOWS_DOWNLOAD_LINK }}", "windows-preview-link": "${{ env.WINDOWS_PREVIEW_LINK }}", "linux-download-link": "${{ env.LINUX_DOWNLOAD_LINK }}", "linux-preview-link": "${{ env.LINUX_PREVIEW_LINK }}", "mac-link": "${{ env.MAC_LINK }}", "release-version": "${{ env.RELEASE_VERSION }}"}'
