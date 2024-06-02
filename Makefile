@@ -6,8 +6,10 @@ clean:
 	rm -rf ./src/webui/dist
 	rm -rf ./src/webui/node_modules
 
+tools:
+	./build/linux-server/tools.sh
 
-linux_binary:
+linux_binary: tools
 	./build/linux-server/build.sh
 
 install: linux_binary
