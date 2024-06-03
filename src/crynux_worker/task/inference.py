@@ -9,7 +9,7 @@ from typing import cast
 
 from crynux_worker.config import get_config
 from crynux_worker.models import ProxyConfig
-from crynux_worker.utils import get_exe_head, run_worker
+from crynux_worker.utils import get_exe_head, run_worker, set_env
 
 from . import utils
 from .error import TaskError, TaskInvalid
@@ -93,17 +93,11 @@ def inference(
         ]
     )
 
-    envs = os.environ.copy()
-    envs.update(
-        {
-            "sd_data_dir__models__huggingface": os.path.abspath(hf_cache_dir),
-            "gpt_data_dir__models__huggingface": os.path.abspath(hf_cache_dir),
-            "sd_data_dir__models__external": os.path.abspath(external_cache_dir),
-            "gpt_data_dir__models__external": os.path.abspath(external_cache_dir),
-        }
+    envs = set_env(
+        hf_cache_dir=hf_cache_dir,
+        external_cache_dir=external_cache_dir,
+        proxy=proxy
     )
-    if proxy is not None:
-        envs["proxy"] = json.dumps(proxy)
 
     _logger.info("Start inference task.")
     with open(log_file, mode="w", encoding="utf-8") as f:
