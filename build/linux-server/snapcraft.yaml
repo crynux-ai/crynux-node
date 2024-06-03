@@ -1,0 +1,17 @@
+name: crynux-node
+version: 2.0.6
+summary: Start a Crynux Node
+description: |
+    Crynux is the truly permissionless #DeAI on GPU@home.
+    Start a Crynux Node on your local device to share your GPU to others in exchange for rewards.
+confinement: devmode
+base: core18
+
+parts:
+  crynux-node:
+    plugin: dump
+    source: ../crynux_node/dist/crynux-node-helium-v2.0.6-linux-bin-x64.tar.gz
+
+apps:
+  crynux-node:
+    command: crynux-node

@@ -2,8 +2,8 @@
 Description=Start Crynux Node on System Startup
 
 [Service]
-WorkingDirectory=/usr/local/crynux_node
-ExecStart=/usr/local/crynux_node/crynux_node
+WorkingDirectory=/usr/local/crynux-node
+ExecStart=/usr/local/crynux-node/crynux-node
 Restart=always
 RestartSec=10
 
