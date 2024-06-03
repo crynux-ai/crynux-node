@@ -15,3 +15,5 @@ parts:
 apps:
   crynux-node:
     command: crynux-node
+    daemon: simple
+    restart-delay: 10s
