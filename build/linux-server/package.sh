@@ -36,7 +36,7 @@ cp -r "res" "dist/crynux-node/"
 
 RELEASE_NAME="crynux-node-helium-v${VERSION}-linux-bin-x64"
 
-mv dist/crynux_node "dist/$RELEASE_NAME"
+mv dist/crynux-node "dist/$RELEASE_NAME"
 
 ## Generate the tar file
 tar -czf "dist/$RELEASE_NAME.tar.gz" -C dist "$RELEASE_NAME"
