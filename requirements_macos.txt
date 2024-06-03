@@ -23,3 +23,4 @@ python-multipart==0.0.6
 tenacity==8.2.3
 psutil==5.9.8
 eth-rlp==1.0.1
+pebble==5.0.7

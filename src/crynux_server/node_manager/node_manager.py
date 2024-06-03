@@ -14,7 +14,7 @@ from tenacity import (AsyncRetrying, before_sleep_log, stop_after_attempt,
 from web3 import Web3
 from web3.types import EventData
 
-from crynux_server import models
+from crynux_server import models, pool
 from crynux_server.config import Config, wait_privkey
 from crynux_server.contracts import Contracts, set_contracts
 from crynux_server.event_queue import DbEventQueue, EventQueue, set_event_queue
@@ -179,6 +179,8 @@ class NodeManager(object):
 
     async def _init_components(self):
         _logger.info("Initializing node manager components.")
+        pool.init()
+
         if self._event_queue is None:
             self._event_queue = _make_event_queue(self.event_queue_cls)
 
@@ -664,6 +666,7 @@ class NodeManager(object):
         if self._contracts is not None:
             await self._contracts.close()
             self._contracts = None
+        pool.close()
 
 
 _node_manager: Optional[NodeManager] = None
