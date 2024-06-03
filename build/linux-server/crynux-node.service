@@ -1,0 +1,11 @@
+[Unit]
+Description=Start Crynux Node on System Startup
+
+[Service]
+WorkingDirectory=/usr/local/crynux_node
+ExecStart=/usr/local/crynux_node/crynux_node
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
