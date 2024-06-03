@@ -3,9 +3,9 @@ from __future__ import annotations
 from functools import partial
 from typing import List
 
-from anyio import from_thread, to_process, to_thread
+from anyio import from_thread, to_thread
 
-from crynux_server import models
+from crynux_server import models, pool
 from crynux_worker.models import ModelConfig, ProxyConfig
 
 from .state_cache import ManagerStateCache
@@ -76,7 +76,7 @@ async def inference_in_process(
     script_dir: str,
     proxy: ProxyConfig | None = None,
 ):
-    await to_process.run_sync(
+    await pool.run_in_process(
         _inference,
         task_args_str,
         output_dir,
@@ -84,5 +84,4 @@ async def inference_in_process(
         external_cache_dir,
         script_dir,
         proxy,
-        cancellable=True,
     )

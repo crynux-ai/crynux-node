@@ -27,6 +27,7 @@ dependencies = [
     "tenacity~=8.2.3",
     "psutil~=5.9.8",
     "eth-rlp==1.0.1",
+    "pebble==5.0.7",
 ]
 version = "2.0.6"
 
