@@ -1,3 +1,13 @@
+# Need calling multiprocessing.freeze_support to support multiprocessing in frozen app
+# Divert the program flow in worker sub-process as soon as possible,
+# before importing heavy-weight modules.
+if __name__ == "__main__":
+    import multiprocessing
+
+    multiprocessing.freeze_support()
+
+
+import asyncio
 import logging
 import os
 import platform
@@ -5,82 +15,34 @@ import sys
 from logging.handlers import RotatingFileHandler
 
 import psutil
+import qasync
+from anyio import Event, create_task_group, sleep
+from PyQt6.QtCore import (QObject, QSettings, Qt, QtMsgType, QUrl, pyqtSlot,
+                          qInstallMessageHandler)
+from PyQt6.QtGui import QAction, QDesktopServices, QIcon, QPixmap
+from PyQt6.QtWebChannel import QWebChannel
+from PyQt6.QtWebEngineCore import QWebEnginePage, QWebEngineSettings
+from PyQt6.QtWebEngineWidgets import QWebEngineView
+from PyQt6.QtWidgets import (QApplication, QMenu, QSplashScreen,
+                             QStackedLayout, QSystemTrayIcon, QWidget)
+
+from crynux_server.run import CrynuxRunner
 
 _logger = logging.getLogger(__name__)
-handler = logging.StreamHandler()
-dt_fmt = "%Y-%m-%d %H:%M:%S"
-formatter = logging.Formatter(
-    "[{asctime}] [{levelname:<8}] {name}: {message}", dt_fmt, style="{"
-)
-handler.setFormatter(formatter)
-_logger.addHandler(handler)
-_logger.setLevel(logging.DEBUG)
-
-if getattr(sys, "frozen", False):
-    app_path = os.path.dirname(sys.executable)
-    system_name = platform.system()
-
-    if system_name == "Darwin":
-        resdir = os.path.join(os.path.dirname(app_path), "Resources")
-        os.environ["CRYNUX_SERVER_CONFIG"] = os.path.join(resdir, "config", "config.yml")
-
-        from crynux_server import config as crynux_config
-
-        cfg = crynux_config.get_config()
-        cfg.task_dir = os.path.join(resdir, "tasks")
-        cfg.web_dist = os.path.join(resdir, "webui/dist")
-        cfg.log.dir = os.path.join(resdir, "logs")
-        cfg.db = f"sqlite+aiosqlite://{os.path.join(resdir, 'db/server.db')}"
-        assert cfg.task_config is not None
-        cfg.task_config.output_dir = os.path.join(resdir, "data/results")
-        cfg.task_config.hf_cache_dir = os.path.join(resdir, "data/huggingface")
-        cfg.task_config.external_cache_dir = os.path.join(resdir, "data/external")
-        cfg.task_config.inference_logs_dir = os.path.join(resdir, "data/inference-logs")
-        cfg.task_config.script_dir = os.path.join(resdir, "worker")
-        cfg.resource_dir = os.path.join(resdir, "res")
-        crynux_config.set_config(cfg)
-        crynux_config.dump_config(cfg)
-
-    elif system_name == "Windows":
-        os.environ["CRYNUX_SERVER_CONFIG"] = os.path.join("config", "config.yml")
-
-    else:
-        error = RuntimeError(f"Unsupported platform: {system_name}")
-        _logger.error(error)
-        raise error
-
-elif os.getenv("CRYNUX_SERVER_CONFIG") is None:
-    index = __file__.rfind(os.path.sep + "src")
-    root_dir = __file__[:index]
-
-    os.environ["CRYNUX_SERVER_CONFIG"] = os.path.join(root_dir, "config", "config.yml")
-
-assert os.environ["CRYNUX_SERVER_CONFIG"]
-config_file_path = os.path.abspath(os.environ["CRYNUX_SERVER_CONFIG"])
-_logger.info(f"Start Crynux Node from: {config_file_path}")
-
-import asyncio
-import sys
-from PyQt6.QtGui import QDesktopServices, QIcon, QAction, QPixmap
-from PyQt6.QtCore import QUrl, Qt, qInstallMessageHandler, QtMsgType, QSettings, QObject, pyqtSlot
-from PyQt6.QtWidgets import QWidget, QApplication, QSplashScreen, QStackedLayout, QSystemTrayIcon, QMenu
-from PyQt6.QtWebEngineWidgets import QWebEngineView
-from PyQt6.QtWebEngineCore import QWebEnginePage, QWebEngineSettings
-from PyQt6.QtWebChannel import QWebChannel
-import qasync
-
-from anyio import Event, create_task_group, sleep
-from crynux_server.run import CrynuxRunner
 
 
 def init_log(_logger, config):
     if config.log.level == "DEBUG":
-        os.environ['QT_LOGGING_RULES'] = "qt.webenginecontext.debug=true"
+        os.environ["QT_LOGGING_RULES"] = "qt.webenginecontext.debug=true"
 
     def qt_message_handler(mode, context, message):
 
-        position = '[QT] line: %d, func: %s(), file: %s\n' % (context.line, context.function, context.file)
-        msg = '[QT] %s\n' % message
+        position = "[QT] line: %d, func: %s(), file: %s\n" % (
+            context.line,
+            context.function,
+            context.file,
+        )
+        msg = "[QT] %s\n" % message
 
         if mode == QtMsgType.QtInfoMsg:
             _logger.info(msg)
@@ -108,9 +70,13 @@ def init_log(_logger, config):
         maxBytes=50 * 1024 * 1024,
         backupCount=5,
     )
-    file_handler.setFormatter(logging.Formatter(
-        "[{asctime}] [{levelname:<8}] {name}: {message}", "%Y-%m-%d %H:%M:%S", style="{"
-    ))
+    file_handler.setFormatter(
+        logging.Formatter(
+            "[{asctime}] [{levelname:<8}] {name}: {message}",
+            "%Y-%m-%d %H:%M:%S",
+            style="{",
+        )
+    )
     _logger.addHandler(file_handler)
 
 
@@ -181,14 +147,13 @@ class CrynuxApp(QWidget):
 
         settings = self.webpage.settings()
         settings.setAttribute(
-            QWebEngineSettings.WebAttribute.JavascriptCanAccessClipboard,
-            True
+            QWebEngineSettings.WebAttribute.JavascriptCanAccessClipboard, True
         )
 
         stack.addWidget(self.webview)
         self.setLayout(stack)
         self.setGeometry(300, 300, 1300, 800)
-        self.setWindowTitle('Crynux Node')
+        self.setWindowTitle("Crynux Node")
 
     def delayed_show(self):
         self.webview.load(QUrl("http://localhost:7412"))
@@ -199,7 +164,10 @@ class CrynuxApp(QWidget):
             return
 
         self.show()
-        self.setWindowState(self.windowState() & ~Qt.WindowState.WindowMinimized | Qt.WindowState.WindowActive)
+        self.setWindowState(
+            self.windowState() & ~Qt.WindowState.WindowMinimized
+            | Qt.WindowState.WindowActive
+        )
         self.activateWindow()
 
     def closeEvent(self, event):
@@ -225,13 +193,10 @@ def main():
     geometry = app.primaryScreen().availableGeometry()
 
     pixmap = QPixmap(os.path.join(crynux_cfg.resource_dir, "splash.png")).scaledToWidth(
-        int(geometry.width() / 4),
-        mode=Qt.TransformationMode.SmoothTransformation
+        int(geometry.width() / 4), mode=Qt.TransformationMode.SmoothTransformation
     )
 
-    splash_screen = QSplashScreen(
-        pixmap=pixmap
-    )
+    splash_screen = QSplashScreen(pixmap=pixmap)
     splash_screen.setWindowFlag(Qt.WindowType.WindowStaysOnTopHint)
     _logger.debug("show splash screen")
 
@@ -271,9 +236,11 @@ def main():
             _logger.debug("runner stop")
 
         def system_tray_action(reason):
-            if (platform.system() == "Windows"
-                    and reason == QSystemTrayIcon.ActivationReason.Trigger
-                    and reason != QSystemTrayIcon.ActivationReason.Context):
+            if (
+                platform.system() == "Windows"
+                and reason == QSystemTrayIcon.ActivationReason.Trigger
+                and reason != QSystemTrayIcon.ActivationReason.Context
+            ):
                 crynux_app.show_recreate_window()
 
         def go_to_discord():
@@ -321,5 +288,63 @@ def main():
         proc.kill()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
+    handler = logging.StreamHandler()
+    dt_fmt = "%Y-%m-%d %H:%M:%S"
+    formatter = logging.Formatter(
+        "[{asctime}] [{levelname:<8}] {name}: {message}", dt_fmt, style="{"
+    )
+    handler.setFormatter(formatter)
+    _logger.addHandler(handler)
+    _logger.setLevel(logging.DEBUG)
+
+    if getattr(sys, "frozen", False):
+        app_path = os.path.dirname(sys.executable)
+        system_name = platform.system()
+
+        if system_name == "Darwin":
+            resdir = os.path.join(os.path.dirname(app_path), "Resources")
+            os.environ["CRYNUX_SERVER_CONFIG"] = os.path.join(
+                resdir, "config", "config.yml"
+            )
+
+            from crynux_server import config as crynux_config
+
+            cfg = crynux_config.get_config()
+            cfg.task_dir = os.path.join(resdir, "tasks")
+            cfg.web_dist = os.path.join(resdir, "webui/dist")
+            cfg.log.dir = os.path.join(resdir, "logs")
+            cfg.db = f"sqlite+aiosqlite://{os.path.join(resdir, 'db/server.db')}"
+            assert cfg.task_config is not None
+            cfg.task_config.output_dir = os.path.join(resdir, "data/results")
+            cfg.task_config.hf_cache_dir = os.path.join(resdir, "data/huggingface")
+            cfg.task_config.external_cache_dir = os.path.join(resdir, "data/external")
+            cfg.task_config.inference_logs_dir = os.path.join(
+                resdir, "data/inference-logs"
+            )
+            cfg.task_config.script_dir = os.path.join(resdir, "worker")
+            cfg.resource_dir = os.path.join(resdir, "res")
+            crynux_config.set_config(cfg)
+            crynux_config.dump_config(cfg)
+
+        elif system_name == "Windows":
+            os.environ["CRYNUX_SERVER_CONFIG"] = os.path.join("config", "config.yml")
+
+        else:
+            error = RuntimeError(f"Unsupported platform: {system_name}")
+            _logger.error(error)
+            raise error
+
+    elif os.getenv("CRYNUX_SERVER_CONFIG") is None:
+        index = __file__.rfind(os.path.sep + "src")
+        root_dir = __file__[:index]
+
+        os.environ["CRYNUX_SERVER_CONFIG"] = os.path.join(
+            root_dir, "config", "config.yml"
+        )
+
+    assert os.environ["CRYNUX_SERVER_CONFIG"]
+    config_file_path = os.path.abspath(os.environ["CRYNUX_SERVER_CONFIG"])
+    _logger.info(f"Start Crynux Node from: {config_file_path}")
+
     main()
