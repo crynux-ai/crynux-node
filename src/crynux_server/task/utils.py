@@ -2,9 +2,8 @@ import os
 import secrets
 from typing import List, Tuple
 
-from anyio import to_process
-
 from celery.result import AsyncResult
+from crynux_server import pool
 from crynux_server.models import TaskType, TaskResultReady
 from crynux_server.config import TaskConfig
 
@@ -47,13 +46,12 @@ async def run_distributed_task(
     task_type: TaskType,
     task_args: str,
 ):
-    await to_process.run_sync(
+    await pool.run_in_process(
         _run_distributed_task,
         task_name,
         task_id,
         task_type,
         task_args,
-        cancellable=True
     )
 
 
@@ -62,11 +60,10 @@ def _run_local_task(
     task_id: int,
     task_type: TaskType,
     task_args: str,
-    task_config: TaskConfig
+    task_config: TaskConfig,
 ):
     import crynux_worker.task as h_task
-    from crynux_worker.task.utils import (get_gpt_resp_hash,
-                                            get_image_hash)
+    from crynux_worker.task.utils import get_gpt_resp_hash, get_image_hash
 
     proxy = None
     if task_config.proxy is not None:
@@ -89,9 +86,7 @@ def _run_local_task(
 
     task_func(**kwargs)
 
-    result_dir = os.path.join(
-        task_config.output_dir, str(task_id)
-    )
+    result_dir = os.path.join(task_config.output_dir, str(task_id))
     result_files = sorted(os.listdir(result_dir))
     result_paths = [os.path.join(result_dir, file) for file in result_files]
     if task_type == TaskType.SD:
@@ -112,7 +107,7 @@ async def run_local_task(
     task_args: str,
     task_config: TaskConfig,
 ):
-    return await to_process.run_sync(
+    return await pool.run_in_process(
         _run_local_task,
         task_name,
         task_id,
