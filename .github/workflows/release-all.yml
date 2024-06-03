@@ -216,8 +216,10 @@ jobs:
     steps:
       - name: Print the Google Drive links
         run: |
-          echo "windows content link: ${{ env.WINDOWS_LINK }}"
-          echo "linux content link: ${{ env.LINUX_LINK }}"
+          echo "windows download link: ${{ env.WINDOWS_DOWNLOAD_LINK }}"
+          echo "windows preview link: ${{ env.WINDOWS_PREVIEW_LINK }}"
+          echo "linux download link: ${{ env.LINUX_DOWNLOAD_LINK }}"
+          echo "linux preview link: ${{ env.LINUX_PREVIEW_LINK }}"
 
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -233,8 +235,8 @@ jobs:
 
       - name: Generate the changelog
         run: |
-          windows_link_escaped=$(printf '%s\n' "${{ env.WINDOWS_LINK }}" | sed -e 's/[\/&]/\\&/g')
-          linux_link_escaped=$(printf '%s\n' "${{ env.LINUX_LINK }}" | sed -e 's/[\/&]/\\&/g')
+          windows_link_escaped=$(printf '%s\n' "${{ env.WINDOWS_DOWNLOAD_LINK }}" | sed -e 's/[\/&]/\\&/g')
+          linux_link_escaped=$(printf '%s\n' "${{ env.LINUX_DOWNLOAD_LINK }}" | sed -e 's/[\/&]/\\&/g')
           sed -i "s/RELEASE_VERSION/${{ env.RELEASE_VERSION }}/g" build/changelog-template.md
           sed -i "s/WINDOWS_LINK/$windows_link_escaped/g" build/changelog-template.md
           sed -i "s/LINUX_SERVER_LINK/$linux_link_escaped/g" build/changelog-template.md
