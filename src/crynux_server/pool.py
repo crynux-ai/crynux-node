@@ -1,4 +1,5 @@
 import asyncio
+import multiprocessing
 from functools import partial
 from typing import Callable, Optional, TypeVar
 
@@ -13,7 +14,7 @@ def init():
 
     assert _default_process_executor is None, "Process pool has been initilized"
 
-    _default_process_executor = ProcessPool(max_workers=2)
+    _default_process_executor = ProcessPool(max_workers=2, context=multiprocessing.get_context("spawn"))
 
 
 def get_process_executor() -> ProcessPool:
