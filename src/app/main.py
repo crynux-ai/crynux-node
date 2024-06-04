@@ -226,7 +226,20 @@ def main():
         _logger.debug("Creating runner and crynux_app")
         runner = CrynuxRunner()
 
+        should_exit = False
         exit_event = Event()
+
+        def set_should_exit():
+            nonlocal should_exit
+
+            should_exit = True
+            _logger.debug("set should exit")
+
+        async def check_should_exit():
+            while not should_exit:
+                await sleep(0.1)
+            exit_event.set()
+            _logger.debug("set exit event")
 
         async def wait_for_exit():
             await exit_event.wait()
@@ -248,7 +261,7 @@ def main():
         tray.activated.connect(system_tray_action)
         tray_menu_dashboard.triggered.connect(crynux_app.show_recreate_window)
         tray_menu_discord.triggered.connect(go_to_discord)
-        tray_menu_exit.triggered.connect(exit_event.set)
+        tray_menu_exit.triggered.connect(set_should_exit)
 
         def app_state_changed(reason):
             if reason == Qt.ApplicationState.ApplicationActive:
@@ -259,6 +272,7 @@ def main():
 
         async with create_task_group() as tg:
             _logger.debug("Starting init task")
+            tg.start_soon(check_should_exit)
             tg.start_soon(wait_for_exit)
             await tg.start(runner.run)
             await sleep(3.5)

@@ -41,8 +41,8 @@ class CrynuxRunner(object):
 
         self._shutdown_event: Optional[Event] = None
         self._should_shutdown = False
-        signal.signal(signal.SIGINT, self._set_shutdown_event)
-        signal.signal(signal.SIGTERM, self._set_shutdown_event)
+        signal.signal(signal.SIGINT, self._shutdown_signal_handler)
+        signal.signal(signal.SIGTERM, self._shutdown_signal_handler)
 
     def _shutdown_signal_handler(self, *args):
         self._should_shutdown = True
@@ -52,7 +52,7 @@ class CrynuxRunner(object):
             await sleep(0.1)
         self._set_shutdown_event()
 
-    def _set_shutdown_event(self, *args):
+    def _set_shutdown_event(self):
         if self._shutdown_event is not None:
             self._shutdown_event.set()
 
