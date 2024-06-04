@@ -233,11 +233,13 @@ def main():
             nonlocal should_exit
 
             should_exit = True
+            _logger.debug("set should exit")
 
         async def check_should_exit():
             while not should_exit:
                 await sleep(0.1)
             exit_event.set()
+            _logger.debug("set exit event")
 
         async def wait_for_exit():
             await exit_event.wait()
