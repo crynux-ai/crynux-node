@@ -20,6 +20,19 @@ while getopts ":w:d:" opt; do
 done
 
 if [[ -z $WORK_DIR ]]; then
+  echo "Please specify the working directory"
+  exit 1
+fi
+
+# https://github.com/AnyLifeZLB/FaceVerificationSDK/blob/main/install_newest_mediapipe_on_macos.md
+export SYSTEM_VERSION_COMPAT=0
+
+# Must use arm64 version of Python
+# CONDA_SUBDIR=osx-arm64 conda create -n crynux python=3.10
+# python > 3.10.2 is required
+arch=$(python3.10 -c "import platform;print(platform.uname())")
+if [[ $arch == *"x86_64"* ]]; then
+  echo "Please use the python in arm64 arch"
   exit 1
 fi
 
@@ -52,13 +65,7 @@ function check_or_install {
   fi
 }
 
-check_or_install git git
-check_or_install yarn yarn
-check_or_install node node
-check_or_install go go
-check_or_install python3.10 python@3.10
 check_or_install create-dmg create-dmg
-
 
 # 1. Prepare the WebUI dist
 

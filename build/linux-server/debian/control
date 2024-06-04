@@ -1,0 +1,12 @@
+Source: crynux-node
+Maintainer: lukew <lukew@crynux.ai>
+Section: misc
+Priority: optional
+Standards-Version: 4.6.2
+Build-Depends: debhelper-compat (= 13), python3.10-dev (>= 3.10.1), wget (>= 1.21.0)
+
+Package: crynux-node
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Description: Crynux Node
+ The binary release version of the Crynux Node on Ubuntu

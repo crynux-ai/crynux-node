@@ -15,28 +15,28 @@ source venv/bin/activate
 pyinstaller crynux.spec
 
 ## Copy the worker
-mv "dist/crynux_worker_process" "dist/crynux_node/crynux_worker_process"
+mv "dist/crynux_worker_process" "dist/crynux-node/crynux_worker_process"
 
 ## Create the data and config folders
-mkdir "dist/crynux_node/config"
-cp "../../config/config.yml.package_example" "dist/crynux_node/config/config.yml"
+mkdir "dist/crynux-node/config"
+cp "../../config/config.yml.package_example" "dist/crynux-node/config/config.yml"
 
-mkdir "dist/crynux_node/data"
-mkdir "dist/crynux_node/data/external"
-mkdir "dist/crynux_node/data/huggingface"
-mkdir "dist/crynux_node/data/results"
-mkdir "dist/crynux_node/data/inference-logs"
+mkdir "dist/crynux-node/data"
+mkdir "dist/crynux-node/data/external"
+mkdir "dist/crynux-node/data/huggingface"
+mkdir "dist/crynux-node/data/results"
+mkdir "dist/crynux-node/data/inference-logs"
 
 ## Copy the Web UI
-mkdir "dist/crynux_node/webui"
-cp -r "webui/dist" "dist/crynux_node/webui/"
+mkdir "dist/crynux-node/webui"
+cp -r "webui/dist" "dist/crynux-node/webui/"
 
 ## Copy the resources
-cp -r "res" "dist/crynux_node/"
+cp -r "res" "dist/crynux-node/"
 
 RELEASE_NAME="crynux-node-helium-v${VERSION}-linux-bin-x64"
 
-mv dist/crynux_node "dist/$RELEASE_NAME"
+mv dist/crynux-node "dist/$RELEASE_NAME"
 
 ## Generate the tar file
 tar -czf "dist/$RELEASE_NAME.tar.gz" -C dist "$RELEASE_NAME"
