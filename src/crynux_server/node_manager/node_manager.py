@@ -540,7 +540,7 @@ class NodeManager(object):
                         with fail_after(5, shield=True):
                             await self.state_cache.set_node_state(
                                 status=models.NodeStatus.Error,
-                                message="Node manager init error: cannot request token from faucet. Retrying",
+                                message="Node manager init error: cannot request token from faucet. Retrying...",
                             )
                         raise
 
