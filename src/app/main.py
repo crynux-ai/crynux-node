@@ -26,8 +26,6 @@ from PyQt6.QtWebEngineWidgets import QWebEngineView
 from PyQt6.QtWidgets import (QApplication, QMenu, QSplashScreen,
                              QStackedLayout, QSystemTrayIcon, QWidget)
 
-from crynux_server.run import CrynuxRunner
-
 _logger = logging.getLogger(__name__)
 
 
@@ -177,6 +175,7 @@ class CrynuxApp(QWidget):
 
 def main():
     from crynux_server import config as crynux_config
+    from crynux_server.run import CrynuxRunner
 
     _logger.debug("Starting Crynux node...")
 
@@ -304,9 +303,10 @@ if __name__ == "__main__":
 
         if system_name == "Darwin":
             resdir = os.path.join(os.path.dirname(app_path), "Resources")
-            os.environ["CRYNUX_SERVER_CONFIG"] = os.path.join(
-                resdir, "config", "config.yml"
-            )
+            config_file_path = os.path.join(resdir, "config", "config.yml")
+            os.environ["CRYNUX_SERVER_CONFIG"] = config_file_path
+
+            _logger.debug(f"Config file path on mac: {config_file_path}")
 
             from crynux_server import config as crynux_config
 
@@ -319,17 +319,17 @@ if __name__ == "__main__":
             cfg.task_config.output_dir = os.path.join(resdir, "data/results")
             cfg.task_config.hf_cache_dir = os.path.join(resdir, "data/huggingface")
             cfg.task_config.external_cache_dir = os.path.join(resdir, "data/external")
-            cfg.task_config.inference_logs_dir = os.path.join(
-                resdir, "data/inference-logs"
-            )
+            cfg.task_config.inference_logs_dir = os.path.join(resdir, "data/inference-logs")
             cfg.task_config.script_dir = os.path.join(resdir, "worker")
             cfg.resource_dir = os.path.join(resdir, "res")
             crynux_config.set_config(cfg)
             crynux_config.dump_config(cfg)
 
         elif system_name == "Windows":
-            os.environ["CRYNUX_SERVER_CONFIG"] = os.path.join("config", "config.yml")
+            config_file_path = os.path.join("config", "config.yml")
+            os.environ["CRYNUX_SERVER_CONFIG"] = config_file_path
 
+            _logger.debug(f"Config file path on windows: {config_file_path}")
         else:
             error = RuntimeError(f"Unsupported platform: {system_name}")
             _logger.error(error)
@@ -339,9 +339,10 @@ if __name__ == "__main__":
         index = __file__.rfind(os.path.sep + "src")
         root_dir = __file__[:index]
 
-        os.environ["CRYNUX_SERVER_CONFIG"] = os.path.join(
-            root_dir, "config", "config.yml"
-        )
+        config_file_path = os.path.join(root_dir, "config", "config.yml")
+        os.environ["CRYNUX_SERVER_CONFIG"] = config_file_path
+
+        _logger.debug(f"Config file path from source: {config_file_path}")
 
     assert os.environ["CRYNUX_SERVER_CONFIG"]
     config_file_path = os.path.abspath(os.environ["CRYNUX_SERVER_CONFIG"])
