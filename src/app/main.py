@@ -6,7 +6,6 @@ if __name__ == "__main__":
 
     multiprocessing.freeze_support()
 
-
 import asyncio
 import logging
 import os
@@ -133,7 +132,6 @@ class CrynuxApp(QWidget):
         _logger.debug("Application UI initialized")
 
     def init_ui(self):
-
         stack = QStackedLayout(self)
         self.webview = QWebEngineView()
         self.webpage = CustomWebEnginePage()
@@ -250,7 +248,6 @@ def main():
         def system_tray_action(reason):
             if (
                 platform.system() == "Windows"
-                and reason == QSystemTrayIcon.ActivationReason.Trigger
                 and reason != QSystemTrayIcon.ActivationReason.Context
             ):
                 crynux_app.show_recreate_window()
@@ -264,7 +261,7 @@ def main():
         tray_menu_exit.triggered.connect(set_should_exit)
 
         def app_state_changed(reason):
-            if reason == Qt.ApplicationState.ApplicationActive:
+            if platform.system() == "Darwin" and reason == Qt.ApplicationState.ApplicationActive:
                 if app.activeWindow() is None:
                     crynux_app.show_recreate_window()
 
