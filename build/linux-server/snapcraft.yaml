@@ -10,7 +10,7 @@ base: core22
 parts:
   crynux-node:
     plugin: dump
-    source: ./dist/crynux-node-helium-v2.0.6-linux-bin-x64.tar.gz
+    source: ./crynux-node-helium-v2.0.6-linux-bin-x64.tar.gz
 
 apps:
   crynux-node:
