@@ -1,0 +1,44 @@
+---
+name: Build the snap package and push to Ubuntu Snap Store
+on:
+    workflow_dispatch:
+        inputs:
+            name:
+                description: 'build manually trigger'
+                required: true
+                default: 'triggered by developer'
+
+jobs:
+    build-snap-and-push-to-store:
+        runs-on: ubuntu-latest
+        steps:
+            -   name: Checkout repository
+                uses: actions/checkout@v4
+                with:
+                    submodules: recursive
+
+            -   name: Set up Python
+                uses: actions/setup-python@v5
+                with:
+                    python-version: '3.10'
+
+            -   name: Setup Go 1.21.x
+                uses: actions/setup-go@v5
+                with:
+                    go-version: '1.21.x'
+
+            -   name: Set up Node.js
+                uses: actions/setup-node@v4
+                with:
+                    node-version: '22.x'
+
+            -   name: Run the build script
+                run: ./build/linux-server/build.sh
+
+            -   name: Set up snapcraft
+                uses: samuelmeuli/action-snapcraft@v2
+
+            -   name: Build the snap package
+                run: |
+                    cd build/crynux_node
+                    snapcraft
