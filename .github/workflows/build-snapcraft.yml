@@ -44,6 +44,8 @@ jobs:
 
     build-the-snap-package:
         runs-on: ubuntu-latest
+        needs:
+            - build-the-linux-binary
         steps:
             -   name: Checkout repository
                 uses: actions/checkout@v4
