@@ -9,7 +9,7 @@ on:
                 default: 'triggered by developer'
 
 jobs:
-    build-snap-and-push-to-store:
+    build-the-linux-binary:
         runs-on: ubuntu-latest
         steps:
             -   name: Checkout repository
@@ -35,14 +35,34 @@ jobs:
             -   name: Run the build script
                 run: ./build/linux-server/build.sh
 
+            -   name: Upload the artifact
+                uses: actions/upload-artifact@v4
+                with:
+                    if-no-files-found: error
+                    name: linux-bin
+                    path: build/crynux_node/dist/crynux-node-helium-v2.0.6-linux-bin-x64.tar.gz
+
+    build-the-snap-package:
+        runs-on: ubuntu-latest
+        steps:
+            -   name: Checkout repository
+                uses: actions/checkout@v4
+
+            -   name: Prepare snapcraft.yml
+                run: |
+                    cp build/linux-server/snapcraft.yaml .
+
+            -   name: Download linux binary
+                uses: actions/download-artifact@v4
+                with:
+                    name: linux-bin
+
             -   id: snapcraft
                 name: Build the snap package
                 uses: snapcore/action-build@v1
-                with:
-                    path: ./build/crynux_node
                     
             -   name: Upload the snap artifact
                 uses: actions/upload-artifact@v3
                 with:
-                    name: snap
+                    name: ubuntu-snap
                     path: ${{ steps.snapcraft.outputs.snap }}
