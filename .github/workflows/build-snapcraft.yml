@@ -35,10 +35,14 @@ jobs:
             -   name: Run the build script
                 run: ./build/linux-server/build.sh
 
-            -   name: Set up snapcraft
-                uses: samuelmeuli/action-snapcraft@v2
-
-            -   name: Build the snap package
-                run: |
-                    cd build/crynux_node
-                    snapcraft
+            -   id: snapcraft
+                name: Build the snap package
+                uses: snapcore/action-build@v1
+                with:
+                    path: ./build/crynux_node
+                    
+            -   name: Upload the snap artifact
+                uses: actions/upload-artifact@v3
+                with:
+                    name: snap
+                    path: ${{ steps.snapcraft.outputs.snap }}
