@@ -71,7 +71,7 @@ jobs:
                     path: /home/runner/.local/state/snapcraft/log
                     
             -   name: Upload the snap artifact
-                uses: actions/upload-artifact@v3
+                uses: actions/upload-artifact@v4
                 with:
                     name: ubuntu-snap
                     path: ${{ steps.snapcraft.outputs.snap }}
