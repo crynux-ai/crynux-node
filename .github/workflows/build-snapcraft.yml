@@ -62,6 +62,13 @@ jobs:
             -   id: snapcraft
                 name: Build the snap package
                 uses: snapcore/action-build@v1
+
+            -   name: Archive error log if failed
+                if: ${{ failure() }}
+                uses: actions/upload-artifact@v3
+                with:
+                    name: snap-logs
+                    path: /home/runner/.local/state/snapcraft/log
                     
             -   name: Upload the snap artifact
                 uses: actions/upload-artifact@v3
