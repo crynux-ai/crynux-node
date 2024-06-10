@@ -14,6 +14,6 @@ parts:
 
 apps:
     crynux-node:
-        command: crynux-node-helium-v2.0.6-linux-bin-x64/crynux-node
+        command: crynux-node
         daemon: simple
         restart-delay: 10s

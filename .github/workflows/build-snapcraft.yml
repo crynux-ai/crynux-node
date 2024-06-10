@@ -63,13 +63,14 @@ jobs:
                 name: Build the snap package
                 uses: snapcore/action-build@v1
 
-            -   name: Archive error log if failed
-                if: ${{ failure() }}
-                uses: actions/upload-artifact@v4
+            -   name: Publish to Snap Store
+                uses: snapcore/action-publish@v1
+                env:
+                    SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAP_STORE_CREDENTIALS }}
                 with:
-                    name: snap-logs
-                    path: /home/runner/.local/state/snapcraft/log
-                    
+                    snap: ${{ steps.snapcraft.outputs.snap }}
+                    release: stable
+
             -   name: Upload the snap artifact
                 uses: actions/upload-artifact@v4
                 with:
