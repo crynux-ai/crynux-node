@@ -16,8 +16,6 @@ parts:
         plugin: dump
         source: ./crynux-node-helium-v2.0.6-linux-bin-x64.tar.gz
         stage-packages:
-            - python3.10
-            - python3.10-venv
             - ffmpeg
             - libsm6
             - libxext6
