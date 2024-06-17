@@ -1,0 +1,78 @@
+---
+name: Build the snap package and push to Ubuntu Snap Store
+on:
+    workflow_dispatch:
+        inputs:
+            name:
+                description: 'build manually trigger'
+                required: true
+                default: 'triggered by developer'
+
+jobs:
+    build-the-linux-binary:
+        runs-on: ubuntu-latest
+        steps:
+            -   name: Checkout repository
+                uses: actions/checkout@v4
+                with:
+                    submodules: recursive
+
+            -   name: Set up Python
+                uses: actions/setup-python@v5
+                with:
+                    python-version: '3.10'
+
+            -   name: Setup Go 1.21.x
+                uses: actions/setup-go@v5
+                with:
+                    go-version: '1.21.x'
+
+            -   name: Set up Node.js
+                uses: actions/setup-node@v4
+                with:
+                    node-version: '22.x'
+
+            -   name: Run the build script
+                run: ./build/linux-server/build.sh
+
+            -   name: Upload the artifact
+                uses: actions/upload-artifact@v4
+                with:
+                    if-no-files-found: error
+                    name: linux-bin
+                    path: build/crynux_node/dist/crynux-node-helium-v2.0.6-linux-bin-x64.tar.gz
+
+    build-the-snap-package:
+        runs-on: ubuntu-latest
+        needs:
+            - build-the-linux-binary
+        steps:
+            -   name: Checkout repository
+                uses: actions/checkout@v4
+
+            -   name: Prepare snapcraft.yml
+                run: |
+                    cp build/linux-server/snapcraft.yaml .
+
+            -   name: Download linux binary
+                uses: actions/download-artifact@v4
+                with:
+                    name: linux-bin
+
+            -   id: snapcraft
+                name: Build the snap package
+                uses: snapcore/action-build@v1
+
+            -   name: Publish to Snap Store
+                uses: snapcore/action-publish@v1
+                env:
+                    SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAP_STORE_CREDENTIALS }}
+                with:
+                    snap: ${{ steps.snapcraft.outputs.snap }}
+                    release: stable
+
+            -   name: Upload the snap artifact
+                uses: actions/upload-artifact@v4
+                with:
+                    name: ubuntu-snap
+                    path: ${{ steps.snapcraft.outputs.snap }}
