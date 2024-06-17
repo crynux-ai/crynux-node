@@ -565,7 +565,6 @@ class NodeManager(object):
                 
                         await self._init_components()
                         await self._check_time()
-                        await self._request_tokens()
 
                 except get_cancelled_exc_class():
                     _logger.exception(f"Node manager init error: init task cancelled")
