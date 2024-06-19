@@ -16,6 +16,7 @@ from anyio.abc import TaskStatus, TaskGroup
 from crynux_server import db, log, utils
 from crynux_server.config import get_config
 from crynux_server.node_manager import NodeManager, set_node_manager
+from crynux_server.worker_manager import WorkerManager, set_worker_manager
 from crynux_server.server import Server, set_server
 
 import logging
@@ -70,6 +71,9 @@ class CrynuxRunner(object):
 
         await db.init(self.config.db)
         _logger.info("DB init completed.")
+
+        worker_manager = WorkerManager()
+        set_worker_manager(worker_manager)
 
         _logger.info(f"Serving WebUI from: {os.path.abspath(self.config.web_dist)}")
         self._server = Server(self.config.web_dist)

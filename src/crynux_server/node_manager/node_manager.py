@@ -25,11 +25,11 @@ from crynux_server.task import (DbTaskStateCache, InferenceTaskRunner,
                                 set_task_state_cache, set_task_system)
 from crynux_server.watcher import (BlockNumberCache, DbBlockNumberCache,
                                    EventWatcher, set_watcher)
+from crynux_server.worker_manager import get_worker_manager, TaskCancelled, PrefetchError, TaskError
 
 from .state_cache import (DbNodeStateCache, DbTxStateCache, ManagerStateCache,
                           StateCache, set_manager_state_cache)
 from .state_manager import NodeStateManager, set_node_state_manager
-from .utils import inference_in_process, prefetch_in_thread
 
 _logger = logging.getLogger(__name__)
 
@@ -82,7 +82,6 @@ def _make_watcher(
 
 def _make_task_system(
     queue: EventQueue,
-    distributed: bool,
     retry: bool,
     task_state_cache_cls: Type[TaskStateCache],
 ) -> TaskSystem:
@@ -90,7 +89,7 @@ def _make_task_system(
     set_task_state_cache(cache)
 
     system = TaskSystem(
-        state_cache=cache, queue=queue, distributed=distributed, retry=retry
+        state_cache=cache, queue=queue, retry=retry
     )
     system.set_runner_cls(runner_cls=InferenceTaskRunner)
 
@@ -187,7 +186,6 @@ class NodeManager(object):
         if self._task_system is None:
                 self._task_system = _make_task_system(
                     queue=self._event_queue,
-                    distributed=self.config.distributed,
                     retry=self._retry,
                     task_state_cache_cls=self.task_state_cache_cls,
                 )
@@ -231,104 +229,45 @@ class NodeManager(object):
 
     async def _init(self):
         _logger.info("Initialize node manager")
-        if not self.config.distributed:
 
-            ### Prefetech ###
-            from crynux_worker.models import ModelConfig, ProxyConfig
+        worker_manager = get_worker_manager()
 
-            assert (
-                self.config.task_config is not None
-            ), "Task config is None in non-distributed version"
+        async for attemp in AsyncRetrying(
+            stop=stop_after_attempt(3) if self._retry else stop_after_attempt(1),
+            wait=wait_fixed(self._retry_delay),
+            before_sleep=before_sleep_log(_logger, logging.ERROR, exc_info=True),
+            reraise=True,
+        ):
+            with attemp:
+                try:
+                    async for progress in worker_manager.get_prefetch_task_progress():
+                        await self.state_cache.set_node_state(
+                            status=models.NodeStatus.Init,
+                            init_message=progress
+                        )
+                except TaskCancelled:
+                    worker_manager.reset_prefetch_task()
+                    raise
+                except PrefetchError as e:
+                    raise ValueError("Failed to download models due to network issue") from e
+        _logger.info("Finish downloading models")
 
-            if (
-                self.config.task_config is not None
-                and self.config.task_config.preloaded_models is not None
-            ):
-                preload_models = self.config.task_config.preloaded_models.model_dump()
-                sd_base_models: List[ModelConfig] | None = preload_models.get("sd_base", None)
-                gpt_base_models: List[ModelConfig] | None = preload_models.get("gpt_base", None)
-                controlnet_models: List[ModelConfig] | None = preload_models.get(
-                    "controlnet", None
-                )
-                vae_models: List[ModelConfig] | None = preload_models.get("vae", None)
-            else:
-                sd_base_models = None
-                gpt_base_models = None
-                controlnet_models = None
-                vae_models = None
-
-            if (
-                self.config.task_config is not None
-                and self.config.task_config.proxy is not None
-            ):
-                proxy = self.config.task_config.proxy.model_dump()
-                proxy = cast(ProxyConfig, proxy)
-            else:
-                proxy = None
-
-            # retry prefetch for 3 times
-            async for attemp in AsyncRetrying(
-                stop=stop_after_attempt(3) if self._retry else stop_after_attempt(1),
-                wait=wait_fixed(self._retry_delay),
-                before_sleep=before_sleep_log(_logger, logging.ERROR, exc_info=True),
-                reraise=True,
-            ):
-                with attemp:
-                    await prefetch_in_thread(
-                        self.state_cache,
-                        self.config.task_config.hf_cache_dir,
-                        self.config.task_config.external_cache_dir,
-                        self.config.task_config.script_dir,
-                        sd_base_models,
-                        gpt_base_models,
-                        controlnet_models,
-                        vae_models,
-                        proxy,
-                    )
-
-            ### Inference ###
-            prompt = (
-                "a realistic photo of an old man sitting on a brown chair, "
-                "on the seaside, with blue sky and white clouds, a dog is lying "
-                "under his legs, masterpiece, high resolution"
+        await self.state_cache.set_node_state(
+            status=models.NodeStatus.Init,
+            init_message="Running local evaluation task"
+        )
+        try:
+            with fail_after(300):
+                await worker_manager.get_init_inference_task_result()
+        except TimeoutError as e:
+            msg = (
+                "The initial inference task exceeded the timeout limit(5 min). Maybe your device does not meet "
+                "the lowest hardware requirements"
             )
-            sd_inference_args = {
-                "base_model": "runwayml/stable-diffusion-v1-5",
-                "prompt": prompt,
-                "negative_prompt": "",
-                "task_config": {
-                    "num_images": 3,
-                    "safety_checker": False,
-                    "cfg": 7,
-                    "seed": 99975892,
-                    "steps": 40,
-                },
-            }
-            current_ts = int(datetime.now().timestamp())
-            try:
-                _logger.info("Start initial inference task")
-                with fail_after(300):
-                    await self.state_cache.set_node_state(
-                        status=models.NodeStatus.Init,
-                        init_message="Running local evaluation task"
-                    )
-                    await inference_in_process(
-                        json.dumps(sd_inference_args),
-                        os.path.join(
-                            self.config.task_config.output_dir, f"_sd_init_{current_ts}"
-                        ),
-                        self.config.task_config.hf_cache_dir,
-                        self.config.task_config.external_cache_dir,
-                        self.config.task_config.script_dir,
-                        proxy,
-                    )
-                _logger.info("Initial inference task success")
-            except TimeoutError as e:
-                msg = (
-                    "The initial inference task exceeded the timeout limit(5 min). Maybe your device does not meet "
-                    "the lowest hardware requirements"
-                )
-                raise ValueError(msg) from e
+            raise ValueError(msg) from e
+        except TaskError as e:
+            raise ValueError("The initial validation task failed") from e
+        _logger.info("Finish initial validation task")
 
         _logger.info("Node manager initializing complete.")
 

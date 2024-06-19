@@ -15,18 +15,16 @@ from tenacity import (retry, retry_if_exception, stop_after_delay, wait_chain,
 from web3.types import EventData
 
 from crynux_server import models
-from crynux_server.config import TaskConfig as LocalConfig
-from crynux_server.config import get_config
+from crynux_server.config import get_config, Config
 from crynux_server.contracts import (Contracts, TxRevertedError, TxWaiter,
                                      get_contracts)
 from crynux_server.event_queue import EventQueue, get_event_queue
 from crynux_server.relay import Relay, RelayError, get_relay
 from crynux_server.watcher import EventWatcher, get_watcher
-from crynux_worker.task.error import TaskInvalid
+from crynux_server.worker_manager import TaskInvalid
 
 from .state_cache import TaskStateCache, get_task_state_cache
-from .utils import (make_result_commitments, run_distributed_task,
-                    run_local_task)
+from .utils import make_result_commitments, run_task
 
 _logger = logging.getLogger(__name__)
 
@@ -41,13 +39,11 @@ class TaskRunner(ABC):
         self,
         task_id: int,
         task_name: str,
-        distributed: bool,
         state_cache: Optional[TaskStateCache] = None,
         queue: Optional[EventQueue] = None,
     ):
         self.task_id = task_id
         self.task_name = task_name
-        self.distributed = distributed
         if state_cache is None:
             state_cache = get_task_state_cache()
         self.cache = state_cache
@@ -269,18 +265,16 @@ class InferenceTaskRunner(TaskRunner):
         self,
         task_id: int,
         task_name: str,
-        distributed: bool,
         state_cache: Optional[TaskStateCache] = None,
         queue: Optional[EventQueue] = None,
         contracts: Optional[Contracts] = None,
         relay: Optional[Relay] = None,
         watcher: Optional[EventWatcher] = None,
-        local_config: Optional[LocalConfig] = None,
+        config: Optional[Config] = None,
     ) -> None:
         super().__init__(
             task_id=task_id,
             task_name=task_name,
-            distributed=distributed,
             state_cache=state_cache,
             queue=queue,
         )
@@ -296,19 +290,10 @@ class InferenceTaskRunner(TaskRunner):
             self.watcher = get_watcher()
         else:
             self.watcher = watcher
-
-        if not self.distributed:
-            # load task local config only in non-distributed mode
-            if local_config is None:
-                config = get_config()
-                assert (
-                    config.task_config is not None
-                ), "Default task local config not found in config."
-                self.local_config = config.task_config
-            else:
-                self.local_config = local_config
-        else:
-            self.local_config = None
+        
+        if config is None:
+            config = get_config()
+        self.config = config
 
         self._cleaned = False
 
@@ -439,54 +424,31 @@ class InferenceTaskRunner(TaskRunner):
 
         task = await get_task()
 
-        if self.distributed:
-            _logger.info(
-                f"task id: {task.task_id},"
-                f"task type: {event.task_type},"
-                f"task_args: {task.task_args},"
-            )
-            _logger.info("Start inference task")
-            await run_distributed_task(
-                self.task_name,
-                task.task_id,
-                event.task_type,
-                task.task_args,
+        _logger.info(
+            f"task id: {task.task_id},"
+            f"task type: {event.task_type},"
+            f"task_args: {task.task_args},"
+        )
+        _logger.info("Start inference task")
+        task_dir = os.path.join(self.config.task_dir, str(task.task_id))
+        try:
+            next_event = await run_task(
+                task_name=self.task_name,
+                task_id=task.task_id,
+                task_type=event.task_type,
+                task_args=task.task_args,
+                task_dir=task_dir,
             )
             _logger.info("Inference task success")
             async with self.state_context():
                 self.state.status = models.TaskStatus.Executing
-        else:
-            try:
-                assert self.local_config is not None
-
-                _logger.info(
-                    f"task id: {task.task_id},"
-                    f"task type: {event.task_type},"
-                    f"task_args: {task.task_args},"
-                    f"output_dir: {self.local_config.output_dir},"
-                    f"hf_cache_dir: {self.local_config.hf_cache_dir},"
-                    f"external_cache_dir: {self.local_config.external_cache_dir},"
-                    f"script_dir: {self.local_config.script_dir},"
-                    f"inference_logs_dir: {self.local_config.inference_logs_dir},"
-                )
-                _logger.info("Start inference task")
-                next_event = await run_local_task(
-                    self.task_name,
-                    task.task_id,
-                    event.task_type,
-                    task.task_args,
-                    self.local_config,
-                )
-                _logger.info("Inference task success")
-                async with self.state_context():
-                    self.state.status = models.TaskStatus.Executing
-                await self.queue.put(next_event)
-            except TaskInvalid as e:
-                _logger.exception(e)
-                _logger.error("Task error, report error to the chain.")
-                with fail_after(delay=60, shield=True):
-                    await self._report_error()
-                await finish_callback()
+            await self.queue.put(next_event)
+        except TaskInvalid as e:
+            _logger.exception(e)
+            _logger.error("Task error, report error to the chain.")
+            with fail_after(delay=60, shield=True):
+                await self._report_error()
+            await finish_callback()
 
     async def result_ready(
         self,
@@ -614,7 +576,6 @@ class MockTaskRunner(TaskRunner):
         self,
         task_id: int,
         task_name: str,
-        distributed: bool,
         state_cache: Optional[TaskStateCache] = None,
         queue: Optional[EventQueue] = None,
         timeout: int = 900,
@@ -622,7 +583,6 @@ class MockTaskRunner(TaskRunner):
         super().__init__(
             task_id=task_id,
             task_name=task_name,
-            distributed=distributed,
             state_cache=state_cache,
             queue=queue,
         )

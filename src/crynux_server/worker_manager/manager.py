@@ -1,122 +1,135 @@
-from asyncio import Queue
-from collections import deque, defaultdict
-from typing import Optional, Dict, Deque, DefaultDict, Tuple
+from typing import AsyncGenerator, Dict, Optional, Union
 
-from anyio import Event
-from pydantic import BaseModel
-
-from crynux_server.models import TaskType
+from .exchange import TaskExchange
+from .task import TaskInput, TaskResult, TaskStreamResult
+from .error import TaskError, PrefetchError
 
 
-class TaskInput(BaseModel):
-    task_name: str
-    task_type: TaskType
-    task_args: str
-    task_id: int = 0
-
-
-class TaskCancelled(Exception):
-    pass
-
-
-class TaskError(Exception):
-    def __init__(self, err_msg: str) -> None:
-        self.err_msg = err_msg
-
-    def __str__(self) -> str:
-        return f"TaskError: {self.err_msg}"
-
-
-class TaskResult(object):
+class WorkerManager(object):
     def __init__(self) -> None:
-        self._done_event = Event()
+        self._exchange = TaskExchange()
 
-        self._result = None
-        self._error: Optional[Exception] = None
+        self._next_worker_id = 0
+        # store worker current TaskResult, when it is None means worker is idle
+        # when worker not in the dict, means it is disconnected
+        self._worker_task: Dict[int, Union[TaskResult, TaskStreamResult, None]] = {}
 
-    def set_result(self, result):
-        assert not self._done_event.is_set(), "TaskReuslt is done"
-        self._result = result
-        self._done_event.set()
+        self._prefetch_task_result = TaskStreamResult()
+        self._init_inference_task_result = TaskResult()
 
-    def set_error(self, err_msg: str):
-        assert not self._done_event.is_set(), "TaskReuslt is done"
-        self._error = TaskError(err_msg)
-        self._done_event.set()
+        self._prefetch_worker_id: Optional[int] = None
+        self._init_inference_worker_id: Optional[int] = None
 
-    def cancel(self):
-        assert not self._done_event.is_set(), "TaskReuslt is done"
-        self._error = TaskCancelled()
-        self._done_event.set()
+    def connect(self) -> int:
+        worker_id = self._next_worker_id
+        self._next_worker_id += 1
+        self._worker_task[worker_id] = None
+        return worker_id
 
-    async def get(self):
-        await self._done_event.wait()
-        if self._error is not None:
-            raise self._error
-        return self._result
+    def disconnect(self, worker_id: int):
+        assert worker_id in self._worker_task, f"Worker {worker_id} is disconnected"
+        # cancel the worker's running task
+        task_result = self._worker_task.pop(worker_id)
+        if task_result is not None and not task_result.done():
+            task_result.cancel()
 
+    async def send_task(self, input: TaskInput):
+        return await self._exchange.send_task(input)
 
+    async def get_task(self, worker_id: int):
+        assert worker_id in self._worker_task, f"Worker {worker_id} is disconnected"
+        assert self._worker_task[worker_id] is None, f"Worker {worker_id} is busy now"
+        task_input, task_result = await self._exchange.get_task()
 
-DEFAULT_ROUTING_KEY = ""
+        def done_callback(_):
+            # mark worker status idle when worker is connected
+            if worker_id in self._worker_task:
+                self._worker_task[worker_id] = None
 
+        task_result.add_done_callback(done_callback)
 
-class TaskExchange(object):
-    def __init__(self) -> None:
-        self._worker_task_queues: Dict[int, Queue[Tuple[TaskInput, TaskResult]]] = {}
-        
-        self._worker_routing_key: Dict[int, str] = {}
-        self._worker_route_map: DefaultDict[str, Deque[int]] = defaultdict(lambda: deque())
-        self._used_worker_queue: Deque[int] = deque()
+        self._worker_task[worker_id] = task_result
+        return task_input, task_result
+    
+    def start_prefetch_task(self, worker_id: int):
+        assert worker_id in self._worker_task, f"Worker {worker_id} is disconnected"
+        assert self._worker_task[worker_id] is None, f"Worker {worker_id} is busy now"
 
-    def register(self, worker_id: int):
-        self._worker_task_queues[worker_id] = Queue()
-        
-        self._worker_routing_key[worker_id] = DEFAULT_ROUTING_KEY
-        self._worker_route_map[DEFAULT_ROUTING_KEY].appendleft(worker_id)
-        self._used_worker_queue.appendleft(worker_id)
+        if self._prefetch_worker_id is None and not self._prefetch_task_result.done():
+            self._worker_task[worker_id] = self._prefetch_task_result
+            self._prefetch_worker_id = worker_id
 
-    def unregister(self, worker_id: int):
-        task_queue = self._worker_task_queues[worker_id]
-        while not task_queue.empty():
-            _, result = task_queue.get_nowait()
-            result.cancel()
+            def done_callback(_):
+                # mark worker status idle when worker is connected
+                if worker_id in self._worker_task:
+                    self._worker_task[worker_id] = None
+                self._prefetch_worker_id = None
 
-        routing_key = self._worker_routing_key.pop(worker_id)
-        self._worker_route_map[routing_key].remove(worker_id)
-        self._used_worker_queue.remove(worker_id)
+            self._prefetch_task_result.add_done_callback(done_callback)
 
-    async def send_task(self, task_input: TaskInput, routing_key: str = DEFAULT_ROUTING_KEY):
-        # should called by task runner
-        # try sending task to worker without routing key first
-        # if all workers has a routing key, try sending task to a worker with the same routing key
-        # if no worker has the same routing key, then send task to the least recent used worker
+    async def push_prefetch_task_progress(self, worker_id: int, progress: str):
+        if self._prefetch_worker_id == worker_id and not self._prefetch_task_result.done():
+            await self._prefetch_task_result.push_result(progress)
 
-        assert len(self._worker_task_queues) > 0, "No workers in the task exchange"
+    def prefetch_task_error(self, worker_id: int, err_msg: str):
+        if self._prefetch_worker_id == worker_id and not self._prefetch_task_result.done():
+            self._prefetch_task_result.set_error(PrefetchError(err_msg))
 
-        result = TaskResult()
+    def finish_prefetch_task(self, worker_id: int):
+        if self._prefetch_worker_id == worker_id and not self._prefetch_task_result.done():
+            self._prefetch_task_result.close()
 
-        if len(self._worker_route_map[DEFAULT_ROUTING_KEY]) > 0:
-            worker_id = self._worker_route_map[DEFAULT_ROUTING_KEY].popleft()
-            self._used_worker_queue.remove(worker_id)
-        elif routing_key != DEFAULT_ROUTING_KEY and len(self._worker_route_map[routing_key]) > 0:
-            worker_id = self._worker_route_map[routing_key].popleft()
-            self._used_worker_queue.remove(worker_id)
-        else:
-            worker_id = self._used_worker_queue.popleft()
-            worker_routing_key = self._worker_routing_key[worker_id]
-            # the global most recent used worker should be the most recent used worker among the same routing key
-            _worker_id = self._worker_route_map[worker_routing_key].popleft()
-            assert worker_id == _worker_id
-
-        task_queue = self._worker_task_queues[worker_id]
-        await task_queue.put((task_input, result))
-        self._worker_route_map[routing_key].append(worker_id)
-        self._used_worker_queue.append(worker_id)
-
-    async def get_task(self, worker_id: int) -> Tuple[TaskInput, TaskResult]:
-        # should called by worker
-        assert worker_id in self._worker_task_queues, f"worker id {worker_id} not found in task exchange"
-        queue = self._worker_task_queues[worker_id]
-        return await queue.get()
+    def reset_prefetch_task(self):
+        self._prefetch_task_result = TaskStreamResult()
 
 
+    async def get_prefetch_task_progress(self) -> AsyncGenerator[str, None]:
+        if not self._prefetch_task_result.done():
+            async for progress in self._prefetch_task_result.get():
+                yield progress
+
+    def start_init_inference_task(self, worker_id: int):
+        assert worker_id in self._worker_task, f"Worker {worker_id} is disconnected"
+        assert self._worker_task[worker_id] is None, f"Worker {worker_id} is busy now"
+
+        if not self._init_inference_task_result.done():
+            self._worker_task[worker_id] = self._init_inference_task_result
+            self._init_inference_worker_id = worker_id
+
+            def done_callback(_):
+                # mark worker status idle when worker is connected
+                if worker_id in self._worker_task:
+                    self._worker_task[worker_id] = None
+                self._init_inference_worker_id = None
+
+            self._init_inference_task_result.add_done_callback(done_callback)
+
+    def init_inference_task_success(self, worker_id: int):
+        if self._init_inference_worker_id == worker_id and not self._init_inference_task_result.done():
+            self._init_inference_task_result.set_result(None)
+
+    def init_inference_task_error(self, worker_id: int, err_msg: str):
+        if self._init_inference_worker_id == worker_id and not self._init_inference_task_result.done():
+            self._init_inference_task_result.set_error(TaskError(err_msg))
+
+    async def get_init_inference_task_result(self):
+        if not self._init_inference_task_result.done():
+            await self._init_inference_task_result.get()
+
+    def reset_init_inference_task(self):
+        self._init_inference_task_result = TaskResult()
+
+
+_default_worker_manager: Optional[WorkerManager] = None
+
+
+def get_worker_manager():
+    assert _default_worker_manager is not None
+
+    return _default_worker_manager
+
+
+def set_worker_manager(worker_manager: WorkerManager):
+    global _default_worker_manager
+
+    _default_worker_manager = worker_manager
