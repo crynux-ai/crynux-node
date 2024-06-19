@@ -22,7 +22,7 @@ class WorkerPhase(str, Enum):
 
 
 class WorkerPhaseMessage(BaseModel):
-    status: WorkerPhase
+    phase: WorkerPhase
 
 
 class PayloadType(str, Enum):
@@ -183,7 +183,7 @@ async def worker(websocket: WebSocket, worker_manager: WorkerManagerDep):
     try:
         while True:
             raw_status_msg = await websocket.receive_json()
-            phase = WorkerPhaseMessage.model_validate(raw_status_msg).status
+            phase = WorkerPhaseMessage.model_validate(raw_status_msg).phase
             if phase == WorkerPhase.Prefetch:
                 await process_prefetch(worker_id, websocket, worker_manager)
             elif phase == WorkerPhase.InitInference:
