@@ -249,7 +249,11 @@ class NodeManager(object):
                     worker_manager.reset_prefetch_task()
                     raise
                 except PrefetchError as e:
+                    worker_manager.reset_prefetch_task()
                     raise ValueError("Failed to download models due to network issue") from e
+                except Exception as e:
+                    worker_manager.reset_prefetch_task()
+                    raise ValueError("Failed to download models") from e
         _logger.info("Finish downloading models")
 
         await self.state_cache.set_node_state(
