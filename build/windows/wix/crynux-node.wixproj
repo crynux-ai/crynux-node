@@ -1,0 +1,32 @@
+﻿<Project Sdk="WixToolset.Sdk/5.0.0">
+    <PropertyGroup>
+        <OutputPath>..\..\crynux_node\dist\installer</OutputPath>
+        <IntermediateOutputPath>..\..\crynux_node\dist\wix</IntermediateOutputPath>
+        <SourceDir>..\..\crynux_node\dist\crynux-node-helium-v$(RELEASE_NUMBER)-windows-x64</SourceDir>
+        <DefineConstants>ReleaseNumber=$(RELEASE_NUMBER)</DefineConstants>
+        <OutputName>crynux-node-helium-v$(RELEASE_NUMBER)-windows-x64</OutputName>
+    </PropertyGroup>
+
+	<ItemGroup>
+		<HarvestDirectory Include="$(SourceDir)">
+			<ComponentGroupName>CrynuxAppMainComponent</ComponentGroupName>
+			<DirectoryRefId>INSTALLFOLDER</DirectoryRefId>
+			<SuppressRootDirectory>true</SuppressRootDirectory>
+			<SuppressCom>true</SuppressCom>
+			<SuppressRegistry>true</SuppressRegistry>
+			<GenerateGuidsNow>true</GenerateGuidsNow>
+		</HarvestDirectory>
+		<BindPath Include="$(SourceDir)" />
+	</ItemGroup>
+
+	<ItemGroup>
+        <WixExtension Include="WixUIExtension">
+            <HintPath>$(WixToolPath)WixUIExtension.dll</HintPath>
+            <Name>WixUIExtension</Name>
+        </WixExtension>
+    </ItemGroup>
+
+	<ItemGroup>
+		<PackageReference Include="WixToolset.Heat" Version="5.0.0" />
+	</ItemGroup>
+</Project>

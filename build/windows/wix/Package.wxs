@@ -1,0 +1,26 @@
+﻿<Wix xmlns="http://wixtoolset.org/schemas/v5/wxs">
+    <Package
+        Name="Crynux Node"
+        Manufacturer="Crynux"
+        Version="$(var.ReleaseNumber)"
+        UpgradeCode="12b29d8f-294e-4701-916f-e78b383e26d0">
+
+        <MediaTemplate EmbedCab="no" MaximumUncompressedMediaSize="1024" />
+        <StandardDirectory Id="TARGETDIR">
+            <StandardDirectory Id="ProgramFilesFolder">
+                <Directory Id="INSTALLFOLDER" Name="Crynux Node" />
+                <Component Id="EnableLongPathRegistryEntries" Guid="*">
+                    <RegistryKey Root="HKLM"
+                         Key="SYSTEM\CurrentControlSet\Control\FileSystem">
+                        <RegistryValue Type="integer" Name="LongPathsEnabled" Value="1" KeyPath="yes"/>
+                    </RegistryKey>
+                </Component>
+            </StandardDirectory>
+        </StandardDirectory>
+
+        <Feature Id="Main">
+            <ComponentGroupRef Id="CrynuxAppMainComponent" />
+            <ComponentRef Id="EnableLongPathRegistryEntries" />
+        </Feature>
+    </Package>
+</Wix>
