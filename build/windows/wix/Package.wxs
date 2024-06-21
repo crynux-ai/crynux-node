@@ -1,21 +1,37 @@
-﻿<Wix xmlns="http://wixtoolset.org/schemas/v5/wxs">
+﻿<Wix
+    xmlns="http://wixtoolset.org/schemas/v4/wxs"
+    xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui"
+>
     <Package
         Name="Crynux Node"
         Manufacturer="Crynux"
         Version="$(var.ReleaseNumber)"
         UpgradeCode="12b29d8f-294e-4701-916f-e78b383e26d0">
 
+        <Icon Id="app.ico" SourceFile="..\..\..\res\icon.ico"/>
+        <Property Id="ARPPRODUCTICON" Value="app.ico" />
+
         <MediaTemplate EmbedCab="no" MaximumUncompressedMediaSize="1024" />
+
+        <ui:WixUI Id="WixUI_InstallDir_Crynux" InstallDirectory="BININSTALLFOLDER" />
+
+        <!-- Dialog Banner 493x58 -->
+        <WixVariable Id="WixUIBannerBmp" Value="installer-banner.png" />
+
+        <!-- First page 493x312 -->
+        <WixVariable Id="WixUIDialogBmp" Value="installer-welcome.png" />
+
+        <StandardDirectory Id="ProgramFiles6432Folder">
+            <Directory Id="BININSTALLFOLDER" Name="Crynux Node" />
+        </StandardDirectory>
+
         <StandardDirectory Id="TARGETDIR">
-            <StandardDirectory Id="ProgramFilesFolder">
-                <Directory Id="INSTALLFOLDER" Name="Crynux Node" />
-                <Component Id="EnableLongPathRegistryEntries" Guid="*">
-                    <RegistryKey Root="HKLM"
-                         Key="SYSTEM\CurrentControlSet\Control\FileSystem">
-                        <RegistryValue Type="integer" Name="LongPathsEnabled" Value="1" KeyPath="yes"/>
-                    </RegistryKey>
-                </Component>
-            </StandardDirectory>
+            <Component Id="EnableLongPathRegistryEntries" Guid="*">
+                <RegistryKey Root="HKLM"
+                     Key="SYSTEM\CurrentControlSet\Control\FileSystem">
+                    <RegistryValue Type="integer" Name="LongPathsEnabled" Value="1" KeyPath="yes"/>
+                </RegistryKey>
+            </Component>
         </StandardDirectory>
 
         <Feature Id="Main">

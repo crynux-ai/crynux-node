@@ -10,23 +10,15 @@
 	<ItemGroup>
 		<HarvestDirectory Include="$(SourceDir)">
 			<ComponentGroupName>CrynuxAppMainComponent</ComponentGroupName>
-			<DirectoryRefId>INSTALLFOLDER</DirectoryRefId>
+			<DirectoryRefId>BININSTALLFOLDER</DirectoryRefId>
 			<SuppressRootDirectory>true</SuppressRootDirectory>
-			<SuppressCom>true</SuppressCom>
-			<SuppressRegistry>true</SuppressRegistry>
 			<GenerateGuidsNow>true</GenerateGuidsNow>
 		</HarvestDirectory>
 		<BindPath Include="$(SourceDir)" />
 	</ItemGroup>
 
 	<ItemGroup>
-        <WixExtension Include="WixUIExtension">
-            <HintPath>$(WixToolPath)WixUIExtension.dll</HintPath>
-            <Name>WixUIExtension</Name>
-        </WixExtension>
-    </ItemGroup>
-
-	<ItemGroup>
 		<PackageReference Include="WixToolset.Heat" Version="5.0.0" />
+		<PackageReference Include="WixToolset.UI.wixext" Version="5.0.0" />
 	</ItemGroup>
 </Project>
