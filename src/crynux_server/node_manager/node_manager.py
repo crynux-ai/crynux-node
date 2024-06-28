@@ -4,7 +4,7 @@ import json
 import logging
 import os
 from datetime import datetime
-from typing import List, Optional, Type, cast
+from typing import List, Optional, Type
 
 from anyio import (TASK_STATUS_IGNORED, Event, create_task_group, fail_after,
                    get_cancelled_exc_class, move_on_after)
@@ -25,7 +25,7 @@ from crynux_server.task import (DbTaskStateCache, InferenceTaskRunner,
                                 set_task_state_cache, set_task_system)
 from crynux_server.watcher import (BlockNumberCache, DbBlockNumberCache,
                                    EventWatcher, set_watcher)
-from crynux_server.worker_manager import get_worker_manager, TaskCancelled, PrefetchError, TaskError
+from crynux_server.worker_manager import get_worker_manager, WorkerManager, TaskCancelled, PrefetchError, TaskError
 
 from .state_cache import (DbNodeStateCache, DbTxStateCache, ManagerStateCache,
                           StateCache, set_manager_state_cache)
@@ -135,6 +135,7 @@ class NodeManager(object):
         node_state_manager: Optional[NodeStateManager] = None,
         watcher: Optional[EventWatcher] = None,
         task_system: Optional[TaskSystem] = None,
+        worker_manager: Optional[WorkerManager] = None,
         retry: bool = True,
         retry_delay: float = 30,
     ) -> None:
@@ -163,6 +164,9 @@ class NodeManager(object):
         self._node_state_manager = node_state_manager
         self._watcher = watcher
         self._task_system = task_system
+        if worker_manager is None:
+            worker_manager = get_worker_manager()
+        self._worker_manager = worker_manager
 
         self._retry = retry
         self._retry_delay = retry_delay
@@ -230,8 +234,6 @@ class NodeManager(object):
     async def _init(self):
         _logger.info("Initialize node manager")
 
-        worker_manager = get_worker_manager()
-
         async for attemp in AsyncRetrying(
             stop=stop_after_attempt(3) if self._retry else stop_after_attempt(1),
             wait=wait_fixed(self._retry_delay),
@@ -240,19 +242,19 @@ class NodeManager(object):
         ):
             with attemp:
                 try:
-                    async for progress in worker_manager.get_prefetch_task_progress():
+                    async for progress in self._worker_manager.get_prefetch_task_progress():
                         await self.state_cache.set_node_state(
                             status=models.NodeStatus.Init,
                             init_message=progress
                         )
                 except TaskCancelled:
-                    worker_manager.reset_prefetch_task()
+                    self._worker_manager.reset_prefetch_task()
                     raise
                 except PrefetchError as e:
-                    worker_manager.reset_prefetch_task()
+                    self._worker_manager.reset_prefetch_task()
                     raise ValueError("Failed to download models due to network issue") from e
                 except Exception as e:
-                    worker_manager.reset_prefetch_task()
+                    self._worker_manager.reset_prefetch_task()
                     raise ValueError("Failed to download models") from e
         _logger.info("Finish downloading models")
 
@@ -262,7 +264,7 @@ class NodeManager(object):
         )
         try:
             with fail_after(300):
-                await worker_manager.get_init_inference_task_result()
+                await self._worker_manager.get_init_inference_task_result()
         except TimeoutError as e:
             msg = (
                 "The initial inference task exceeded the timeout limit(5 min). Maybe your device does not meet "
@@ -570,7 +572,8 @@ class NodeManager(object):
         assert self._tg is None, "Node manager is running."
 
         try:
-            await self._run(prefetch=prefetch)
+            with self._worker_manager.start():
+                await self._run(prefetch=prefetch)
         except get_cancelled_exc_class():
             raise
         except Exception as e:

@@ -72,7 +72,7 @@ class CrynuxRunner(object):
         await db.init(self.config.db)
         _logger.info("DB init completed.")
 
-        worker_manager = WorkerManager()
+        worker_manager = WorkerManager(self.config)
         set_worker_manager(worker_manager)
 
         _logger.info(f"Serving WebUI from: {os.path.abspath(self.config.web_dist)}")
@@ -100,7 +100,6 @@ class CrynuxRunner(object):
                 tg.start_soon(self._check_should_shutdown)
                 tg.start_soon(self._wait_for_shutdown)
 
-                tg.start_soon(self._node_manager.run)
                 if not self.config.headless:
                     await tg.start(
                         self._server.start,
@@ -110,6 +109,7 @@ class CrynuxRunner(object):
                     )
                 _logger.info("Crynux server started.")
                 task_status.started()
+                tg.start_soon(self._node_manager.run)
         finally:
             with move_on_after(2, shield=True):
                 await db.close()

@@ -51,7 +51,7 @@ class YamlConfigSettingsSource(PydanticBaseSettingsSource):
                     self._yaml_data = yaml.safe_load(f)
             else:
                 self._yaml_data = {}
-        return self._yaml_data
+        return self._yaml_data # type: ignore
 
     def get_field_value(
         self, field: FieldInfo, field_name: str
@@ -121,6 +121,9 @@ class TaskConfig(BaseModel):
     external_cache_dir: str
     script_dir: str
     inference_logs_dir: str
+
+    worker_version_file: str
+    worker_patch_url: str
 
     preloaded_models: Optional[PreloadedModelsConfig] = None
 

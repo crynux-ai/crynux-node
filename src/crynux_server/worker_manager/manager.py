@@ -1,12 +1,26 @@
+import logging
+import subprocess
+from contextlib import contextmanager
 from typing import AsyncGenerator, Dict, Optional, Union
+
+from anyio import sleep
+
+from crynux_server.config import Config, get_config
 
 from .exchange import TaskExchange
 from .task import TaskInput, TaskResult, TaskStreamResult
 from .error import TaskError, PrefetchError
+from .utils import get_exe_head
+
+_logger = logging.getLogger(__name__)
 
 
 class WorkerManager(object):
-    def __init__(self) -> None:
+    def __init__(self, config: Optional[Config] = None) -> None:
+        if config is None:
+            config = get_config()        
+        self.config = config
+
         self._exchange = TaskExchange()
 
         self._next_worker_id = 0
@@ -19,6 +33,26 @@ class WorkerManager(object):
 
         self._prefetch_worker_id: Optional[int] = None
         self._init_inference_worker_id: Optional[int] = None
+
+        self._worker_process: Optional[subprocess.Popen] = None
+
+    @contextmanager
+    def start(self):
+        if self.config.task_config is not None:
+            script_dir = self.config.task_config.script_dir
+            patch_url = self.config.task_config.worker_patch_url
+            version_file = self.config.task_config.worker_version_file
+        else:
+            script_dir = ""
+            patch_url = ""
+            version_file = "version.txt"
+        args = get_exe_head(script_dir)
+        envs = {
+            "CRYNUX_WORKER_PATCH_URL": patch_url,
+            "CRYNUX_WORKER_VERSION_FILE": version_file,
+        }
+        with subprocess.Popen(args=args, env=envs):
+            yield
 
     def connect(self) -> int:
         worker_id = self._next_worker_id
@@ -37,6 +71,7 @@ class WorkerManager(object):
         return await self._exchange.send_task(input)
 
     async def get_task(self, worker_id: int):
+        await sleep(0)
         assert worker_id in self._worker_task, f"Worker {worker_id} is disconnected"
         assert self._worker_task[worker_id] is None, f"Worker {worker_id} is busy now"
         task_input, task_result = await self._exchange.get_task()
@@ -50,7 +85,7 @@ class WorkerManager(object):
 
         self._worker_task[worker_id] = task_result
         return task_input, task_result
-    
+
     def start_prefetch_task(self, worker_id: int):
         assert worker_id in self._worker_task, f"Worker {worker_id} is disconnected"
         assert self._worker_task[worker_id] is None, f"Worker {worker_id} is busy now"
@@ -64,6 +99,7 @@ class WorkerManager(object):
                 if worker_id in self._worker_task:
                     self._worker_task[worker_id] = None
                 self._prefetch_worker_id = None
+                _logger.info("finish prefetch task")
 
             self._prefetch_task_result.add_done_callback(done_callback)
 
@@ -101,6 +137,7 @@ class WorkerManager(object):
                 if worker_id in self._worker_task:
                     self._worker_task[worker_id] = None
                 self._init_inference_worker_id = None
+                _logger.info("finish init inference task")
 
             self._init_inference_task_result.add_done_callback(done_callback)
 

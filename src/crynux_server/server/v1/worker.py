@@ -1,12 +1,17 @@
 import logging
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
-from pydantic import BaseModel
 from enum import Enum
-from typing import Optional
-from PIL import Image
 from io import BytesIO
-from crynux_server.worker_manager import WorkerManager, TaskResult, TaskInput, TaskInvalid, TaskExecutionError, TaskError, is_task_invalid
+from typing import Optional
+
+from anyio import fail_after
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from PIL import Image
+from pydantic import BaseModel
+
 from crynux_server.models import TaskType
+from crynux_server.worker_manager import (TaskError, TaskExecutionError,
+                                          TaskInput, TaskInvalid, TaskResult,
+                                          WorkerManager, is_task_invalid)
 
 from ..depends import WorkerManagerDep
 
@@ -123,6 +128,8 @@ async def _process_one_inference_task(
 ):
     try:
         await websocket.send_json(task_input.model_dump())
+        resp = await websocket.receive_text()
+        assert resp == "task received"
         results = []
         while True:
             raw_msg = await websocket.receive_json()
@@ -169,10 +176,15 @@ async def process_inference(
     worker_id: int, websocket: WebSocket, worker_manager: WorkerManager
 ):
     while True:
-        task_input, task_result = await worker_manager.get_task(worker_id)
-        await _process_one_inference_task(
-            worker_id, websocket, task_input, task_result
-        )
+        try:
+            with fail_after(1):
+                task_input, task_result = await worker_manager.get_task(worker_id)
+        except TimeoutError:
+            await websocket.send_text("")
+            resp = await websocket.receive_text()
+            assert resp == "task received"
+            continue
+        await _process_one_inference_task(worker_id, websocket, task_input, task_result)
 
 
 @router.websocket("/")
