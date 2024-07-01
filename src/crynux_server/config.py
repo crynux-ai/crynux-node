@@ -116,11 +116,9 @@ class CeleryConfig(BaseModel):
 
 
 class TaskConfig(BaseModel):
-    output_dir: str
     hf_cache_dir: str
     external_cache_dir: str
     script_dir: str
-    inference_logs_dir: str
 
     worker_version_file: str
     worker_patch_url: str
@@ -131,6 +129,7 @@ class TaskConfig(BaseModel):
 
 class ModelConfig(BaseModel):
     id: str
+    variant: str | None = "fp16"
 
 
 class PreloadedModelsConfig(BaseModel):
