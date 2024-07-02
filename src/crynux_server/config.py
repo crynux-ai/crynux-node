@@ -158,7 +158,6 @@ class Config(BaseSettings):
 
     celery: Optional[CeleryConfig] = None
 
-    distributed: bool = False
     task_config: Optional[TaskConfig] = None
 
     server_host: str = "0.0.0.0"

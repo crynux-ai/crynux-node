@@ -26,7 +26,7 @@ async def _stop(
 ):
     config = get_config()
 
-    log.init(config.log.dir, config.log.level, config.log.filename, config.distributed)
+    log.init(config.log.dir, config.log.level, config.log.filename)
 
     if len(config.db) > 0:
         await db.init(config.db)

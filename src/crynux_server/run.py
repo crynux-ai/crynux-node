@@ -32,7 +32,6 @@ class CrynuxRunner(object):
             self.config.log.dir,
             self.config.log.level,
             self.config.log.filename,
-            self.config.distributed,
         )
         _logger.debug("Logger init completed.")
 
