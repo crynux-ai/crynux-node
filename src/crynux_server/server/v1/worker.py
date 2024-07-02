@@ -190,7 +190,9 @@ async def process_inference(
 @router.websocket("/")
 async def worker(websocket: WebSocket, worker_manager: WorkerManagerDep):
     await websocket.accept()
-    worker_id = worker_manager.connect()
+    version_msg = await websocket.receive_json()
+    version = version_msg["version"]
+    worker_id = worker_manager.connect(version)
     await websocket.send_json({"worker_id": worker_id})
     try:
         while True:
