@@ -163,7 +163,6 @@ class Config(BaseSettings):
     server_host: str = "0.0.0.0"
     server_port: int = 7412
     web_dist: str = ""
-    headless: bool = False
 
     resource_dir: str = ""
 

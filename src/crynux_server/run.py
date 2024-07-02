@@ -99,13 +99,12 @@ class CrynuxRunner(object):
                 tg.start_soon(self._check_should_shutdown)
                 tg.start_soon(self._wait_for_shutdown)
 
-                if not self.config.headless:
-                    await tg.start(
-                        self._server.start,
-                        self.config.server_host,
-                        self.config.server_port,
-                        self.config.log.level == "DEBUG",
-                    )
+                await tg.start(
+                    self._server.start,
+                    self.config.server_host,
+                    self.config.server_port,
+                    self.config.log.level == "DEBUG",
+                )
                 _logger.info("Crynux server started.")
                 task_status.started()
                 tg.start_soon(self._node_manager.run)
@@ -121,7 +120,7 @@ class CrynuxRunner(object):
         if self._tg is None:
             return
 
-        if self._server is not None and not self.config.headless:
+        if self._server is not None:
             self._server.stop()
         if self._node_manager is not None:
             with move_on_after(10, shield=True):

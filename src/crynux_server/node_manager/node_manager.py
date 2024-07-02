@@ -196,13 +196,7 @@ class NodeManager(object):
 
         if self._contracts is None or self._relay is None:
             if self._privkey is None:
-                if self.config.headless:
-                    assert (
-                        len(self.config.ethereum.privkey) > 0
-                    ), "In headless mode, you must provide private key in config file before starting node."
-                    self._privkey = self.config.ethereum.privkey
-                else:
-                    self._privkey = await wait_privkey()
+                self._privkey = await wait_privkey()
 
             if self._contracts is None:
                 self._contracts = await _make_contracts(
@@ -562,8 +556,7 @@ class NodeManager(object):
                     if tx_status == models.TxStatus.Pending:
                         await self.state_cache.set_tx_state(models.TxStatus.Success)
 
-                if not self.config.headless:
-                    tg.start_soon(self._sync_state)
+                tg.start_soon(self._sync_state)
 
         finally:
             self._tg = None
@@ -583,8 +576,6 @@ class NodeManager(object):
             with fail_after(5, shield=True):
                 await self.state_cache.set_node_state(models.NodeStatus.Error, msg)
             await self.finish()
-            if self.config.headless:
-                raise
 
     async def finish(self):
         if self._tg is not None and not self._tg.cancel_scope.cancel_called:
@@ -606,8 +597,7 @@ class NodeManager(object):
         if self._node_state_manager is not None:
             with move_on_after(10, shield=True):
                 await self._node_state_manager.try_stop()
-            if not self.config.headless:
-                self._node_state_manager.stop_sync()
+            self._node_state_manager.stop_sync()
             self._node_state_manager = None
         if self._contracts is not None:
             await self._contracts.close()
