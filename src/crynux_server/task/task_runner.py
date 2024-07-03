@@ -431,6 +431,8 @@ class InferenceTaskRunner(TaskRunner):
         )
         _logger.info("Start inference task")
         task_dir = os.path.join(self.config.task_dir, str(task.task_id))
+        if not os.path.exists(task_dir):
+            os.makedirs(task_dir, exist_ok=True)
         try:
             next_event = await run_task(
                 task_name=self.task_name,
