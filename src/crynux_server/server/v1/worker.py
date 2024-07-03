@@ -180,10 +180,13 @@ async def process_inference(
             with fail_after(1):
                 task_input, task_result = await worker_manager.get_task(worker_id)
         except TimeoutError:
-            await websocket.send_text("")
-            resp = await websocket.receive_text()
-            assert resp == "task received"
-            continue
+            try:
+                await websocket.send_text("")
+                resp = await websocket.receive_text()
+                assert resp == "task received"
+                continue
+            except WebSocketDisconnect:
+                pass
         await _process_one_inference_task(worker_id, websocket, task_input, task_result)
 
 
