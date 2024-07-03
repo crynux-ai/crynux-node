@@ -186,7 +186,7 @@ async def process_inference(
                 assert resp == "task received"
                 continue
             except WebSocketDisconnect:
-                pass
+                return
         await _process_one_inference_task(worker_id, websocket, task_input, task_result)
 
 
