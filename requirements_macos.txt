@@ -7,7 +7,6 @@ PyQt6-sip==13.6.0
 PyQt6-WebEngine==6.6.0
 PyQt6-WebEngine-Qt6==6.6.3
 qasync==0.27.1
-celery[redis]==5.3.1
 pyyaml==5.3.1
 web3==6.17.2
 anyio==3.7.1
@@ -23,4 +22,3 @@ python-multipart==0.0.6
 tenacity==8.2.3
 psutil==5.9.8
 eth-rlp==1.0.1
-pebble==5.0.7
