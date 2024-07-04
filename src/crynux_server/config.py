@@ -6,7 +6,7 @@ from typing import Any, Dict, List, Literal, Tuple, Type, TypedDict, Optional
 
 import yaml
 from anyio import Condition, to_thread
-from pydantic import BaseModel
+from pydantic import BaseModel, computed_field, Field
 from pydantic.fields import FieldInfo
 from pydantic_settings import (BaseSettings, PydanticBaseSettingsSource,
                                SettingsConfigDict)
@@ -81,12 +81,44 @@ class YamlConfigSettingsSource(PydanticBaseSettingsSource):
 
 
 LogLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR", "FATAL", "CRITICAL"]
+DBDriver = Literal["sqlite"]
+
+
+_base_dir: str = ""
+
+def set_base_dir(dirname: str):
+    global _base_dir
+
+    _base_dir = dirname
 
 
 class LogConfig(BaseModel):
-    dir: str
+    m_dir: str = Field(alias="dir")
     level: LogLevel
     filename: str = "crynux-server.log"
+
+    @computed_field
+    @property
+    def dir(self) -> str:
+        return os.path.abspath(os.path.join(_base_dir, self.m_dir))
+
+
+class DBConfig(BaseModel):
+    driver: DBDriver
+    m_filename: str = Field(alias="filename")
+
+    @computed_field
+    @property
+    def filename(self) -> str:
+        return os.path.abspath(os.path.join(_base_dir, self.m_filename))
+
+    @computed_field
+    @property
+    def connection(self) -> str:
+        if self.driver == "sqlite":
+            return f"sqlite+aiosqlite:///{self.filename}"
+        else:
+            raise ValueError(f"unsupported db driver {self.driver}")
 
 
 class Contract(BaseModel):
@@ -110,22 +142,38 @@ class Ethereum(BaseModel):
     contract: Contract
 
 
-class CeleryConfig(BaseModel):
-    broker: str
-    backend: str
-
-
 class TaskConfig(BaseModel):
-    hf_cache_dir: str
-    external_cache_dir: str
-    script_dir: str
+    m_hf_cache_dir: str = Field(alias="hf_cache_dir")
+    m_external_cache_dir: str = Field(alias="external_cache_dir")
+    m_script_dir: str = Field(alias="script_dir")
+    m_output_dir: str = Field(alias="output_dir")
 
-    worker_version_file: str
     worker_patch_url: str
 
     preloaded_models: Optional[PreloadedModelsConfig] = None
 
     proxy: Optional[ProxyConfig] = None
+
+    @computed_field
+    @property
+    def hf_cache_dir(self) -> str:
+        return os.path.abspath(os.path.join(_base_dir, self.m_hf_cache_dir))
+
+    @computed_field
+    @property
+    def external_cache_dir(self) -> str:
+        return os.path.abspath(os.path.join(_base_dir, self.m_external_cache_dir))
+
+    @computed_field
+    @property
+    def script_dir(self) -> str:
+        return os.path.abspath(os.path.join(_base_dir, self.m_script_dir))
+    
+    @computed_field
+    @property
+    def output_dir(self) -> str:
+        return os.path.abspath(os.path.join(_base_dir, self.m_output_dir))
+
 
 class ModelConfig(BaseModel):
     id: str
@@ -151,14 +199,11 @@ class Config(BaseSettings):
 
     ethereum: Ethereum
 
-    db: str
-    task_dir: str
+    db: DBConfig
     relay_url: str
     faucet_url: str
 
-    celery: Optional[CeleryConfig] = None
-
-    task_config: Optional[TaskConfig] = None
+    task_config: TaskConfig
 
     server_host: str = "0.0.0.0"
     server_port: int = 7412

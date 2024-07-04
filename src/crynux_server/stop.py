@@ -28,8 +28,7 @@ async def _stop(
 
     log.init(config.log.dir, config.log.level, config.log.filename)
 
-    if len(config.db) > 0:
-        await db.init(config.db)
+    await db.init(config.db)
 
     if state_manager is None:
         if contracts is None:

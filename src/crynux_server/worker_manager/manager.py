@@ -1,3 +1,4 @@
+import os
 import json
 import logging
 import subprocess
@@ -45,23 +46,21 @@ class WorkerManager(object):
         if self.config.task_config is not None:
             script_dir = self.config.task_config.script_dir
             patch_url = self.config.task_config.worker_patch_url
-            version_file = self.config.task_config.worker_version_file
             hf_cache_dir = self.config.task_config.hf_cache_dir
             external_cache_dir = self.config.task_config.external_cache_dir
         else:
             script_dir = ""
             patch_url = ""
-            version_file = "version.txt"
             hf_cache_dir = ""
             external_cache_dir = ""
 
         args = get_exe_head(script_dir)
-        envs = {
+        envs = os.environ.copy()
+        envs.update({
             "CRYNUX_WORKER_PATCH_URL": patch_url,
-            "CRYNUX_WORKER_VERSION_FILE": version_file,
             "cw_data_dir__models__huggingface": hf_cache_dir,
             "cw_data_dir__models__external": external_cache_dir,
-        }
+        })
         if (
             self.config.task_config is not None
             and self.config.task_config.preloaded_models is not None
