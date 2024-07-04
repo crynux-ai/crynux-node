@@ -4,3 +4,6 @@
 [submodule "gpt-task"]
 	path = gpt-task
 	url = https://github.com/crynux-ai/gpt-task.git
+[submodule "crynux-worker"]
+	path = crynux-worker
+	url = https://github.com/crynux-ai/crynux-worker.git
