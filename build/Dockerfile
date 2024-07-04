@@ -46,6 +46,7 @@ ENV PATH="/app/venv/bin:${PATH}"
 
 COPY stable-diffusion-task stable-diffusion-task
 COPY gpt-task gpt-task
+COPY crynux-worker crynux-worker
 
 WORKDIR /app/stable-diffusion-task
 RUN pip install -r requirements_cuda.txt
@@ -55,11 +56,15 @@ WORKDIR /app/gpt-task
 RUN pip install -r requirements_cuda.txt
 RUN pip install .
 
+WORKDIR /app/crynux-worker
+RUN pip install -r requirements.txt
+RUN pip install .
+
 FROM base as final
 
 COPY --from=builder1 /app/venv /app/venv
 COPY --from=builder2 /app/venv /app/worker/venv
-COPY src/crynux_worker_process.py /app/worker/crynux_worker_process.py
+COPY crynux-worker/crynux_worker_process.py /app/worker/crynux_worker_process.py
 
 ENV PATH="/app/venv/bin:${PATH}"
 

@@ -18,6 +18,7 @@ a = Analysis(
         'torch': 'py',
         'sd_task': 'py',
         'gpt_task': 'py',
+        'crynux_worker': 'py',
     },
     excludes=[],
     noarchive=False,
