@@ -26,6 +26,7 @@ dependencies = [
     "tenacity~=8.2.3",
     "psutil~=5.9.8",
     "eth-rlp==1.0.1",
+    "Pillow",
 ]
 version = "2.1.0"
 
