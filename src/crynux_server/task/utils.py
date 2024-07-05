@@ -1,14 +1,24 @@
+import hashlib
 import json
 import os
 import secrets
 from typing import List, Tuple
 
 from PIL.Image import Image
-from crynux_server.models import TaskType, TaskResultReady
-from crynux_server.worker_manager import get_worker_manager, TaskInput
-from crynux_worker.task.utils import get_gpt_resp_hash, get_image_hash
-
 from web3 import Web3
+
+import imhash
+from crynux_server.models import TaskResultReady, TaskType
+from crynux_server.worker_manager import TaskInput, get_worker_manager
+
+
+def get_image_hash(filename: str) -> str:
+    return imhash.getPHash(filename)  # type: ignore
+
+
+def get_gpt_resp_hash(filename: str) -> str:
+    with open(filename, mode="rb") as f:
+        return "0x" + hashlib.sha256(f.read()).hexdigest()
 
 
 def make_result_commitments(result_hashes: List[str]) -> Tuple[bytes, bytes, bytes]:
@@ -28,10 +38,7 @@ async def run_task(
 ):
     worker_manager = get_worker_manager()
     task_input = TaskInput(
-        task_id=task_id,
-        task_name=task_name,
-        task_type=task_type,
-        task_args=task_args
+        task_id=task_id, task_name=task_name, task_type=task_type, task_args=task_args
     )
 
     task_result = await worker_manager.send_task(task_input)
@@ -53,7 +60,7 @@ async def run_task(
                 json.dump(result, f)
             files.append(filename)
             hashes.append(get_gpt_resp_hash(filename))
-    
+
     return TaskResultReady(
         task_id=task_id,
         hashes=hashes,
