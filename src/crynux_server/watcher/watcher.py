@@ -1,9 +1,10 @@
 import logging
-from typing import Any, Awaitable, Callable, Dict, Optional
+from typing import Any, Awaitable, Callable, Dict, Optional, List
 
 from anyio import CancelScope, TASK_STATUS_IGNORED, create_task_group, fail_after, sleep
 from anyio.abc import TaskGroup, TaskStatus
-from web3.types import EventData
+from web3.types import EventData, TxReceipt
+from web3.logs import DISCARD
 
 from crynux_server.contracts import Contracts, ContractWrapper
 
@@ -25,6 +26,17 @@ def wrap_callback(callback: EventCallback) -> EventCallback:
     return inner
 
 
+def _filter_event(event: EventData, filter_args: Optional[Dict[str, Any]] = None) -> bool:
+    if filter_args is None:
+        return True
+    for key, val in filter_args.items():
+        if key in event["args"]:
+            real_val = event["args"][key]
+            if real_val != val:
+                return False
+    return True
+
+
 class EventFilter(object):
     def __init__(
         self,
@@ -33,35 +45,31 @@ class EventFilter(object):
         event_name: str,
         callback: EventCallback,
         filter_args: Optional[Dict[str, Any]] = None,
-        from_block: Optional[int] = None,
-        to_block: Optional[int] = None,
     ):
         self.filter_id = filter_id
         self.contract = contract
         self.event_name = event_name
         self.callback = callback
         self.filter_args = filter_args
-        self.from_block = from_block
-        self.to_block = to_block
 
-    async def process_events(self, start: int, end: int, tg: TaskGroup):
-        if self.from_block is not None:
-            start = max(self.from_block, start)
-        if self.to_block is not None:
-            end = min(self.to_block, end)
-        
-        if start <= end:
-            events = await self.contract.get_events(event_name=self.event_name, filter_args=self.filter_args, from_block=start, to_block=end)
-            _logger.debug(f"Watcher {self.filter_id}: {len(events)} events from block {start} to block {end}")
-            for event in events:
-                _logger.debug(f"Watcher {self.filter_id}: watch event: {event}")
-                tg.start_soon(wrap_callback(self.callback), event)
+    async def process_events(self, block_receipts: List[TxReceipt], tg: TaskGroup):
+        if len(block_receipts) == 0:
+            return
+        blocknum = block_receipts[0]["blockNumber"]
+        filtered_events = []
+        for receipt in block_receipts:
+            events = await self.contract.event_process_receipt(self.event_name, receipt, errors=DISCARD)
+            filtered_events.extend([event for event in events if _filter_event(event, self.filter_args)])
+        _logger.debug(f"Watcher {self.filter_id}: {len(filtered_events)} events from block {blocknum}")
+
+        for event in filtered_events:
+            _logger.debug(f"Watcher {self.filter_id}: watch event: {event}")
+            tg.start_soon(wrap_callback(self.callback), event)
 
 
 class EventWatcher(object):
     def __init__(self, contracts: Contracts):
         self.contracts = contracts
-        self.page_size = 500
 
         self._event_filters: Dict[int, EventFilter] = {}
         self._next_filter_id: int = 0
@@ -92,8 +100,6 @@ class EventWatcher(object):
         event_name: str,
         callback: EventCallback,
         filter_args: Optional[Dict[str, Any]] = None,
-        from_block: Optional[int] = None,
-        to_block: Optional[int] = None,
     ) -> int:
         contract = self.contracts.get_contract(contract_name)
 
@@ -104,8 +110,6 @@ class EventWatcher(object):
             event_name=event_name,
             callback=callback,
             filter_args=filter_args,
-            from_block=from_block,
-            to_block=to_block,
         )
         self._event_filters[filter_id] = event_filter
         self._next_filter_id += 1
@@ -121,7 +125,7 @@ class EventWatcher(object):
         self,
         from_block: int = 0,
         to_block: int = 0,
-        interval: float = 1,
+        interval: float = 5,
         *,
         task_status: TaskStatus[None] = TASK_STATUS_IGNORED,
     ):
@@ -157,19 +161,19 @@ class EventWatcher(object):
                 while to_block <= 0 or from_block <= to_block:
                     latest_blocknum = await self.contracts.get_current_block_number()
                     if from_block <= latest_blocknum:
-                        end = min(latest_blocknum, from_block + self.page_size)
-                        if len(self._event_filters) > 0:
+                        for blocknum in range(from_block, latest_blocknum):
                             async with create_task_group() as tg:
-                                # fix event filters, avoid raise RuntimeError: dictionary changed size during iteration
-                                event_filters = list(self._event_filters.values())
-                                for event_filter in event_filters:
-                                    await event_filter.process_events(start=from_block, end=end, tg=tg)
-                        _logger.debug(f"Process events from block {from_block} to {end}")
+                                receipts = await self.contracts.get_block_tx_receipts(blocknum)
+                                if len(receipts) > 0:
+                                    event_filters = list(self._event_filters.values())
+                                    for event_filter in event_filters:
+                                        await event_filter.process_events(receipts, tg=tg)
+                            _logger.debug(f"Process events from block {blocknum}")
 
-                        with fail_after(delay=5, shield=True):
-                            if self._cache is not None:
-                                await self._cache.set(end)
-                        from_block = end + 1
+                            with fail_after(delay=5, shield=True):
+                                if self._cache is not None:
+                                    await self._cache.set(blocknum)
+                            from_block = blocknum + 1
                     else:
                         await sleep(interval)
         finally:

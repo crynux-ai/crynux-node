@@ -196,7 +196,6 @@ async def get_disk_info(
         base_model_dir: str,
         lora_model_dir: str,
         log_dir: str,
-        inference_log_dir: Optional[str] = None,
 ) -> DiskInfo:
     info = DiskInfo()
     path = Path(base_model_dir)
@@ -222,14 +221,5 @@ async def get_disk_info(
             if await f.is_file():
                 size += (await f.stat()).st_size
         info.logs += size // 1024
-
-    if inference_log_dir is not None:
-        path = Path(inference_log_dir)
-        if await path.exists():
-            size = 0
-            async for f in path.rglob("*"):
-                if await f.is_file():
-                    size += (await f.stat()).st_size
-            info.logs += size // 1024
 
     return info

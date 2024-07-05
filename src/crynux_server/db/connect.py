@@ -10,7 +10,7 @@ from sqlalchemy.pool import NullPool
 from sqlalchemy.ext.asyncio import (AsyncEngine, AsyncSession,
                                     async_sessionmaker, create_async_engine)
 
-from crynux_server.config import get_config
+from crynux_server.config import get_config, DBConfig
 
 from .models import Base
 
@@ -35,15 +35,20 @@ async def get_session() -> AsyncGenerator[AsyncSession, None]:
 session_scope = asynccontextmanager(get_session)
 
 
-async def init(db: str | None = None):
+async def init(db: DBConfig | None = None):
     if db is None:        
         db = get_config().db
 
     if hasattr(_local, "session") or hasattr(_local, "engine"):
         raise ValueError("db has been initialized")
 
+    if not os.path.exists(db.filename):
+        dirname = os.path.dirname(db.filename)
+        if len(dirname) > 0:
+            os.makedirs(dirname, exist_ok=True)
+
     engine = create_async_engine(
-        db,
+        db.connection,
         pool_pre_ping=True,
         connect_args={"check_same_thread": False, "timeout": 5},
         poolclass=NullPool
@@ -51,20 +56,8 @@ async def init(db: str | None = None):
     )
     session = async_sessionmaker(engine, autoflush=False, expire_on_commit=False)
 
-    paths = db.split("://", maxsplit=1)
-    if len(paths) == 2 and len(paths[1]) > 0:
-        path = paths[1].split(r"/", maxsplit=1)[1]
-
-        if not os.path.exists(path):
-            dirname = os.path.dirname(path)
-            if len(dirname) > 0:
-                os.makedirs(dirname, exist_ok=True)
-
-            async with engine.begin() as conn:
-                await conn.run_sync(Base.metadata.create_all)
-    else:
-        async with engine.begin() as conn:
-            await conn.run_sync(Base.metadata.create_all)
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
 
     _local.engine = engine
     _local.session = session

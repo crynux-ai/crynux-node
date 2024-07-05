@@ -13,6 +13,7 @@ from crynux_server.node_manager import (
     get_node_state_manager,
 )
 from crynux_server.task import TaskStateCache, get_task_state_cache
+from crynux_server.worker_manager import WorkerManager, get_worker_manager
 
 __all__ = [
     "ConfigDep",
@@ -20,6 +21,7 @@ __all__ = [
     "TaskStateCacheDep",
     "ContractsDep",
     "EventQueueDep",
+    "WorkerManagerDep",
 ]
 
 
@@ -67,9 +69,13 @@ async def _get_contracts():
         raise
 
 
+async def _get_worker_manager():
+    return get_worker_manager()
+
 ConfigDep = Annotated[Config, Depends(_get_config)]
 ManagerStateCacheDep = Annotated[ManagerStateCache, Depends(_get_manager_state_cache)]
 NodeStateManagerDep = Annotated[Optional[NodeStateManager], Depends(_get_node_state_manager)]
 EventQueueDep = Annotated[Optional[EventQueue], Depends(_get_event_queue)]
 TaskStateCacheDep = Annotated[Optional[TaskStateCache], Depends(_get_task_state_cache)]
 ContractsDep = Annotated[Optional[Contracts], Depends(_get_contracts)]
+WorkerManagerDep = Annotated[WorkerManager, Depends(_get_worker_manager)]

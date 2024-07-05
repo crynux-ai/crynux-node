@@ -1,3 +1,4 @@
+import logging
 from functools import partial
 from typing import Optional
 
@@ -11,6 +12,7 @@ from hypercorn.config import Config
 from .middleware import add_middleware
 from .v1 import router as v1_router
 
+_logger = logging.getLogger(__name__)
 
 class Server(object):
     def __init__(self, web_dist: str = "") -> None:
@@ -46,6 +48,7 @@ class Server(object):
                 task_status.started()
         finally:
             self._shutdown_event = None
+            _logger.info("server app stopped")
 
     def stop(self) -> None:
         assert self._shutdown_event is not None, "Server has not been started."

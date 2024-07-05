@@ -18,12 +18,11 @@ a = Analysis(
         ('res', 'res'),
         ('webui', 'webui'),
     ] + collect_data_files('crynux_server.contracts.abi'),
-    hiddenimports=['aiosqlite', "crynux_server.contracts.abi"],
+    hiddenimports=['aiosqlite', "crynux_server.contracts.abi", "pkg_resources.extern"],
     collect_submodules=["crynux_server.contracts.abi"],
     collect_data=["crynux_server.contracts.abi"],
     module_collection_mode={
         'crynux_server': 'py',
-        'crynux_worker': 'py',
     },
     hookspath=[],
     hooksconfig={},
@@ -67,6 +66,6 @@ app = BUNDLE(
     icon='res/icon.icns',
     bundle_identifier='ai.crynux.node',
     info_plist={
-        'CFBundleShortVersionString': '2.0.7',
+        'CFBundleShortVersionString': '2.1.0',
     },
 )

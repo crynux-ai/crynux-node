@@ -1,3 +1,8 @@
+if __name__ == "__main__":
+    import multiprocessing
+
+    multiprocessing.freeze_support()
+
 import math
 import signal
 import os.path
@@ -16,6 +21,7 @@ from anyio.abc import TaskStatus, TaskGroup
 from crynux_server import db, log, utils
 from crynux_server.config import get_config
 from crynux_server.node_manager import NodeManager, set_node_manager
+from crynux_server.worker_manager import WorkerManager, set_worker_manager
 from crynux_server.server import Server, set_server
 
 import logging
@@ -31,7 +37,6 @@ class CrynuxRunner(object):
             self.config.log.dir,
             self.config.log.level,
             self.config.log.filename,
-            self.config.distributed,
         )
         _logger.debug("Logger init completed.")
 
@@ -71,6 +76,9 @@ class CrynuxRunner(object):
         await db.init(self.config.db)
         _logger.info("DB init completed.")
 
+        worker_manager = WorkerManager(self.config)
+        set_worker_manager(worker_manager)
+
         _logger.info(f"Serving WebUI from: {os.path.abspath(self.config.web_dist)}")
         self._server = Server(self.config.web_dist)
         set_server(self._server)
@@ -96,16 +104,15 @@ class CrynuxRunner(object):
                 tg.start_soon(self._check_should_shutdown)
                 tg.start_soon(self._wait_for_shutdown)
 
-                tg.start_soon(self._node_manager.run)
-                if not self.config.headless:
-                    await tg.start(
-                        self._server.start,
-                        self.config.server_host,
-                        self.config.server_port,
-                        self.config.log.level == "DEBUG",
-                    )
+                await tg.start(
+                    self._server.start,
+                    self.config.server_host,
+                    self.config.server_port,
+                    self.config.log.level == "DEBUG",
+                )
                 _logger.info("Crynux server started.")
                 task_status.started()
+                tg.start_soon(self._node_manager.run)
         finally:
             with move_on_after(2, shield=True):
                 await db.close()
@@ -118,12 +125,15 @@ class CrynuxRunner(object):
         if self._tg is None:
             return
 
-        if self._server is not None and not self.config.headless:
+        if self._server is not None:
             self._server.stop()
+            _logger.info("stop server")
         if self._node_manager is not None:
             with move_on_after(10, shield=True):
                 await self._node_manager.finish()
+                _logger.info("stop node manager")
         self._tg.cancel_scope.cancel()
+        _logger.info("cancel runner task group")
 
     async def stop(self):
         self._set_shutdown_event()

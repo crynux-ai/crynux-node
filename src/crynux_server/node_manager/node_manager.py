@@ -4,7 +4,7 @@ import json
 import logging
 import os
 from datetime import datetime
-from typing import List, Optional, Type, cast
+from typing import List, Optional, Type
 
 from anyio import (TASK_STATUS_IGNORED, Event, create_task_group, fail_after,
                    get_cancelled_exc_class, move_on_after)
@@ -14,7 +14,7 @@ from tenacity import (AsyncRetrying, before_sleep_log, stop_after_attempt,
 from web3 import Web3
 from web3.types import EventData
 
-from crynux_server import models, pool
+from crynux_server import models
 from crynux_server.config import Config, wait_privkey
 from crynux_server.contracts import Contracts, set_contracts
 from crynux_server.event_queue import DbEventQueue, EventQueue, set_event_queue
@@ -25,11 +25,11 @@ from crynux_server.task import (DbTaskStateCache, InferenceTaskRunner,
                                 set_task_state_cache, set_task_system)
 from crynux_server.watcher import (BlockNumberCache, DbBlockNumberCache,
                                    EventWatcher, set_watcher)
+from crynux_server.worker_manager import get_worker_manager, WorkerManager, TaskCancelled, PrefetchError, TaskError
 
 from .state_cache import (DbNodeStateCache, DbTxStateCache, ManagerStateCache,
                           StateCache, set_manager_state_cache)
 from .state_manager import NodeStateManager, set_node_state_manager
-from .utils import inference_in_process, prefetch_in_thread
 
 _logger = logging.getLogger(__name__)
 
@@ -67,13 +67,14 @@ def _make_event_queue(queue_cls: Type[EventQueue]) -> EventQueue:
     return queue
 
 
-def _make_watcher(
+async def _make_watcher(
     contracts: Contracts,
     block_number_cache_cls: Type[BlockNumberCache],
 ):
     watcher = EventWatcher.from_contracts(contracts)
 
     block_cache = block_number_cache_cls()
+    await block_cache.set(0)
     watcher.set_blocknumber_cache(block_cache)
 
     set_watcher(watcher)
@@ -82,7 +83,6 @@ def _make_watcher(
 
 def _make_task_system(
     queue: EventQueue,
-    distributed: bool,
     retry: bool,
     task_state_cache_cls: Type[TaskStateCache],
 ) -> TaskSystem:
@@ -90,7 +90,7 @@ def _make_task_system(
     set_task_state_cache(cache)
 
     system = TaskSystem(
-        state_cache=cache, queue=queue, distributed=distributed, retry=retry
+        state_cache=cache, queue=queue, retry=retry
     )
     system.set_runner_cls(runner_cls=InferenceTaskRunner)
 
@@ -136,6 +136,7 @@ class NodeManager(object):
         node_state_manager: Optional[NodeStateManager] = None,
         watcher: Optional[EventWatcher] = None,
         task_system: Optional[TaskSystem] = None,
+        worker_manager: Optional[WorkerManager] = None,
         retry: bool = True,
         retry_delay: float = 30,
     ) -> None:
@@ -164,12 +165,17 @@ class NodeManager(object):
         self._node_state_manager = node_state_manager
         self._watcher = watcher
         self._task_system = task_system
+        if worker_manager is None:
+            worker_manager = get_worker_manager()
+        self._worker_manager = worker_manager
 
         self._retry = retry
         self._retry_delay = retry_delay
 
         self._tg: Optional[TaskGroup] = None
         self._finish_event: Optional[Event] = None
+
+        self._closed = False
 
     @property
     def finish_event(self) -> Event:
@@ -179,7 +185,6 @@ class NodeManager(object):
 
     async def _init_components(self):
         _logger.info("Initializing node manager components.")
-        pool.init()
 
         if self._event_queue is None:
             self._event_queue = _make_event_queue(self.event_queue_cls)
@@ -187,20 +192,13 @@ class NodeManager(object):
         if self._task_system is None:
                 self._task_system = _make_task_system(
                     queue=self._event_queue,
-                    distributed=self.config.distributed,
                     retry=self._retry,
                     task_state_cache_cls=self.task_state_cache_cls,
                 )
 
         if self._contracts is None or self._relay is None:
             if self._privkey is None:
-                if self.config.headless:
-                    assert (
-                        len(self.config.ethereum.privkey) > 0
-                    ), "In headless mode, you must provide private key in config file before starting node."
-                    self._privkey = self.config.ethereum.privkey
-                else:
-                    self._privkey = await wait_privkey()
+                self._privkey = await wait_privkey()
 
             if self._contracts is None:
                 self._contracts = await _make_contracts(
@@ -223,7 +221,7 @@ class NodeManager(object):
 
         if self._watcher is None:
             if self._watcher is None:
-                self._watcher = _make_watcher(
+                self._watcher = await _make_watcher(
                     contracts=self._contracts,
                     block_number_cache_cls=self.block_number_cache_cls,
                 )
@@ -231,104 +229,47 @@ class NodeManager(object):
 
     async def _init(self):
         _logger.info("Initialize node manager")
-        if not self.config.distributed:
 
-            ### Prefetech ###
-            from crynux_worker.models import ModelConfig, ProxyConfig
+        async for attemp in AsyncRetrying(
+            stop=stop_after_attempt(3) if self._retry else stop_after_attempt(1),
+            wait=wait_fixed(self._retry_delay),
+            before_sleep=before_sleep_log(_logger, logging.ERROR, exc_info=True),
+            reraise=True,
+        ):
+            with attemp:
+                try:
+                    async for progress in self._worker_manager.get_prefetch_task_progress():
+                        await self.state_cache.set_node_state(
+                            status=models.NodeStatus.Init,
+                            init_message=progress
+                        )
+                except TaskCancelled:
+                    self._worker_manager.reset_prefetch_task()
+                    raise
+                except PrefetchError as e:
+                    self._worker_manager.reset_prefetch_task()
+                    raise ValueError("Failed to download models due to network issue") from e
+                except Exception as e:
+                    self._worker_manager.reset_prefetch_task()
+                    raise ValueError("Failed to download models") from e
+        _logger.info("Finish downloading models")
 
-            assert (
-                self.config.task_config is not None
-            ), "Task config is None in non-distributed version"
-
-            if (
-                self.config.task_config is not None
-                and self.config.task_config.preloaded_models is not None
-            ):
-                preload_models = self.config.task_config.preloaded_models.model_dump()
-                sd_base_models: List[ModelConfig] | None = preload_models.get("sd_base", None)
-                gpt_base_models: List[ModelConfig] | None = preload_models.get("gpt_base", None)
-                controlnet_models: List[ModelConfig] | None = preload_models.get(
-                    "controlnet", None
-                )
-                vae_models: List[ModelConfig] | None = preload_models.get("vae", None)
-            else:
-                sd_base_models = None
-                gpt_base_models = None
-                controlnet_models = None
-                vae_models = None
-
-            if (
-                self.config.task_config is not None
-                and self.config.task_config.proxy is not None
-            ):
-                proxy = self.config.task_config.proxy.model_dump()
-                proxy = cast(ProxyConfig, proxy)
-            else:
-                proxy = None
-
-            # retry prefetch for 3 times
-            async for attemp in AsyncRetrying(
-                stop=stop_after_attempt(3) if self._retry else stop_after_attempt(1),
-                wait=wait_fixed(self._retry_delay),
-                before_sleep=before_sleep_log(_logger, logging.ERROR, exc_info=True),
-                reraise=True,
-            ):
-                with attemp:
-                    await prefetch_in_thread(
-                        self.state_cache,
-                        self.config.task_config.hf_cache_dir,
-                        self.config.task_config.external_cache_dir,
-                        self.config.task_config.script_dir,
-                        sd_base_models,
-                        gpt_base_models,
-                        controlnet_models,
-                        vae_models,
-                        proxy,
-                    )
-
-            ### Inference ###
-            prompt = (
-                "a realistic photo of an old man sitting on a brown chair, "
-                "on the seaside, with blue sky and white clouds, a dog is lying "
-                "under his legs, masterpiece, high resolution"
+        await self.state_cache.set_node_state(
+            status=models.NodeStatus.Init,
+            init_message="Running local evaluation task"
+        )
+        try:
+            with fail_after(300):
+                await self._worker_manager.get_init_inference_task_result()
+        except TimeoutError as e:
+            msg = (
+                "The initial inference task exceeded the timeout limit(5 min). Maybe your device does not meet "
+                "the lowest hardware requirements"
             )
-            sd_inference_args = {
-                "base_model": "runwayml/stable-diffusion-v1-5",
-                "prompt": prompt,
-                "negative_prompt": "",
-                "task_config": {
-                    "num_images": 3,
-                    "safety_checker": False,
-                    "cfg": 7,
-                    "seed": 99975892,
-                    "steps": 40,
-                },
-            }
-            current_ts = int(datetime.now().timestamp())
-            try:
-                _logger.info("Start initial inference task")
-                with fail_after(300):
-                    await self.state_cache.set_node_state(
-                        status=models.NodeStatus.Init,
-                        init_message="Running local evaluation task"
-                    )
-                    await inference_in_process(
-                        json.dumps(sd_inference_args),
-                        os.path.join(
-                            self.config.task_config.output_dir, f"_sd_init_{current_ts}"
-                        ),
-                        self.config.task_config.hf_cache_dir,
-                        self.config.task_config.external_cache_dir,
-                        self.config.task_config.script_dir,
-                        proxy,
-                    )
-                _logger.info("Initial inference task success")
-            except TimeoutError as e:
-                msg = (
-                    "The initial inference task exceeded the timeout limit(5 min). Maybe your device does not meet "
-                    "the lowest hardware requirements"
-                )
-                raise ValueError(msg) from e
+            raise ValueError(msg) from e
+        except TaskError as e:
+            raise ValueError("The initial validation task failed") from e
+        _logger.info("Finish initial validation task")
 
         _logger.info("Node manager initializing complete.")
 
@@ -616,8 +557,7 @@ class NodeManager(object):
                     if tx_status == models.TxStatus.Pending:
                         await self.state_cache.set_tx_state(models.TxStatus.Success)
 
-                if not self.config.headless:
-                    tg.start_soon(self._sync_state)
+                tg.start_soon(self._sync_state)
 
         finally:
             self._tg = None
@@ -626,7 +566,8 @@ class NodeManager(object):
         assert self._tg is None, "Node manager is running."
 
         try:
-            await self._run(prefetch=prefetch)
+            with self._worker_manager.start():
+                await self._run(prefetch=prefetch)
         except get_cancelled_exc_class():
             raise
         except Exception as e:
@@ -636,36 +577,39 @@ class NodeManager(object):
             with fail_after(5, shield=True):
                 await self.state_cache.set_node_state(models.NodeStatus.Error, msg)
             await self.finish()
-            if self.config.headless:
-                raise
+        finally:
+            _logger.info("node manager is stopped")
 
     async def finish(self):
-        if self._tg is not None and not self._tg.cancel_scope.cancel_called:
-            self._tg.cancel_scope.cancel()
+        if not self._closed:
+            try:
+                if self._relay is not None:
+                    with fail_after(2, shield=True):
+                        await self._relay.close()
+                    self._relay = None
+                if self._faucet is not None:
+                    await self._faucet.close()
+                    self._faucet = None
+                if self._watcher is not None:
+                    self._watcher.stop()
+                    self._watcher = None
+                if self._task_system is not None:
+                    self._task_system.stop()
+                    self._task_system = None
+                if self._node_state_manager is not None:
+                    with move_on_after(10, shield=True):
+                        await self._node_state_manager.try_stop()
+                    self._node_state_manager.stop_sync()
+                    self._node_state_manager = None
+                if self._contracts is not None:
+                    await self._contracts.close()
+                    self._contracts = None
 
-        if self._relay is not None:
-            with fail_after(2, shield=True):
-                await self._relay.close()
-            self._relay = None
-        if self._faucet is not None:
-            await self._faucet.close()
-            self._faucet = None
-        if self._watcher is not None:
-            self._watcher.stop()
-            self._watcher = None
-        if self._task_system is not None:
-            self._task_system.stop()
-            self._task_system = None
-        if self._node_state_manager is not None:
-            with move_on_after(10, shield=True):
-                await self._node_state_manager.try_stop()
-            if not self.config.headless:
-                self._node_state_manager.stop_sync()
-            self._node_state_manager = None
-        if self._contracts is not None:
-            await self._contracts.close()
-            self._contracts = None
-        pool.close()
+                if self._tg is not None and not self._tg.cancel_scope.cancel_called:
+                    self._tg.cancel_scope.cancel()
+
+            finally:
+                self._closed = True
 
 
 _node_manager: Optional[NodeManager] = None

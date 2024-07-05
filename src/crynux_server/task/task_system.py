@@ -23,14 +23,12 @@ class TaskSystem(object):
         self,
         state_cache: TaskStateCache,
         queue: EventQueue,
-        distributed: bool = False,
         retry: bool = True,
         task_name: str = "inference",
     ) -> None:
         self._state_cache = state_cache
         self._queue = queue
         self._retry = retry
-        self._distributed = distributed
         self._task_name = task_name
 
         self._tg: Optional[TaskGroup] = None
@@ -86,7 +84,6 @@ class TaskSystem(object):
                 state_cache=self._state_cache,
                 queue=self._queue,
                 task_name=self._task_name,
-                distributed=self._distributed,
             )
             runner.state = state
             self._runners[state.task_id] = runner
@@ -111,7 +108,6 @@ class TaskSystem(object):
                             state_cache=self._state_cache,
                             queue=self._queue,
                             task_name=self._task_name,
-                            distributed=self._distributed,
                         )
                         self._runners[task_id] = runner
                         tg.start_soon(self._run_task, task_id)

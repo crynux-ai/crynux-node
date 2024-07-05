@@ -72,7 +72,7 @@ git submodule update --init --recursive
 
 Set-Location $RELEASE_DIR
 New-Item -ItemType Directory -Path "$RELEASE_DIR/worker"
-Copy-Item $WORK_DIR/src/crynux_worker_process.py worker/
+Copy-Item $WORK_DIR/crynux-worker/crynux_worker_process.py worker/
 
 Set-Location $RELEASE_DIR/worker
 python -m venv venv
@@ -87,6 +87,11 @@ pip install .
 Copy-Item -Recurse $WORK_DIR/gpt-task $RELEASE_DIR/gpt-task
 Set-Location $RELEASE_DIR/gpt-task
 pip install -r requirements_cuda.txt
+pip install .
+
+Copy-Item -Recurse $WORK_DIR/crynux-worker $RELEASE_DIR/crynux-worker
+Set-Location $RELEASE_DIR/crynux-worker
+pip install -r requirements.txt
 pip install .
 
 Set-Location $RELEASE_DIR

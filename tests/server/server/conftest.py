@@ -206,7 +206,6 @@ async def managers(
         system = TaskSystem(
             task_state_cache,
             queue=queue,
-            distributed=config.distributed,
             task_name="mock_inference",
         )
         if i == 0:
