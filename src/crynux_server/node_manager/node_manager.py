@@ -175,7 +175,7 @@ class NodeManager(object):
         self._tg: Optional[TaskGroup] = None
         self._finish_event: Optional[Event] = None
 
-        self._closed = True
+        self._closed = False
 
     @property
     def finish_event(self) -> Event:
@@ -578,13 +578,12 @@ class NodeManager(object):
             with fail_after(5, shield=True):
                 await self.state_cache.set_node_state(models.NodeStatus.Error, msg)
             await self.finish()
+        finally:
+            _logger.info("node manager is stopped")
 
     async def finish(self):
         if not self._closed:
             try:
-                if self._tg is not None and not self._tg.cancel_scope.cancel_called:
-                    self._tg.cancel_scope.cancel()
-
                 if self._relay is not None:
                     with fail_after(2, shield=True):
                         await self._relay.close()
@@ -606,6 +605,10 @@ class NodeManager(object):
                 if self._contracts is not None:
                     await self._contracts.close()
                     self._contracts = None
+
+                if self._tg is not None and not self._tg.cancel_scope.cancel_called:
+                    self._tg.cancel_scope.cancel()
+
             finally:
                 self._closed = True
 

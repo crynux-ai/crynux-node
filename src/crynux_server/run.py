@@ -127,10 +127,13 @@ class CrynuxRunner(object):
 
         if self._server is not None:
             self._server.stop()
+            _logger.info("stop server")
         if self._node_manager is not None:
             with move_on_after(10, shield=True):
                 await self._node_manager.finish()
+                _logger.info("stop node manager")
         self._tg.cancel_scope.cancel()
+        _logger.info("cancel runner task group")
 
     async def stop(self):
         self._set_shutdown_event()

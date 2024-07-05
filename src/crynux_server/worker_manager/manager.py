@@ -5,6 +5,7 @@ import subprocess
 from contextlib import contextmanager
 from typing import AsyncGenerator, Dict, Optional, Union
 
+import psutil
 from anyio import sleep
 
 from crynux_server.config import Config, get_config
@@ -80,8 +81,14 @@ class WorkerManager(object):
         log_config = {"dir": self.config.log.dir, "level": self.config.log.level}
         envs["cw_log"] = json.dumps(log_config)
 
-        with subprocess.Popen(args=args, env=envs):
+        p = subprocess.Popen(args=args, env=envs)
+        try:
             yield
+        finally:
+            process = psutil.Process(p.pid)
+            for proc in process.children(recursive=True):
+                proc.kill()
+            process.kill()
 
     def connect(self, version: str) -> int:
         worker_id = self._next_worker_id
