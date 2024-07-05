@@ -100,7 +100,7 @@ cd $GIT_DIR
 git submodule update --init --recursive
 cd $WORK_DIR
 mkdir "$WORK_DIR/worker"
-cp $GIT_DIR/src/crynux_worker_process.py worker/
+cp $GIT_DIR/crynux-worker/crynux_worker_process.py worker/
 
 python3.10 -m venv worker/venv
 source "$WORK_DIR/worker/venv/bin/activate"
@@ -115,6 +115,11 @@ cd $WORK_DIR
 cp -R $GIT_DIR/gpt-task gpt-task
 cd gpt-task
 pip install -r requirements_macos.txt
+pip install .
+
+cp -R $GIT_DIR/crynux-worker crynux-worker
+cd crynux-worker
+pip install -r requirements.txt
 pip install .
 
 cd $WORK_DIR
