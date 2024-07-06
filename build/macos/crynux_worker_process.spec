@@ -2,19 +2,20 @@
 import argparse
 from PyInstaller.utils.hooks import collect_submodules
 from PyInstaller.utils.hooks import collect_data_files
+from PyInstaller.utils.hooks import collect_dynamic_libs
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--identity", action="store")
 options = parser.parse_args()
 
 scipy_hiddenimports = collect_submodules('scipy')
-
 scipy_datas = collect_data_files('scipy')
+binaries = collect_dynamic_libs('bitsandbytes')
 
 a = Analysis(
     ['worker/crynux_worker_process.py'],
     pathex=[],
-    binaries=[],
+    binaries=binaries,
     datas=scipy_datas,
     hiddenimports=[
         "diffusers.pipelines.stable_diffusion_xl.pipeline_output",
@@ -30,6 +31,7 @@ a = Analysis(
         'sd_task': 'py',
         'gpt_task': 'py',
         'crynux_worker': 'py',
+        'bitsandbytes': 'pyz+py',
     },
     excludes=[],
     noarchive=False,
