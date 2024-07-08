@@ -129,7 +129,8 @@ class WorkerManager(object):
         self._current_task = task_result
         return task_input, task_result
 
-    def start_prefetch_task(self, worker_id: int):
+    async def start_prefetch_task(self, worker_id: int):
+        await sleep(0)
         assert (
             worker_id == self._current_worker_id
         ), f"Worker {worker_id} is disconnected"
@@ -177,7 +178,8 @@ class WorkerManager(object):
             async for progress in self._prefetch_task_result.get():
                 yield progress
 
-    def start_init_inference_task(self, worker_id: int):
+    async def start_init_inference_task(self, worker_id: int):
+        await sleep(0)
         assert (
             worker_id == self._current_worker_id
         ), f"Worker {worker_id} is disconnected"

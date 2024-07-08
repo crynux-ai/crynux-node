@@ -139,16 +139,22 @@ class Ethereum(BaseModel):
 
     contract: Contract
 
-    _privkey_file = "privkey.txt"
+    _privkey_file: str = "privkey.txt"
+    _privkey: str = ""
 
-    @cached_property
+    @computed_field
+    @property
     def privkey(self) -> str:
-        privkey_file = os.path.join(_data_dir, self._privkey_file)
-        if os.path.exists(privkey_file):
-            with open(privkey_file, mode="r", encoding="utf-8") as f:
-                return f.read().strip()
-        else:
-            return ""
+        if len(self._privkey) == 0:
+            privkey_file = os.path.join(_data_dir, self._privkey_file)
+            if os.path.exists(privkey_file):
+                with open(privkey_file, mode="r", encoding="utf-8") as f:
+                    self._privkey = f.read().strip()
+        return self._privkey
+    
+    @privkey.setter
+    def privkey(self, privkey: str):
+        self._privkey = privkey
 
     def dump_privkey(self, privkey: str):
         privkey_file = os.path.join(_data_dir, self._privkey_file)

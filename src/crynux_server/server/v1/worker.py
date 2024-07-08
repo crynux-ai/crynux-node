@@ -47,7 +47,7 @@ class WorkerPayloadMessage(BaseModel):
 async def process_prefetch(
     worker_id: int, websocket: WebSocket, worker_manager: WorkerManager
 ):
-    worker_manager.start_prefetch_task(worker_id)
+    await worker_manager.start_prefetch_task(worker_id)
     try:
         while True:
             raw_msg = await websocket.receive_json()
@@ -90,7 +90,7 @@ async def process_prefetch(
 async def process_init_inference(
     worker_id: int, websocket: WebSocket, worker_manager: WorkerManager
 ):
-    worker_manager.start_init_inference_task(worker_id)
+    await worker_manager.start_init_inference_task(worker_id)
     try:
         raw_msg = await websocket.receive_json()
         msg = WorkerPayloadMessage.model_validate(raw_msg)
