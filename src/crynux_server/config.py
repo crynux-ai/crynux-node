@@ -83,12 +83,12 @@ LogLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR", "FATAL", "CRITICAL"]
 DBDriver = Literal["sqlite"]
 
 
-_base_dir: str = ""
+_data_dir: str = ""
 
-def set_base_dir(dirname: str):
-    global _base_dir
+def set_data_dir(dirname: str):
+    global _data_dir
 
-    _base_dir = dirname
+    _data_dir = dirname
 
 
 class LogConfig(BaseModel):
@@ -99,7 +99,7 @@ class LogConfig(BaseModel):
     @computed_field
     @property
     def dir(self) -> str:
-        return os.path.abspath(os.path.join(_base_dir, self.m_dir))
+        return os.path.abspath(os.path.join(_data_dir, self.m_dir))
 
 
 class DBConfig(BaseModel):
@@ -109,7 +109,7 @@ class DBConfig(BaseModel):
     @computed_field
     @property
     def filename(self) -> str:
-        return os.path.abspath(os.path.join(_base_dir, self.m_filename))
+        return os.path.abspath(os.path.join(_data_dir, self.m_filename))
 
     @computed_field
     @property
@@ -143,7 +143,7 @@ class Ethereum(BaseModel):
 
     @cached_property
     def privkey(self) -> str:
-        privkey_file = os.path.join(_base_dir, self._privkey_file)
+        privkey_file = os.path.join(_data_dir, self._privkey_file)
         if os.path.exists(privkey_file):
             with open(privkey_file, mode="r", encoding="utf-8") as f:
                 return f.read().strip()
@@ -151,7 +151,7 @@ class Ethereum(BaseModel):
             return ""
 
     def dump_privkey(self, privkey: str):
-        privkey_file = os.path.join(_base_dir, self._privkey_file)
+        privkey_file = os.path.join(_data_dir, self._privkey_file)
         with open(privkey_file, mode="w", encoding="utf-8") as f:
             f.write(privkey)
 
@@ -171,22 +171,22 @@ class TaskConfig(BaseModel):
     @computed_field
     @property
     def hf_cache_dir(self) -> str:
-        return os.path.abspath(os.path.join(_base_dir, self._hf_cache_dir))
+        return os.path.abspath(os.path.join(_data_dir, self._hf_cache_dir))
 
     @computed_field
     @property
     def external_cache_dir(self) -> str:
-        return os.path.abspath(os.path.join(_base_dir, self._external_cache_dir))
+        return os.path.abspath(os.path.join(_data_dir, self._external_cache_dir))
 
     @computed_field
     @property
     def script_dir(self) -> str:
-        return os.path.abspath(os.path.join(_base_dir, self._script_dir))
+        return os.path.abspath(os.path.join(_data_dir, self._script_dir))
     
     @computed_field
     @property
     def output_dir(self) -> str:
-        return os.path.abspath(os.path.join(_base_dir, self._output_dir))
+        return os.path.abspath(os.path.join(_data_dir, self._output_dir))
 
 
 class ModelConfig(BaseModel):
