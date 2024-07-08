@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import functools
 import os
+from functools import cached_property, partial
 from typing import Any, Dict, List, Literal, Tuple, Type, TypedDict, Optional
 
 import yaml
@@ -17,7 +17,6 @@ __all__ = [
     "Config",
     "get_config",
     "set_config",
-    "dump_config",
     "wait_privkey",
     "set_privkey",
     "get_privkey",
@@ -131,7 +130,6 @@ class Contract(BaseModel):
 
 class Ethereum(BaseModel):
     provider: str
-    privkey: str = ""
 
     chain_id: Optional[int] = None
     gas: Optional[int] = None
@@ -140,6 +138,22 @@ class Ethereum(BaseModel):
     max_priority_fee_per_gas: Optional[int] = None
 
     contract: Contract
+
+    _privkey_file = "privkey.txt"
+
+    @cached_property
+    def privkey(self) -> str:
+        privkey_file = os.path.join(_base_dir, self._privkey_file)
+        if os.path.exists(privkey_file):
+            with open(privkey_file, mode="r", encoding="utf-8") as f:
+                return f.read().strip()
+        else:
+            return ""
+
+    def dump_privkey(self, privkey: str):
+        privkey_file = os.path.join(_base_dir, self._privkey_file)
+        with open(privkey_file, mode="w", encoding="utf-8") as f:
+            f.write(privkey)
 
 
 class TaskConfig(BaseModel):
@@ -251,13 +265,6 @@ def set_config(config: Config):
     _config = config
 
 
-def dump_config(config: Config):
-    config_file: Optional[str] = config.model_config.get("yaml_file")
-    assert config_file is not None
-    with open(config_file, mode="w", encoding="utf-8") as f:
-        yaml.safe_dump(config.model_dump(), f)
-
-
 _condition: Optional[Condition] = None
 
 
@@ -286,7 +293,7 @@ async def set_privkey(privkey: str):
         config.ethereum.privkey = privkey
         condition.notify(1)
 
-    await to_thread.run_sync(functools.partial(dump_config, config=config))
+    await to_thread.run_sync(partial(config.ethereum.dump_privkey, privkey=privkey))
 
 
 def get_privkey() -> str:
