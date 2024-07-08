@@ -29,7 +29,7 @@ pip install .
 
 # prepare the worker
 mkdir worker
-cp src/crynux_worker_process.py worker/
+cp crynux-worker/crynux_worker_process.py worker/
 cd worker
 python3.10 -m venv venv
 source ./venv/bin/activate
@@ -40,4 +40,8 @@ pip install .
 
 cd ../gpt-task
 pip install -r requirements_macos.txt
+pip install .
+
+cd ../crynux-worker
+pip install -r requirements.txt
 pip install .
