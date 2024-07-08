@@ -191,7 +191,6 @@ async def create_node_managers(
             system = TaskSystem(
                 task_state_cache,
                 queue=queue,
-                distributed=config.distributed,
                 task_name="mock_inference",
                 retry=(fail_step > 0),
             )

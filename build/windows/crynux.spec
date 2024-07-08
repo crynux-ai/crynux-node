@@ -8,12 +8,11 @@ a = Analysis(
     datas=[
         ('config/*', 'config/'),
     ] + collect_data_files('crynux_server.contracts.abi'),
-    hiddenimports=['aiosqlite', "crynux_server.contracts.abi"],
+    hiddenimports=['aiosqlite', "crynux_server.contracts.abi", "pkg_resources.extern"],
     collect_submodules=["crynux_server.contracts.abi"],
     collect_data=["crynux_server.contracts.abi"],
     module_collection_mode={
         'crynux_server': 'py',
-        'crynux_worker': 'py',
     },
     hookspath=[],
     hooksconfig={},

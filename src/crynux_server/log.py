@@ -3,7 +3,7 @@ import os
 from logging.handlers import RotatingFileHandler
 
 
-def init(log_dir: str, log_level: str, log_filename: str = "crynux-server.log", distributed: bool = False, root: bool = False):
+def init(log_dir: str, log_level: str, log_filename: str = "crynux-server.log", root: bool = False):
     stream_handler = logging.StreamHandler()
 
     if not os.path.exists(log_dir):
@@ -30,8 +30,6 @@ def init(log_dir: str, log_level: str, log_filename: str = "crynux-server.log", 
         logger_names.append(None)
     else:
         logger_names.append("crynux_server")
-        if not distributed:
-            logger_names.append("crynux_worker")
 
     for name in logger_names:
         logger = logging.getLogger(name)
