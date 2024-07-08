@@ -143,10 +143,10 @@ class Ethereum(BaseModel):
 
 
 class TaskConfig(BaseModel):
-    m_hf_cache_dir: str = Field(alias="hf_cache_dir")
-    m_external_cache_dir: str = Field(alias="external_cache_dir")
-    m_script_dir: str = Field(alias="script_dir")
-    m_output_dir: str = Field(alias="output_dir")
+    _hf_cache_dir: str = "data/huggingface"
+    _external_cache_dir: str = "data/external"
+    _script_dir: str = "worker"
+    _output_dir: str = "data/results"
 
     worker_patch_url: str
 
@@ -157,22 +157,22 @@ class TaskConfig(BaseModel):
     @computed_field
     @property
     def hf_cache_dir(self) -> str:
-        return os.path.abspath(os.path.join(_base_dir, self.m_hf_cache_dir))
+        return os.path.abspath(os.path.join(_base_dir, self._hf_cache_dir))
 
     @computed_field
     @property
     def external_cache_dir(self) -> str:
-        return os.path.abspath(os.path.join(_base_dir, self.m_external_cache_dir))
+        return os.path.abspath(os.path.join(_base_dir, self._external_cache_dir))
 
     @computed_field
     @property
     def script_dir(self) -> str:
-        return os.path.abspath(os.path.join(_base_dir, self.m_script_dir))
+        return os.path.abspath(os.path.join(_base_dir, self._script_dir))
     
     @computed_field
     @property
     def output_dir(self) -> str:
-        return os.path.abspath(os.path.join(_base_dir, self.m_output_dir))
+        return os.path.abspath(os.path.join(_base_dir, self._output_dir))
 
 
 class ModelConfig(BaseModel):
@@ -201,7 +201,6 @@ class Config(BaseSettings):
 
     db: DBConfig
     relay_url: str
-    faucet_url: str
 
     task_config: TaskConfig
 
@@ -210,8 +209,6 @@ class Config(BaseSettings):
     web_dist: str = ""
 
     resource_dir: str = ""
-
-    last_result: Optional[str] = None
 
     model_config = YamlSettingsConfigDict(
         env_nested_delimiter="__",

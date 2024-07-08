@@ -41,9 +41,6 @@ db:
 # The URL of the Relay
 relay_url: "https://dy.relay.crynux.ai"
 
-# The URL of the faucet
-faucet_url: "https://faucet.crynux.ai"
-
 # The directory that stores the distribution files of the WebUI
 web_dist: webui/dist
 
@@ -51,19 +48,6 @@ web_dist: webui/dist
 resource_dir: res
 
 task_config:
-  # The directory to store the temp images for a task.
-  output_dir: "data/results"
-  
-  # The directory to cache the huggingface model files
-  hf_cache_dir: "data/huggingface"
-  
-  # The directory to cache the external model files
-  # Such as the LoRA models from Civitai
-  external_cache_dir: "data/external"
-
-  # The directory that stores the source code of the task execution engine
-  script_dir: "worker"
-
   # Models that will be preloaded before any task execution
   # Other models specified by the task
   # will be downloaded during the task execution
@@ -88,12 +72,3 @@ task_config:
 
   # URL of repository stores patch files of crynux worker
   worker_patch_url: https://raw.githubusercontent.com/crynux-ai/crynux-worker/main
-
-# If the node dies right after submitting the commitments,
-# and before disclosing the result on-chain. 
-# And if the data is corrupted inside the container,
-# which prevents the node from starting again.
-# The result from the previous task execution must be fetched from
-# the logs of the dead container and filled here.
-# So the node could continue with the unfinished task correctly.
-last_result: ""
