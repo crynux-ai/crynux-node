@@ -321,13 +321,12 @@ if __name__ == "__main__":
 
             from crynux_server import config as crynux_config
 
-            crynux_config.set_base_dir(resdir)
+            crynux_config.set_data_dir(resdir)
 
             cfg = crynux_config.get_config()
             cfg.web_dist = os.path.join(resdir, "webui/dist")
             cfg.resource_dir = os.path.join(resdir, "res")
             crynux_config.set_config(cfg)
-            crynux_config.dump_config(cfg)
 
         elif system_name == "Windows":
             config_file_path = os.path.abspath(os.path.join("config", "config.yml"))

@@ -57,7 +57,7 @@ Copy-Item -Recurse $WORK_DIR/src src
 Copy-Item -Recurse $WORK_DIR/res ../res
 Copy-Item $WORK_DIR/pyproject.toml pyproject.toml
 Copy-Item $WORK_DIR/setup.py setup.py
-Copy-Item $WORK_DIR/requirements_macos.txt requirements.txt
+Copy-Item $WORK_DIR/requirements_desktop.txt requirements.txt
 Copy-Item $WORK_DIR/MANIFEST.in MANIFEST.in
 Copy-Item $WORK_DIR/go.mod go.mod
 Copy-Item $WORK_DIR/go.sum go.sum

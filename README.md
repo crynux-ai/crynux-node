@@ -80,7 +80,7 @@ $ python -m venv venv
 # Use ./venv/Scripts/Activate.ps1 on Windows
 $ ./venv/bin/activate
 
-# Use requirements_macos.txt on Mac
+# Use requirements_desktop.txt if you need start the desktop GUI
 (venv) $ pip install -r ./requirements_docker.txt
 
 # Compile the project and install it as a pip dependency. Make sure no error is reported during this step.
@@ -139,6 +139,15 @@ $ ./venv/bin/activate
 
 # Compile the module and install it as a pip dependency. Make sure no error is reported during this step.
 (venv) $ pip install .
+
+# Install the crynux-worker package
+(venv) $ cd ../crynux-worker
+
+(venv) $ pip install -r requirements.txt
+
+# Compile the module and install it as a pip dependency. Make sure no error is reported during this step.
+(venv) $ pip install .
+
 ```
 ### Prepare the WebUI
 1. Prepare the config file
