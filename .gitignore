@@ -11,8 +11,8 @@ __pycache__/
 *.egg
 nodes
 *.so
-config/private_key.txt
-!config/config.yml
+config/
+!config/*example
 db/*
 logs/*
 config.json
