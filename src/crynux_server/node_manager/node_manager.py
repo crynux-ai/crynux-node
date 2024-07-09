@@ -466,6 +466,29 @@ class NodeManager(object):
             raise ValueError(
                 f"The difference between local time and server time is too large ({diff})"
             )
+        
+    async def _get_balance(self):
+        assert self._contracts is not None
+        async for attemp in AsyncRetrying(
+            stop=stop_never if self._retry else stop_after_attempt(1),
+            wait=wait_fixed(self._retry_delay),
+            reraise=True,
+        ):
+            with attemp:
+                try:
+                    balance = await self._contracts.get_balance(self._contracts.account)
+                except Exception as e:
+                    _logger.exception(e)
+                    _logger.error("Cannot get balance from the blockchain, retrying...")
+                    if attemp.retry_state.attempt_number > 3:
+                        with fail_after(5, shield=True):
+                            await self.state_cache.set_node_state(
+                                status=models.NodeStatus.Error,
+                                message="Cannot connect to the blockchain, retrying...consider using a proxy server.",
+                            )
+                    raise
+
+        return balance
 
     async def _run(self, prefetch: bool = True):
         assert self._tg is None, "Node manager is running."
@@ -511,15 +534,14 @@ class NodeManager(object):
                 assert self._task_system is not None
                 tg.start_soon(self._task_system.start)
 
-                assert self._contracts is not None
 
                 # wait the balance is enough to join the network
                 node_amount = Web3.to_wei("400.01", "ether")
-                balance = await self._contracts.get_balance(self._contracts.account)
+                balance = await self._get_balance()
                 while balance < node_amount:
                     await self.state_cache.set_node_state(status=models.NodeStatus.Stopped)
                     await sleep(5)
-                    balance = await self._contracts.get_balance(self._contracts.account)
+                    balance = await self._get_balance()
 
                 # wait the event watcher to start first and then join the network sequentially
                 # because the node may be selected to execute one task in the same tx of join,
