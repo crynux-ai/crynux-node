@@ -97,13 +97,13 @@ $ ./venv/bin/activate
 $ git submodule update --init --recursive
 ```
 
-2. Create a folder named "worker" under the root folder of the project, and copy ```src/crynux_worker_process.py``` to the folder:
+2. Create a folder named "worker" under the root folder of the project, and copy ```crynux-worker/crynux_worker_process.py``` to the folder:
 
 ```shell
 # In the root folder of the project
 
 $ mkdir worker
-$ cp src/crynux_worker_process.py worker/
+$ cp crynux-worker/crynux_worker_process.py worker/
 ```
 3. Create the venv under the worker folder:
 
@@ -114,7 +114,7 @@ $ cd worker
 $ python -m venv venv
 ```
 
-4. Activate the venv and install the requirements for stable-diffusion-task and gpt-task:
+4. Activate the venv and install the requirements for the worker:
 
 ```shell
 # In the worker folder

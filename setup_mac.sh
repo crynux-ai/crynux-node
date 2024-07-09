@@ -21,6 +21,18 @@ if [ -d "worker" ]; then
   rm -rf worker
 fi
 
+# prepare the Web UI
+cd src/webui
+
+if [ -d "dist" ]; then
+  rm -rf dist
+fi
+
+yarn
+yarn build
+
+cd ../../
+
 # prepare the server
 python3.10 -m venv venv
 source ./venv/bin/activate
@@ -45,3 +57,5 @@ pip install .
 cd ../crynux-worker
 pip install -r requirements.txt
 pip install .
+
+cd ../
