@@ -160,22 +160,20 @@ class EventWatcher(object):
 
                 while to_block <= 0 or from_block <= to_block:
                     latest_blocknum = await self.contracts.get_current_block_number()
-                    if from_block <= latest_blocknum:
-                        for blocknum in range(from_block, latest_blocknum):
-                            async with create_task_group() as tg:
-                                receipts = await self.contracts.get_block_tx_receipts(blocknum)
-                                if len(receipts) > 0:
-                                    event_filters = list(self._event_filters.values())
-                                    for event_filter in event_filters:
-                                        await event_filter.process_events(receipts, tg=tg)
-                            _logger.debug(f"Process events from block {blocknum}")
+                    while from_block <= latest_blocknum:
+                        async with create_task_group() as tg:
+                            receipts = await self.contracts.get_block_tx_receipts(from_block)
+                            if len(receipts) > 0:
+                                event_filters = list(self._event_filters.values())
+                                for event_filter in event_filters:
+                                    await event_filter.process_events(receipts, tg=tg)
+                        _logger.debug(f"Process events from block {from_block}")
 
-                            with fail_after(delay=5, shield=True):
-                                if self._cache is not None:
-                                    await self._cache.set(blocknum)
-                            from_block = blocknum + 1
-                    else:
-                        await sleep(interval)
+                        with fail_after(delay=5, shield=True):
+                            if self._cache is not None:
+                                await self._cache.set(from_block)
+                        from_block += 1
+                    await sleep(interval)
         finally:
             self._cancel_scope = None
 
