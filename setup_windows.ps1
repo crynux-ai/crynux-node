@@ -52,4 +52,6 @@ Set-Location "$WORK_DIR/crynux-worker"
 pip install -r requirements.txt
 pip install .
 
+# go back to server venv
 Set-Location $WORK_DIR
+./venv/Scripts/Activate.ps1

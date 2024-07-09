@@ -58,4 +58,6 @@ cd ../crynux-worker
 pip install -r requirements.txt
 pip install .
 
+# go back to server venv
 cd ../
+source ./venv/bin/activate
