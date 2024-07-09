@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from contextlib import contextmanager
 from functools import partial
 from typing import Any, Dict, List, Literal, Tuple, Type, TypedDict, Optional
 
@@ -335,3 +336,55 @@ def get_default_tx_option() -> TxOption:
             config.ethereum.max_priority_fee_per_gas, "wei"
         )
     return res
+
+
+def get_requests_proxy_url(proxy: ProxyConfig | None) -> str | None:
+    if proxy is not None and proxy.host != "":
+
+        if "://" in proxy.host:
+            scheme, host = proxy.host.split("://", 2)
+        else:
+            scheme, host = "", proxy.host
+
+        proxy_str = ""
+        if scheme != "":
+            proxy_str += f"{scheme}://"
+
+        if proxy.username != "":
+            proxy_str += f"{proxy.username}"
+
+            if proxy.password != "":
+                proxy_str += f":{proxy.password}"
+
+            proxy_str += f"@"
+
+        proxy_str += f"{host}:{proxy.port}"
+
+        return proxy_str
+    else:
+        return None
+    
+
+@contextmanager
+def with_proxy(config: Config | None = None):
+    if config is None:
+        config = get_config()
+    proxy_url = get_requests_proxy_url(config.task_config.proxy)
+    if proxy_url is not None:
+        origin_http_proxy = os.environ.get("HTTP_PROXY", None)
+        origin_https_proxy = os.environ.get("HTTPS_PROXY", None)
+        os.environ["HTTP_PROXY"] = proxy_url
+        os.environ["HTTPS_PROXY"] = proxy_url
+        try:
+            yield
+        finally:
+            if origin_http_proxy is not None:
+                os.environ["HTTP_PROXY"] = origin_http_proxy
+            else:
+                os.environ.pop("HTTP_PROXY")
+            if origin_https_proxy is not None:
+                os.environ["HTTPS_PROXY"] = origin_https_proxy
+            else:
+                os.environ.pop("HTTPS_PROXY")
+    else:
+        yield
