@@ -1,4 +1,5 @@
 *
+crynux_node/
 !config/*example
 !data/
 !macos/
