@@ -167,10 +167,10 @@ class Ethereum(BaseModel):
 
 
 class TaskConfig(BaseModel):
-    _hf_cache_dir: str = "data/huggingface"
-    _external_cache_dir: str = "data/external"
+    _hf_cache_dir: str = "tmp/huggingface"
+    _external_cache_dir: str = "tmp/external"
     _script_dir: str = "worker"
-    _output_dir: str = "data/results"
+    _output_dir: str = "tmp/results"
 
     worker_patch_url: str
 
