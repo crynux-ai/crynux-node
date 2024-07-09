@@ -48,8 +48,6 @@ task_config:
   preloaded_models:
     sd_base:
       - id: "runwayml/stable-diffusion-v1-5"
-      - id: "emilianJR/chilloutmix_NiPrunedFp32Fix"
-        variant: null
       - id: "stabilityai/stable-diffusion-xl-base-1.0"
     gpt_base:
       - id: "gpt2"
