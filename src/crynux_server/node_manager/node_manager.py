@@ -5,7 +5,7 @@ from datetime import datetime
 from typing import Optional, Type
 
 from anyio import (TASK_STATUS_IGNORED, Event, create_task_group, fail_after,
-                   get_cancelled_exc_class, move_on_after)
+                   get_cancelled_exc_class, move_on_after, sleep)
 from anyio.abc import TaskGroup, TaskStatus
 from tenacity import (AsyncRetrying, before_sleep_log, stop_after_attempt,
                       stop_never, wait_fixed)
@@ -22,7 +22,9 @@ from crynux_server.task import (DbTaskStateCache, InferenceTaskRunner,
                                 set_task_state_cache, set_task_system)
 from crynux_server.watcher import (BlockNumberCache, DbBlockNumberCache,
                                    EventWatcher, set_watcher)
-from crynux_server.worker_manager import get_worker_manager, WorkerManager, TaskCancelled, PrefetchError, TaskError
+from crynux_server.worker_manager import (PrefetchError, TaskCancelled,
+                                          TaskError, WorkerManager,
+                                          get_worker_manager)
 
 from .state_cache import (DbNodeStateCache, DbTxStateCache, ManagerStateCache,
                           StateCache, set_manager_state_cache)
@@ -86,9 +88,7 @@ def _make_task_system(
     cache = task_state_cache_cls()
     set_task_state_cache(cache)
 
-    system = TaskSystem(
-        state_cache=cache, queue=queue, retry=retry
-    )
+    system = TaskSystem(state_cache=cache, queue=queue, retry=retry)
     system.set_runner_cls(runner_cls=InferenceTaskRunner)
 
     set_task_system(system)
@@ -177,11 +177,11 @@ class NodeManager(object):
             self._event_queue = _make_event_queue(self.event_queue_cls)
 
         if self._task_system is None:
-                self._task_system = _make_task_system(
-                    queue=self._event_queue,
-                    retry=self._retry,
-                    task_state_cache_cls=self.task_state_cache_cls,
-                )
+            self._task_system = _make_task_system(
+                queue=self._event_queue,
+                retry=self._retry,
+                task_state_cache_cls=self.task_state_cache_cls,
+            )
 
         if self._contracts is None or self._relay is None:
             if self._privkey is None:
@@ -225,25 +225,27 @@ class NodeManager(object):
         ):
             with attemp:
                 try:
-                    async for progress in self._worker_manager.get_prefetch_task_progress():
+                    async for (
+                        progress
+                    ) in self._worker_manager.get_prefetch_task_progress():
                         await self.state_cache.set_node_state(
-                            status=models.NodeStatus.Init,
-                            init_message=progress
+                            status=models.NodeStatus.Init, init_message=progress
                         )
                 except TaskCancelled:
                     self._worker_manager.reset_prefetch_task()
                     raise
                 except PrefetchError as e:
                     self._worker_manager.reset_prefetch_task()
-                    raise ValueError("Failed to download models due to network issue") from e
+                    raise ValueError(
+                        "Failed to download models due to network issue"
+                    ) from e
                 except Exception as e:
                     self._worker_manager.reset_prefetch_task()
                     raise ValueError("Failed to download models") from e
         _logger.info("Finish downloading models")
 
         await self.state_cache.set_node_state(
-            status=models.NodeStatus.Init,
-            init_message="Running local evaluation task"
+            status=models.NodeStatus.Init, init_message="Running local evaluation task"
         )
         try:
             with fail_after(300):
@@ -359,7 +361,6 @@ class NodeManager(object):
 
         queue = self._event_queue
         account = self._contracts.account
-        
 
         async def _push_event(event_data: EventData):
             event = models.load_event_from_contracts(event_data)
@@ -377,31 +378,20 @@ class NodeManager(object):
             if address == account:
                 _logger.info("Node is kicked out")
                 await self.state_cache.set_node_state(
-                    status=models.NodeStatus.Stopped,
-                    message="Node is kicked out"
+                    status=models.NodeStatus.Stopped, message="Node is kicked out"
                 )
 
-        self._watcher.watch_event(
-            "node",
-            "NodeKickedOut",
-            callback=_node_kicked_out
-        )
+        self._watcher.watch_event("node", "NodeKickedOut", callback=_node_kicked_out)
 
         async def _node_slashed(event_data: EventData):
             address = event_data["args"]["nodeAddress"]
             if address == account:
                 _logger.info("Node is slashed")
                 await self.state_cache.set_node_state(
-                    status=models.NodeStatus.Stopped,
-                    message="Node is slashed"
+                    status=models.NodeStatus.Stopped, message="Node is slashed"
                 )
 
-        self._watcher.watch_event(
-            "node",
-            "NodeSlashed",
-            callback=_node_slashed
-        )
-
+        self._watcher.watch_event("node", "NodeSlashed", callback=_node_slashed)
 
         # call task_status.started() only once
         task_status_set = False
@@ -436,7 +426,9 @@ class NodeManager(object):
         now = int(datetime.now().timestamp())
         diff = now - remote_now
         if abs(diff) > 60:
-            raise ValueError(f"The difference between local time and server time is too large ({diff})")
+            raise ValueError(
+                f"The difference between local time and server time is too large ({diff})"
+            )
 
     async def _run(self, prefetch: bool = True):
         assert self._tg is None, "Node manager is running."
@@ -452,10 +444,10 @@ class NodeManager(object):
                         # clear tx error when restart
                         # set tx status to pending to forbid user to control node from web
                         await self.state_cache.set_tx_state(models.TxStatus.Success)
-                        
+
                         if prefetch:
                             init_tg.start_soon(self._init)
-                
+
                         await self._init_components()
                         await self._check_time()
 
@@ -478,6 +470,15 @@ class NodeManager(object):
                 assert self._task_system is not None
                 tg.start_soon(self._task_system.start)
 
+                assert self._contracts is not None
+
+                # wait the balance is enough to join the network
+                node_amount = Web3.to_wei("400.01", "ether")
+                balance = await self._contracts.get_balance(self._contracts.account)
+                while balance < node_amount:
+                    await sleep(5)
+                    balance = await self._contracts.get_balance(self._contracts.account)
+
                 # wait the event watcher to start first and then join the network sequentially
                 # because the node may be selected to execute one task in the same tx of join,
                 # start watcher after the joining operation will cause missing the TaskStarted event.
@@ -488,7 +489,7 @@ class NodeManager(object):
                 try:
                     await self.state_cache.set_node_state(
                         status=models.NodeStatus.Init,
-                        init_message="Joining the network"
+                        init_message="Joining the network",
                     )
                     async for attemp in AsyncRetrying(
                         stop=stop_never if self._retry else stop_after_attempt(1),
