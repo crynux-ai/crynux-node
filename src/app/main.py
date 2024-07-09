@@ -316,11 +316,10 @@ if __name__ == "__main__":
 
         if system_name == "Darwin":
             resdir = os.path.join(os.path.dirname(app_path), "Resources")
+            crynux_config.set_data_dir(resdir)
             config_file_path = crynux_config.config_file_path()
 
             _logger.debug(f"Config file path on mac: {config_file_path}")
-
-            crynux_config.set_data_dir(resdir)
 
             cfg = crynux_config.get_config()
             cfg.web_dist = os.path.join(resdir, "webui/dist")
@@ -328,6 +327,8 @@ if __name__ == "__main__":
             crynux_config.set_config(cfg)
 
         elif system_name == "Windows":
+            resdir = os.path.join(os.path.dirname(app_path), "data")
+            crynux_config.set_data_dir(resdir)
             config_file_path = crynux_config.config_file_path()
 
             _logger.debug(f"Config file path on windows: {config_file_path}")
@@ -336,7 +337,8 @@ if __name__ == "__main__":
             _logger.error(error)
             raise error
 
-    elif os.getenv("CRYNUX_SERVER_CONFIG") is None:
+    else:
+        # start from source
         index = __file__.rfind(os.path.sep + "src")
         root_dir = __file__[:index]
 
