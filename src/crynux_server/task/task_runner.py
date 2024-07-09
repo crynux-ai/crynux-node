@@ -389,7 +389,7 @@ class InferenceTaskRunner(TaskRunner):
             await waiter.wait()
             _logger.info(f"Task {self.task_id} timeout. Cancel the task.")
         except TxRevertedError as e:
-            if e.reason != "Task not exist":
+            if "Task not exist" not in e.reason:
                 _logger.error(f"Cancel task {self.task_id} failed due to {e.reason}")
                 raise
         except get_cancelled_exc_class():
