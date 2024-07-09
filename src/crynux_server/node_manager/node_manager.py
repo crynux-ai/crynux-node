@@ -1,10 +1,8 @@
 from __future__ import annotations
 
-import json
 import logging
-import os
 from datetime import datetime
-from typing import List, Optional, Type
+from typing import Optional, Type
 
 from anyio import (TASK_STATUS_IGNORED, Event, create_task_group, fail_after,
                    get_cancelled_exc_class, move_on_after)
@@ -18,7 +16,6 @@ from crynux_server import models
 from crynux_server.config import Config, wait_privkey
 from crynux_server.contracts import Contracts, set_contracts
 from crynux_server.event_queue import DbEventQueue, EventQueue, set_event_queue
-from crynux_server.faucet import Faucet, WebFaucet, set_faucet
 from crynux_server.relay import Relay, WebRelay, set_relay
 from crynux_server.task import (DbTaskStateCache, InferenceTaskRunner,
                                 TaskStateCache, TaskSystem,
@@ -98,12 +95,6 @@ def _make_task_system(
     return system
 
 
-def _make_faucet(faucet_url: str) -> Faucet:
-    faucet = WebFaucet(url=faucet_url)
-    set_faucet(faucet)
-    return faucet
-
-
 def _make_node_state_manager(
     state_cache: ManagerStateCache,
     contracts: Contracts,
@@ -132,7 +123,6 @@ class NodeManager(object):
         event_queue: Optional[EventQueue] = None,
         contracts: Optional[Contracts] = None,
         relay: Optional[Relay] = None,
-        faucet: Optional[Faucet] = None,
         node_state_manager: Optional[NodeStateManager] = None,
         watcher: Optional[EventWatcher] = None,
         task_system: Optional[TaskSystem] = None,
@@ -159,9 +149,6 @@ class NodeManager(object):
         self._event_queue = event_queue
         self._contracts = contracts
         self._relay = relay
-        if faucet is None:
-            faucet = _make_faucet(self.config.faucet_url)
-        self._faucet = faucet
         self._node_state_manager = node_state_manager
         self._watcher = watcher
         self._task_system = task_system
@@ -318,11 +305,7 @@ class NodeManager(object):
             if task.commitments[round] == err_commitment:
                 return
 
-            assert self.config.last_result is not None, (
-                f"Task {task_id} has submitted result commitment, but last result has not found in config."
-                " Please set the result in config file to rerun the task."
-            )
-            state.result = bytes.fromhex(self.config.last_result[2:])
+            state.result = bytes([0] * 31 + [2])
             event = models.TaskResultCommitmentsReady(task_id=task_id)
             events.append(event)
 
@@ -455,37 +438,6 @@ class NodeManager(object):
         if abs(diff) > 60:
             raise ValueError(f"The difference between local time and server time is too large ({diff})")
 
-    async def _request_tokens(self):
-        assert self._faucet is not None
-        assert self._contracts is not None
-
-        async for attemp in AsyncRetrying(
-            stop=stop_never if self._retry else stop_after_attempt(1),
-            wait=wait_fixed(self._retry_delay),
-            reraise=True,
-        ):
-            with attemp:
-                balance = await self._contracts.get_balance(self._contracts.account)
-                if balance == 0:
-                    try:
-                        success = await self._faucet.request_token(self._contracts.account)
-                        if success:
-                            _logger.info("Requesting token from faucet succeed")
-                        else:
-                            _logger.info(
-                                "Requesting token from faucet fails, this address already has token or has requested before"
-                            )
-                    except Exception as e:
-                        _logger.exception(e)
-                        _logger.error(f"Cannot request token from faucet, retrying")
-                        with fail_after(5, shield=True):
-                            await self.state_cache.set_node_state(
-                                status=models.NodeStatus.Error,
-                                message="Node manager init error: cannot request token from faucet. Retrying...",
-                            )
-                        raise
-
-
     async def _run(self, prefetch: bool = True):
         assert self._tg is None, "Node manager is running."
 
@@ -587,9 +539,6 @@ class NodeManager(object):
                     with fail_after(2, shield=True):
                         await self._relay.close()
                     self._relay = None
-                if self._faucet is not None:
-                    await self._faucet.close()
-                    self._faucet = None
                 if self._watcher is not None:
                     self._watcher.stop()
                     self._watcher = None

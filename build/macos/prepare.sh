@@ -88,7 +88,7 @@ cp -R $GIT_DIR/src src
 cp -R $GIT_DIR/res ../res
 cp $GIT_DIR/pyproject.toml pyproject.toml
 cp $GIT_DIR/setup.py setup.py
-cp $GIT_DIR/requirements_macos.txt requirements.txt
+cp $GIT_DIR/requirements_desktop.txt requirements.txt
 cp $GIT_DIR/MANIFEST.in MANIFEST.in
 cp $GIT_DIR/go.mod go.mod
 cp $GIT_DIR/go.sum go.sum

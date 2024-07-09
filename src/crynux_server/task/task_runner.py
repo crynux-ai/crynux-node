@@ -460,8 +460,9 @@ class InferenceTaskRunner(TaskRunner):
         await self.wait_for_status(models.TaskStatus.Executing)
 
         async with self.state_context():
+            result, commitment, nonce = make_result_commitments(event.hashes)
+            # state.result is empty means node has submitted result commitment
             if len(self.state.result) == 0:
-                result, commitment, nonce = make_result_commitments(event.hashes)
                 try:
                     await self._call_task_contract_method(
                         "submitTaskResultCommitment",
@@ -482,7 +483,7 @@ class InferenceTaskRunner(TaskRunner):
                         await finish_callback()
                     else:
                         raise e
-                self.state.result = result
+            self.state.result = result
             _logger.info(f"Task {self.task_id} result 0x{self.state.result.hex()}")
             self.state.status = models.TaskStatus.ResultUploaded
             self.state.files = event.files

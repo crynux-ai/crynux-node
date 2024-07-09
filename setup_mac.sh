@@ -24,7 +24,7 @@ fi
 # prepare the server
 python3.10 -m venv venv
 source ./venv/bin/activate
-pip install -r requirements_macos.txt
+pip install -r requirements_desktop.txt
 pip install .
 
 # prepare the worker

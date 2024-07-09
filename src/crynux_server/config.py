@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import functools
 import os
+from functools import cached_property, partial
 from typing import Any, Dict, List, Literal, Tuple, Type, TypedDict, Optional
 
 import yaml
@@ -17,7 +17,6 @@ __all__ = [
     "Config",
     "get_config",
     "set_config",
-    "dump_config",
     "wait_privkey",
     "set_privkey",
     "get_privkey",
@@ -84,12 +83,12 @@ LogLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR", "FATAL", "CRITICAL"]
 DBDriver = Literal["sqlite"]
 
 
-_base_dir: str = ""
+_data_dir: str = ""
 
-def set_base_dir(dirname: str):
-    global _base_dir
+def set_data_dir(dirname: str):
+    global _data_dir
 
-    _base_dir = dirname
+    _data_dir = dirname
 
 
 class LogConfig(BaseModel):
@@ -100,7 +99,7 @@ class LogConfig(BaseModel):
     @computed_field
     @property
     def dir(self) -> str:
-        return os.path.abspath(os.path.join(_base_dir, self.m_dir))
+        return os.path.abspath(os.path.join(_data_dir, self.m_dir))
 
 
 class DBConfig(BaseModel):
@@ -110,7 +109,7 @@ class DBConfig(BaseModel):
     @computed_field
     @property
     def filename(self) -> str:
-        return os.path.abspath(os.path.join(_base_dir, self.m_filename))
+        return os.path.abspath(os.path.join(_data_dir, self.m_filename))
 
     @computed_field
     @property
@@ -131,7 +130,6 @@ class Contract(BaseModel):
 
 class Ethereum(BaseModel):
     provider: str
-    privkey: str = ""
 
     chain_id: Optional[int] = None
     gas: Optional[int] = None
@@ -141,12 +139,34 @@ class Ethereum(BaseModel):
 
     contract: Contract
 
+    _privkey_file: str = "privkey.txt"
+    _privkey: str = ""
+
+    @computed_field
+    @property
+    def privkey(self) -> str:
+        if len(self._privkey) == 0:
+            privkey_file = os.path.join(_data_dir, self._privkey_file)
+            if os.path.exists(privkey_file):
+                with open(privkey_file, mode="r", encoding="utf-8") as f:
+                    self._privkey = f.read().strip()
+        return self._privkey
+    
+    @privkey.setter
+    def privkey(self, privkey: str):
+        self._privkey = privkey
+
+    def dump_privkey(self, privkey: str):
+        privkey_file = os.path.join(_data_dir, self._privkey_file)
+        with open(privkey_file, mode="w", encoding="utf-8") as f:
+            f.write(privkey)
+
 
 class TaskConfig(BaseModel):
-    m_hf_cache_dir: str = Field(alias="hf_cache_dir")
-    m_external_cache_dir: str = Field(alias="external_cache_dir")
-    m_script_dir: str = Field(alias="script_dir")
-    m_output_dir: str = Field(alias="output_dir")
+    _hf_cache_dir: str = "data/huggingface"
+    _external_cache_dir: str = "data/external"
+    _script_dir: str = "worker"
+    _output_dir: str = "data/results"
 
     worker_patch_url: str
 
@@ -157,22 +177,22 @@ class TaskConfig(BaseModel):
     @computed_field
     @property
     def hf_cache_dir(self) -> str:
-        return os.path.abspath(os.path.join(_base_dir, self.m_hf_cache_dir))
+        return os.path.abspath(os.path.join(_data_dir, self._hf_cache_dir))
 
     @computed_field
     @property
     def external_cache_dir(self) -> str:
-        return os.path.abspath(os.path.join(_base_dir, self.m_external_cache_dir))
+        return os.path.abspath(os.path.join(_data_dir, self._external_cache_dir))
 
     @computed_field
     @property
     def script_dir(self) -> str:
-        return os.path.abspath(os.path.join(_base_dir, self.m_script_dir))
+        return os.path.abspath(os.path.join(_data_dir, self._script_dir))
     
     @computed_field
     @property
     def output_dir(self) -> str:
-        return os.path.abspath(os.path.join(_base_dir, self.m_output_dir))
+        return os.path.abspath(os.path.join(_data_dir, self._output_dir))
 
 
 class ModelConfig(BaseModel):
@@ -201,7 +221,6 @@ class Config(BaseSettings):
 
     db: DBConfig
     relay_url: str
-    faucet_url: str
 
     task_config: TaskConfig
 
@@ -210,8 +229,6 @@ class Config(BaseSettings):
     web_dist: str = ""
 
     resource_dir: str = ""
-
-    last_result: Optional[str] = None
 
     model_config = YamlSettingsConfigDict(
         env_nested_delimiter="__",
@@ -254,13 +271,6 @@ def set_config(config: Config):
     _config = config
 
 
-def dump_config(config: Config):
-    config_file: Optional[str] = config.model_config.get("yaml_file")
-    assert config_file is not None
-    with open(config_file, mode="w", encoding="utf-8") as f:
-        yaml.safe_dump(config.model_dump(), f)
-
-
 _condition: Optional[Condition] = None
 
 
@@ -289,7 +299,7 @@ async def set_privkey(privkey: str):
         config.ethereum.privkey = privkey
         condition.notify(1)
 
-    await to_thread.run_sync(functools.partial(dump_config, config=config))
+    await to_thread.run_sync(partial(config.ethereum.dump_privkey, privkey=privkey))
 
 
 def get_privkey() -> str:
