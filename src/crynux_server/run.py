@@ -116,6 +116,8 @@ class CrynuxRunner(object):
         finally:
             with move_on_after(2, shield=True):
                 await db.close()
+            with move_on_after(10, shield=True):
+                await self._node_manager.close()
             self._shutdown_event = None
             self._tg = None
             _logger.info("Crynux server stopped")
@@ -130,7 +132,7 @@ class CrynuxRunner(object):
             _logger.info("stop server")
         if self._node_manager is not None:
             with move_on_after(10, shield=True):
-                await self._node_manager.finish()
+                await self._node_manager.stop()
                 _logger.info("stop node manager")
         self._tg.cancel_scope.cancel()
         _logger.info("cancel runner task group")

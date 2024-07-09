@@ -503,7 +503,8 @@ async def test_node_manager(
             ).status == models.NodeStatus.Stopped
 
         for n in node_managers:
-            await n.finish()
+            await n.stop()
+            await n.close()
         tg.cancel_scope.cancel()
 
 
@@ -556,7 +557,7 @@ async def test_node_manager_auto_cancel(
             )
             assert state.status == models.TaskStatus.Aborted
 
-            await node_managers[0].finish()
+            await node_managers[0].stop()
             tg.cancel_scope.cancel()
     finally:
         await root_contracts.task_contract.update_timeout(900, option=tx_option)
@@ -688,5 +689,5 @@ async def test_node_manager_with_recover(
             ).status == models.NodeStatus.Stopped
 
         for n in node_managers:
-            await n.finish()
+            await n.stop()
         tg.cancel_scope.cancel()

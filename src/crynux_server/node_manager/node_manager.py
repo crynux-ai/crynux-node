@@ -162,7 +162,7 @@ class NodeManager(object):
         self._tg: Optional[TaskGroup] = None
         self._finish_event: Optional[Event] = None
 
-        self._closed = False
+        self._stoped = False
 
     @property
     def finish_event(self) -> Event:
@@ -272,13 +272,20 @@ class NodeManager(object):
         if blocknumber_cache is not None and await blocknumber_cache.get() > 0:
             return
 
-        task_id = await self._contracts.task_contract.get_node_task(
-            self._contracts.account
-        )
-        if task_id == 0:
-            return
+        async for attemp in AsyncRetrying(
+            stop=stop_never if self._retry else stop_after_attempt(1),
+            wait=wait_fixed(self._retry_delay),
+            reraise=True,
+        ):
+            with attemp:
+                task_id = await self._contracts.task_contract.get_node_task(
+                    self._contracts.account
+                )
+                if task_id == 0:
+                    return
 
-        task = await self._contracts.task_contract.get_task(task_id=task_id)
+                task = await self._contracts.task_contract.get_task(task_id=task_id)
+
         round = task.selected_nodes.index(self._contracts.account)
         state = models.TaskState(
             task_id=task_id,
@@ -462,7 +469,7 @@ class NodeManager(object):
                         await self.state_cache.set_node_state(
                             models.NodeStatus.Error, msg
                         )
-                    await self.finish()
+                    await self.stop()
                     return
 
                 await self._recover()
@@ -529,17 +536,13 @@ class NodeManager(object):
             _logger.error(msg)
             with fail_after(5, shield=True):
                 await self.state_cache.set_node_state(models.NodeStatus.Error, msg)
-            await self.finish()
+            await self.stop()
         finally:
             _logger.info("node manager is stopped")
 
-    async def finish(self):
-        if not self._closed:
+    async def stop(self):
+        if not self._stoped:
             try:
-                if self._relay is not None:
-                    with fail_after(2, shield=True):
-                        await self._relay.close()
-                    self._relay = None
                 if self._watcher is not None:
                     self._watcher.stop()
                     self._watcher = None
@@ -551,15 +554,21 @@ class NodeManager(object):
                         await self._node_state_manager.try_stop()
                     self._node_state_manager.stop_sync()
                     self._node_state_manager = None
-                if self._contracts is not None:
-                    await self._contracts.close()
-                    self._contracts = None
 
                 if self._tg is not None and not self._tg.cancel_scope.cancel_called:
                     self._tg.cancel_scope.cancel()
 
             finally:
-                self._closed = True
+                self._stoped = True
+
+    async def close(self):
+        if self._relay is not None:
+            with fail_after(2, shield=True):
+                await self._relay.close()
+            self._relay = None
+        if self._contracts is not None:
+            await self._contracts.close()
+            self._contracts = None
 
 
 _node_manager: Optional[NodeManager] = None
