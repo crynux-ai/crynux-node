@@ -80,8 +80,8 @@ $ python -m venv venv
 # Use ./venv/Scripts/Activate.ps1 on Windows
 $ ./venv/bin/activate
 
-# Use requirements_desktop.txt if you need start the desktop GUI
-(venv) $ pip install -r ./requirements_docker.txt
+# Use requirements_docker.txt if you do not need the desktop GUI
+(venv) $ pip install -r ./requirements_desktop.txt
 
 # Compile the project and install it as a pip dependency. Make sure no error is reported during this step.
 (venv) $ pip install .
