@@ -19,7 +19,7 @@ from anyio import (
 from anyio.abc import TaskStatus, TaskGroup
 
 from crynux_server import db, log, utils
-from crynux_server.config import get_config
+from crynux_server.config import get_config, with_proxy
 from crynux_server.node_manager import NodeManager, set_node_manager
 from crynux_server.worker_manager import WorkerManager, set_worker_manager
 from crynux_server.server import Server, set_server
@@ -71,56 +71,57 @@ class CrynuxRunner(object):
 
         _logger.info("Starting Crynux server")
 
-        self._shutdown_event = Event()
+        with with_proxy(self.config):
+            self._shutdown_event = Event()
 
-        await db.init(self.config.db)
-        _logger.info("DB init completed.")
+            await db.init(self.config.db)
+            _logger.info("DB init completed.")
 
-        worker_manager = WorkerManager(self.config)
-        set_worker_manager(worker_manager)
+            worker_manager = WorkerManager(self.config)
+            set_worker_manager(worker_manager)
 
-        _logger.info(f"Serving WebUI from: {os.path.abspath(self.config.web_dist)}")
-        self._server = Server(self.config.web_dist)
-        set_server(self._server)
-        _logger.info("Web server init completed.")
+            _logger.info(f"Serving WebUI from: {os.path.abspath(self.config.web_dist)}")
+            self._server = Server(self.config.web_dist)
+            set_server(self._server)
+            _logger.info("Web server init completed.")
 
-        gpu_info = await utils.get_gpu_info()
-        gpu_name = gpu_info.model
-        gpu_vram_gb = math.ceil(gpu_info.vram_total_mb / 1024)
+            gpu_info = await utils.get_gpu_info()
+            gpu_name = gpu_info.model
+            gpu_vram_gb = math.ceil(gpu_info.vram_total_mb / 1024)
 
-        _logger.info("Starting node manager...")
+            _logger.info("Starting node manager...")
 
-        self._node_manager = NodeManager(
-            config=self.config, gpu_name=gpu_name, gpu_vram=gpu_vram_gb
-        )
-        set_node_manager(self._node_manager)
+            self._node_manager = NodeManager(
+                config=self.config, gpu_name=gpu_name, gpu_vram=gpu_vram_gb
+            )
+            set_node_manager(self._node_manager)
 
-        _logger.info("Node manager created.")
+            _logger.info("Node manager created.")
 
-        try:
-            async with create_task_group() as tg:
-                self._tg = tg
+            try:
+                async with create_task_group() as tg:
+                    self._tg = tg
 
-                tg.start_soon(self._check_should_shutdown)
-                tg.start_soon(self._wait_for_shutdown)
+                    tg.start_soon(self._check_should_shutdown)
+                    tg.start_soon(self._wait_for_shutdown)
 
-                await tg.start(
-                    self._server.start,
-                    self.config.server_host,
-                    self.config.server_port,
-                    self.config.log.level == "DEBUG",
-                )
-                _logger.info("Crynux server started.")
-                task_status.started()
-                tg.start_soon(self._node_manager.run)
-        finally:
-            with move_on_after(2, shield=True):
-                await db.close()
-            with move_on_after(10, shield=True):
-                await self._node_manager.close()
-            self._shutdown_event = None
-            self._tg = None
-            _logger.info("Crynux server stopped")
+                    await tg.start(
+                        self._server.start,
+                        self.config.server_host,
+                        self.config.server_port,
+                        self.config.log.level == "DEBUG",
+                    )
+                    _logger.info("Crynux server started.")
+                    task_status.started()
+                    tg.start_soon(self._node_manager.run)
+            finally:
+                with move_on_after(2, shield=True):
+                    await db.close()
+                with move_on_after(10, shield=True):
+                    await self._node_manager.close()
+                self._shutdown_event = None
+                self._tg = None
+                _logger.info("Crynux server stopped")
 
     async def _stop(self):
         _logger.info("Stopping crynux server")

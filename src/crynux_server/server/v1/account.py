@@ -39,7 +39,7 @@ async def get_account_info():
         except Exception as e:
             _logger.exception(e)
             _logger.error("get account balance error")
-            raise HTTPException(status_code=500, detail=f"ContractError: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"ContractError: {type(e).__name__} {str(e)}")
 
         return res
 

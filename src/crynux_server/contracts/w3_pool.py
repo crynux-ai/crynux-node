@@ -191,6 +191,7 @@ class W3Pool(object):
             session = ClientSession(
                 timeout=ClientTimeout(self._timeout),
                 connector=TCPConnector(ssl=ssl_context),
+                trust_env=True,
             )
             await provider.cache_async_session(session)
             w3 = AsyncWeb3(provider)
