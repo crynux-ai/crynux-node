@@ -327,8 +327,7 @@ if __name__ == "__main__":
             crynux_config.set_config(cfg)
 
         elif system_name == "Windows":
-            resdir = os.path.join(os.path.dirname(app_path), "data")
-            crynux_config.set_data_dir(resdir)
+            crynux_config.set_data_dir("data")
             config_file_path = crynux_config.config_file_path()
 
             _logger.debug(f"Config file path on windows: {config_file_path}")
