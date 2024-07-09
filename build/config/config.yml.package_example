@@ -6,15 +6,9 @@ log:
   level: "INFO"
 
 ethereum:
-  # The private key of the wallet
-  # Must be filled if headless mode is enabled
-  # If headless mode is not enabled,
-  # the private key can also be filled using the WebUI.
-  privkey: ""
-  
   # The JSON RPC endpoint of the Blockchain node
   # Here we use the private chain for the Hydrogen Network
-  provider: "https://json-rpc.crynux.evm.ra.blumbus.noisnemyd.xyz/"
+  provider: "https://crynux-testnet.public.blastapi.io"
 
   # The Blockchain params
   # Leave it as is for the private chain used in the Hydrogen Network
@@ -39,7 +33,7 @@ db:
   filename: db/server.db
 
 # The URL of the Relay
-relay_url: "https://dy.relay.crynux.ai"
+relay_url: "https://dym.relay.crynux.ai"
 
 # The directory that stores the distribution files of the WebUI
 web_dist: webui/dist
@@ -54,8 +48,6 @@ task_config:
   preloaded_models:
     sd_base:
       - id: "runwayml/stable-diffusion-v1-5"
-      - id: "emilianJR/chilloutmix_NiPrunedFp32Fix"
-        variant: null
       - id: "stabilityai/stable-diffusion-xl-base-1.0"
     gpt_base:
       - id: "gpt2"

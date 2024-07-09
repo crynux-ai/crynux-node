@@ -62,6 +62,7 @@ RUN pip install .
 
 FROM base as final
 
+COPY build/data/ /app/
 COPY --from=builder1 /app/venv /app/venv
 COPY --from=builder2 /app/venv /app/worker/venv
 COPY crynux-worker/crynux_worker_process.py /app/worker/crynux_worker_process.py
@@ -69,13 +70,9 @@ COPY crynux-worker/crynux_worker_process.py /app/worker/crynux_worker_process.py
 ENV PATH="/app/venv/bin:${PATH}"
 
 WORKDIR /app
-
-RUN mkdir data && mkdir data/external && mkdir data/huggingface && mkdir data/results && mkdir data/inference-logs
-COPY config/config.yml.docker_example config.yml.example
-COPY start.sh start.sh
+COPY build/config/config.yml.docker_example config.yml.example
+COPY build/start.sh start.sh
 COPY --from=web-builder /app/dist/ dist/
-
-ENV CRYNUX_SERVER_CONFIG="/app/config/config.yml"
 
 ENTRYPOINT ["bash", "start.sh"]
 CMD [ "run" ]

@@ -1,11 +1,9 @@
 # Build package from source
 # Example call: bash build/macos/prepare.sh -w ~/crynux_app
 
-while getopts ":w:d:" opt; do
+while getopts ":w:" opt; do
   case $opt in
     w) WORK_DIR="$OPTARG"
-    ;;
-    d) DATA_DIR="$OPTARG"
     ;;
     \?) echo "Invalid option -$OPTARG" >&2
     exit 1
@@ -124,17 +122,6 @@ pip install .
 
 cd $WORK_DIR
 
-mkdir config
-cp $GIT_DIR/config/config.yml.package_example config/config.yml
-cp $GIT_DIR/start.sh start.sh
+cp -R $GIT_DIR/build/data .
+cp $GIT_DIR/build/config/config.yml.package_example data/config/config.yml
 cp $GIT_DIR/build/macos/* .
-
-## Prepare the data folder
-if [ $DATA_DIR ] && [ -d $DATA_DIR ]; then
-  # In case the data has been stored elsewhere
-  echo "$DATA_DIR exist, copy it to macapp"
-  mkdir "data"
-  cp -R $DATA_DIR/* "data/"
-else
-  cp -R $GIT_DIR/build/data .
-fi

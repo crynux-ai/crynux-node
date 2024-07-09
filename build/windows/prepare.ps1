@@ -96,8 +96,8 @@ pip install .
 
 Set-Location $RELEASE_DIR
 New-Item -ItemType Directory -Path config
-Copy-Item $WORK_DIR/config/config.yml.package_example config/config.yml
-Copy-Item $WORK_DIR/start.sh start.sh
+Copy-Item -Recurse "$WORK_DIR/build/data" "data"
 Copy-Item $WORK_DIR/build/windows/* .
+Copy-Item $WORK_DIR/build/config/config.yml.package_example "data/config/config.yml"
 
 Set-Location $WORK_DIR

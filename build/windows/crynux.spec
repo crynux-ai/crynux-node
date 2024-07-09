@@ -5,9 +5,7 @@ a = Analysis(
     ['crynux-node/src/app/main.py'],
     pathex=[],
     binaries=[],
-    datas=[
-        ('config/*', 'config/'),
-    ] + collect_data_files('crynux_server.contracts.abi'),
+    datas=collect_data_files('crynux_server.contracts.abi'),
     hiddenimports=['aiosqlite', "crynux_server.contracts.abi", "pkg_resources.extern"],
     collect_submodules=["crynux_server.contracts.abi"],
     collect_data=["crynux_server.contracts.abi"],

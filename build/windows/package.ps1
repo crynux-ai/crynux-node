@@ -19,14 +19,7 @@ pyinstaller crynux_worker_process.spec
 
 Move-Item -Path "dist/crynux_worker_process" "dist/Crynux Node/crynux_worker_process"
 
-New-Item -ItemType Directory -Path "dist/Crynux Node/config"
-Copy-Item "../../config/config.yml.package_example" "dist/Crynux Node/config/config.yml"
-
-New-Item -ItemType Directory -Path "dist/Crynux Node/data"
-New-Item -ItemType Directory -Path "dist/Crynux Node/data/external"
-New-Item -ItemType Directory -Path "dist/Crynux Node/data/huggingface"
-New-Item -ItemType Directory -Path "dist/Crynux Node/data/results"
-New-Item -ItemType Directory -Path "dist/Crynux Node/data/inference-logs"
+Copy-Item -Recurse "data" "dist/Crynux Node/data"
 
 New-Item -ItemType Directory -Path "dist/Crynux Node/webui"
 Copy-Item -Recurse "webui/dist" "dist/Crynux Node/webui/dist"

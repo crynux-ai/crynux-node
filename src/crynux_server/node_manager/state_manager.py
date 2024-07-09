@@ -132,7 +132,7 @@ class NodeStateManager(object):
                 continue
 
             elif status == models.ChainNodeStatus.QUIT:
-                node_amount = Web3.to_wei(400, "ether")
+                node_amount = Web3.to_wei("400.01", "ether")
                 balance = await self.contracts.get_balance(
                     self.contracts.account
                 )

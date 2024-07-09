@@ -13,7 +13,6 @@ a = Analysis(
         ('dist/crynux_worker_process', '.'),
     ],
     datas=[
-        ('config/*', 'config/'),
         ('data', 'data'),
         ('res', 'res'),
         ('webui', 'webui'),

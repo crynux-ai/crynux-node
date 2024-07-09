@@ -1,15 +1,18 @@
 from __future__ import annotations
 
 import os
-from functools import cached_property, partial
+from functools import partial
 from typing import Any, Dict, List, Literal, Tuple, Type, TypedDict, Optional
 
 import yaml
 from anyio import Condition, to_thread
 from pydantic import BaseModel, computed_field, Field
 from pydantic.fields import FieldInfo
-from pydantic_settings import (BaseSettings, PydanticBaseSettingsSource,
-                               SettingsConfigDict)
+from pydantic_settings import (
+    BaseSettings,
+    PydanticBaseSettingsSource,
+    SettingsConfigDict,
+)
 from web3 import Web3
 from web3.types import Wei
 
@@ -25,8 +28,12 @@ __all__ = [
 ]
 
 
-class YamlSettingsConfigDict(SettingsConfigDict):
-    yaml_file: str | None
+_data_dir: str = ""
+_config_dir: str = "config"
+
+
+def config_file_path():
+    return os.path.join(_data_dir, _config_dir, "config.yml")
 
 
 class YamlConfigSettingsSource(PydanticBaseSettingsSource):
@@ -44,13 +51,13 @@ class YamlConfigSettingsSource(PydanticBaseSettingsSource):
     @property
     def yaml_data(self) -> Dict[str, Any]:
         if self._yaml_data is None:
-            yaml_file = self.config.get("yaml_file")
+            yaml_file = config_file_path()
             if yaml_file is not None and os.path.exists(yaml_file):
                 with open(yaml_file, mode="r", encoding="utf-8") as f:
                     self._yaml_data = yaml.safe_load(f)
             else:
                 self._yaml_data = {}
-        return self._yaml_data # type: ignore
+        return self._yaml_data  # type: ignore
 
     def get_field_value(
         self, field: FieldInfo, field_name: str
@@ -82,8 +89,6 @@ class YamlConfigSettingsSource(PydanticBaseSettingsSource):
 LogLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR", "FATAL", "CRITICAL"]
 DBDriver = Literal["sqlite"]
 
-
-_data_dir: str = ""
 
 def set_data_dir(dirname: str):
     global _data_dir
@@ -139,25 +144,24 @@ class Ethereum(BaseModel):
 
     contract: Contract
 
-    _privkey_file: str = "privkey.txt"
+    _privkey_file: str = "private_key.txt"
     _privkey: str = ""
 
-    @computed_field
     @property
     def privkey(self) -> str:
         if len(self._privkey) == 0:
-            privkey_file = os.path.join(_data_dir, self._privkey_file)
+            privkey_file = os.path.join(_data_dir, _config_dir, self._privkey_file)
             if os.path.exists(privkey_file):
                 with open(privkey_file, mode="r", encoding="utf-8") as f:
                     self._privkey = f.read().strip()
         return self._privkey
-    
+
     @privkey.setter
     def privkey(self, privkey: str):
         self._privkey = privkey
 
     def dump_privkey(self, privkey: str):
-        privkey_file = os.path.join(_data_dir, self._privkey_file)
+        privkey_file = os.path.join(_data_dir, _config_dir, self._privkey_file)
         with open(privkey_file, mode="w", encoding="utf-8") as f:
             f.write(privkey)
 
@@ -188,7 +192,7 @@ class TaskConfig(BaseModel):
     @property
     def script_dir(self) -> str:
         return os.path.abspath(os.path.join(_data_dir, self._script_dir))
-    
+
     @computed_field
     @property
     def output_dir(self) -> str:
@@ -230,9 +234,8 @@ class Config(BaseSettings):
 
     resource_dir: str = ""
 
-    model_config = YamlSettingsConfigDict(
+    model_config = SettingsConfigDict(
         env_nested_delimiter="__",
-        yaml_file=os.getenv("CRYNUX_SERVER_CONFIG", "config/config.yml"),
         env_file=".env",
     )
 

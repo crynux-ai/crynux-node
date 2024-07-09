@@ -1,3 +1,6 @@
+*
+crynux_node/
+!config/*example
 !data/
 !macos/
 !windows/
@@ -5,4 +8,5 @@
 !Dockerfile
 !bump-version.ps1
 !changelog-template.md
-*
+!start.sh
+!*/

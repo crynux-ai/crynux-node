@@ -308,20 +308,18 @@ if __name__ == "__main__":
     _logger.addHandler(handler)
     _logger.setLevel(logging.DEBUG)
 
+    from crynux_server import config as crynux_config
+
     if getattr(sys, "frozen", False):
         app_path = os.path.dirname(sys.executable)
         system_name = platform.system()
 
         if system_name == "Darwin":
             resdir = os.path.join(os.path.dirname(app_path), "Resources")
-            config_file_path = os.path.abspath(os.path.join(resdir, "config", "config.yml"))
-            os.environ["CRYNUX_SERVER_CONFIG"] = config_file_path
+            crynux_config.set_data_dir(resdir)
+            config_file_path = crynux_config.config_file_path()
 
             _logger.debug(f"Config file path on mac: {config_file_path}")
-
-            from crynux_server import config as crynux_config
-
-            crynux_config.set_data_dir(resdir)
 
             cfg = crynux_config.get_config()
             cfg.web_dist = os.path.join(resdir, "webui/dist")
@@ -329,8 +327,8 @@ if __name__ == "__main__":
             crynux_config.set_config(cfg)
 
         elif system_name == "Windows":
-            config_file_path = os.path.abspath(os.path.join("config", "config.yml"))
-            os.environ["CRYNUX_SERVER_CONFIG"] = config_file_path
+            crynux_config.set_data_dir("data")
+            config_file_path = crynux_config.config_file_path()
 
             _logger.debug(f"Config file path on windows: {config_file_path}")
         else:
@@ -338,17 +336,17 @@ if __name__ == "__main__":
             _logger.error(error)
             raise error
 
-    elif os.getenv("CRYNUX_SERVER_CONFIG") is None:
+    else:
+        # start from source
         index = __file__.rfind(os.path.sep + "src")
         root_dir = __file__[:index]
 
-        config_file_path = os.path.abspath(os.path.join(root_dir, "config", "config.yml"))
-        os.environ["CRYNUX_SERVER_CONFIG"] = config_file_path
+        crynux_config.set_data_dir(root_dir)
+        config_file_path = crynux_config.config_file_path()
 
         _logger.debug(f"Config file path from source: {config_file_path}")
 
-    assert os.environ["CRYNUX_SERVER_CONFIG"]
-    config_file_path = os.path.abspath(os.environ["CRYNUX_SERVER_CONFIG"])
+    config_file_path = crynux_config.config_file_path()
     _logger.info(f"Start Crynux Node from: {config_file_path}")
 
     main()
