@@ -4,11 +4,23 @@ import logging
 from datetime import datetime
 from typing import Optional, Type
 
-from anyio import (TASK_STATUS_IGNORED, Event, create_task_group, fail_after,
-                   get_cancelled_exc_class, move_on_after, sleep)
+from anyio import (
+    TASK_STATUS_IGNORED,
+    Event,
+    create_task_group,
+    fail_after,
+    get_cancelled_exc_class,
+    move_on_after,
+    sleep,
+)
 from anyio.abc import TaskGroup, TaskStatus
-from tenacity import (AsyncRetrying, before_sleep_log, stop_after_attempt,
-                      stop_never, wait_fixed)
+from tenacity import (
+    AsyncRetrying,
+    before_sleep_log,
+    stop_after_attempt,
+    stop_never,
+    wait_fixed,
+)
 from web3 import Web3
 from web3.types import EventData
 
@@ -17,17 +29,35 @@ from crynux_server.config import Config, wait_privkey
 from crynux_server.contracts import Contracts, set_contracts
 from crynux_server.event_queue import DbEventQueue, EventQueue, set_event_queue
 from crynux_server.relay import Relay, WebRelay, set_relay
-from crynux_server.task import (DbTaskStateCache, InferenceTaskRunner,
-                                TaskStateCache, TaskSystem,
-                                set_task_state_cache, set_task_system)
-from crynux_server.watcher import (BlockNumberCache, DbBlockNumberCache,
-                                   EventWatcher, set_watcher)
-from crynux_server.worker_manager import (PrefetchError, TaskCancelled,
-                                          TaskError, WorkerManager,
-                                          get_worker_manager)
+from crynux_server.task import (
+    DbTaskStateCache,
+    InferenceTaskRunner,
+    TaskStateCache,
+    TaskSystem,
+    set_task_state_cache,
+    set_task_system,
+)
+from crynux_server.watcher import (
+    BlockNumberCache,
+    DbBlockNumberCache,
+    EventWatcher,
+    set_watcher,
+)
+from crynux_server.worker_manager import (
+    PrefetchError,
+    TaskCancelled,
+    TaskError,
+    WorkerManager,
+    get_worker_manager,
+)
 
-from .state_cache import (DbNodeStateCache, DbTxStateCache, ManagerStateCache,
-                          StateCache, set_manager_state_cache)
+from .state_cache import (
+    DbNodeStateCache,
+    DbTxStateCache,
+    ManagerStateCache,
+    StateCache,
+    set_manager_state_cache,
+)
 from .state_manager import NodeStateManager, set_node_state_manager
 
 _logger = logging.getLogger(__name__)
@@ -472,6 +502,10 @@ class NodeManager(object):
                     await self.stop()
                     return
 
+                await self.state_cache.set_node_state(
+                    models.NodeStatus.Init,
+                    init_message="Synchronizing node status from the blockchain",
+                )
                 await self._recover()
 
                 assert self._task_system is not None
@@ -483,6 +517,7 @@ class NodeManager(object):
                 node_amount = Web3.to_wei("400.01", "ether")
                 balance = await self._contracts.get_balance(self._contracts.account)
                 while balance < node_amount:
+                    await self.state_cache.set_node_state(status=models.NodeStatus.Stopped)
                     await sleep(5)
                     balance = await self._contracts.get_balance(self._contracts.account)
 
