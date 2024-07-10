@@ -4,7 +4,7 @@ from typing import Dict, Optional, Type, TypeVar
 from anyio import create_task_group, get_cancelled_exc_class
 from anyio.abc import TaskGroup
 from tenacity import (AsyncRetrying, stop_after_attempt, stop_never,
-                      wait_exponential)
+                      wait_fixed)
 
 from crynux_server.event_queue import EventQueue
 from crynux_server.models import TaskStatus
@@ -54,7 +54,7 @@ class TaskSystem(object):
 
             async for attemp in AsyncRetrying(
                 stop=stop_never if self._retry else stop_after_attempt(1),
-                wait=wait_exponential(multiplier=10),
+                wait=wait_fixed(30),
                 reraise=True,
             ):
                 with attemp:
