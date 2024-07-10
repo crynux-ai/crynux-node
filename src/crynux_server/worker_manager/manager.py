@@ -170,6 +170,13 @@ class WorkerManager(object):
         ):
             self._prefetch_task_result.close()
 
+    def cancel_prefetch_task(self, worker_id: int):
+        if (
+            self._prefetch_worker_id == worker_id
+            and not self._prefetch_task_result.done()
+        ):
+            self._prefetch_task_result.cancel()
+
     def reset_prefetch_task(self):
         self._prefetch_task_result = TaskStreamResult()
 
@@ -215,6 +222,13 @@ class WorkerManager(object):
     async def get_init_inference_task_result(self):
         if not self._init_inference_task_result.done():
             await self._init_inference_task_result.get()
+
+    def cancel_init_inference_task(self, worker_id: int):
+        if (
+            self._init_inference_worker_id == worker_id
+            and not self._init_inference_task_result.done()
+        ):
+            self._init_inference_task_result.cancel()
 
     def reset_init_inference_task(self):
         self._init_inference_task_result = TaskResult()
