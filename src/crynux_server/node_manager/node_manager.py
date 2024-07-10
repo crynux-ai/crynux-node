@@ -249,7 +249,7 @@ class NodeManager(object):
 
         async for attemp in AsyncRetrying(
             stop=stop_after_attempt(3) if self._retry else stop_after_attempt(1),
-            wait=wait_fixed(self._retry_delay),
+            wait=wait_fixed(1),
             before_sleep=before_sleep_log(_logger, logging.ERROR, exc_info=True),
             reraise=True,
         ):
@@ -263,7 +263,7 @@ class NodeManager(object):
                         )
                 except TaskCancelled:
                     self._worker_manager.reset_prefetch_task()
-                    raise
+                    raise ValueError("Failed to download models due to worker internal error")
                 except PrefetchError as e:
                     self._worker_manager.reset_prefetch_task()
                     raise ValueError(
@@ -385,7 +385,7 @@ class NodeManager(object):
                     with fail_after(5, shield=True):
                         await self.state_cache.set_node_state(
                             status=models.NodeStatus.Error,
-                            message="Node manager running error: cannot sync node state from chain.",
+                            message="Node manager running error: cannot sync node state from chain, retrying...",
                         )
                     raise
 
@@ -453,13 +453,24 @@ class NodeManager(object):
                     with fail_after(5, shield=True):
                         await self.state_cache.set_node_state(
                             status=models.NodeStatus.Error,
-                            message="Node manager running error: cannot watch events from chain.",
+                            message="Node manager running error: cannot watch events from chain, retrying...",
                         )
                     raise
 
     async def _check_time(self):
         assert self._relay is not None
-        remote_now = await self._relay.now()
+        async for attemp in AsyncRetrying(
+            stop=stop_after_attempt(3),
+            wait=wait_fixed(self._retry_delay),
+            reraise=True,
+        ):
+            with attemp:
+                try:
+                    remote_now = await self._relay.now()
+                except Exception as e:
+                    _logger.exception(e)
+                    _logger.error(f"Cannot get server time from relay")
+                    raise ValueError("Cannot get server time from relay")
         now = int(datetime.now().timestamp())
         diff = now - remote_now
         if abs(diff) > 60:

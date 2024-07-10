@@ -1,12 +1,13 @@
 import logging
 from enum import IntEnum
-from typing import Any, Dict, Optional, List
+from typing import Any, Dict, Optional
 
 from anyio import Condition
 from eth_typing import ChecksumAddress
+from hexbytes import HexBytes
 from web3.logs import WARN
 from web3.providers.async_base import AsyncBaseProvider
-from web3.types import TxParams, TxReceipt, BlockIdentifier
+from web3.types import TxParams, TxReceipt, BlockIdentifier, BlockData
 
 from crynux_server.config import TxOption
 
@@ -249,16 +250,15 @@ class Contracts(object):
         async with await self._w3_pool.get() as w3:
             return await w3.eth.get_block_number()
 
-    async def get_block_tx_receipts(self, block_identifier: BlockIdentifier) -> List[TxReceipt]:
+    async def get_block(self, block_identifier: BlockIdentifier) -> BlockData:
         async with await self._w3_pool.get() as w3:
             block = await w3.eth.get_block(block_identifier=block_identifier)
-            receipts = []
-            assert "transactions" in block
-            for tx_hash in block["transactions"]:
-                assert isinstance(tx_hash, bytes)
-                receipt = await w3.eth.get_transaction_receipt(tx_hash)
-                receipts.append(receipt)
-        return receipts
+            return block
+        
+    async def get_tx_receipt(self, tx_hash: HexBytes) -> TxReceipt:
+        async with await self._w3_pool.get() as w3:
+            receipt = await w3.eth.get_transaction_receipt(tx_hash)
+            return receipt
 
     async def get_balance(self, account: ChecksumAddress) -> int:
         async with await self._w3_pool.get() as w3:

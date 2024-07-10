@@ -77,6 +77,8 @@ async def process_prefetch(
         worker_manager.finish_prefetch_task(worker_id)
         _logger.info(f"worker {worker_id} complete prefetching models")
     except WebSocketDisconnect:
+        _logger.error(f"worker {worker_id} disconnects during prefetching models")
+        worker_manager.cancel_prefetch_task(worker_id)
         raise
     except Exception as e:
         _logger.exception(e)
@@ -110,6 +112,8 @@ async def process_init_inference(
             worker_manager.init_inference_task_success(worker_id)
             _logger.info(f"worker {worker_id} complete init inference task")
     except WebSocketDisconnect:
+        _logger.error(f"worker {worker_id} disconnects during running initial inference task")
+        worker_manager.cancel_init_inference_task(worker_id)
         raise
     except Exception as e:
         _logger.exception(e)
@@ -162,6 +166,8 @@ async def _process_one_inference_task(
                 break
         task_result.set_result(results)
     except WebSocketDisconnect:
+        _logger.error(f"worker {worker_id} disconnects, cancel inference task {task_input.task_id}")
+        task_result.cancel()
         raise
     except Exception as e:
         _logger.exception(e)
