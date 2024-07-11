@@ -52,9 +52,7 @@ task_config:
     gpt_base:
       - id: "gpt2"
       - id: "tiiuae/falcon-7b-instruct"
-    controlnet:
-      - id: "lllyasviel/control_v11p_sd15_openpose"
-      - id: "thibaud/controlnet-openpose-sdxl-1.0"
+    controlnet: []
     vae: []
     
   # The proxy server used when downloading models.

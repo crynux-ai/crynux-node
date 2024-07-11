@@ -3,28 +3,22 @@ if __name__ == "__main__":
 
     multiprocessing.freeze_support()
 
+import logging
 import math
-import signal
 import os.path
+import signal
 from typing import Optional
 
 import anyio
-from anyio import (
-    TASK_STATUS_IGNORED,
-    create_task_group,
-    move_on_after,
-    sleep,
-    Event,
-)
-from anyio.abc import TaskStatus, TaskGroup
+from anyio import (TASK_STATUS_IGNORED, Event, create_task_group,
+                   get_cancelled_exc_class, move_on_after, sleep)
+from anyio.abc import TaskGroup, TaskStatus
 
 from crynux_server import db, log, utils
 from crynux_server.config import get_config, with_proxy
 from crynux_server.node_manager import NodeManager, set_node_manager
-from crynux_server.worker_manager import WorkerManager, set_worker_manager
 from crynux_server.server import Server, set_server
-
-import logging
+from crynux_server.worker_manager import WorkerManager, set_worker_manager
 
 _logger = logging.getLogger(__name__)
 
@@ -114,6 +108,12 @@ class CrynuxRunner(object):
                     _logger.info("Crynux server started.")
                     task_status.started()
                     tg.start_soon(self._node_manager.run)
+            except get_cancelled_exc_class() as e:
+                _logger.debug("Crynux server stopped for being cancelled")
+                _logger.debug(e, exc_info=True)
+            except Exception as e:
+                _logger.debug("Crynux server stopped by exception")
+                _logger.debug(e, exc_info=True)
             finally:
                 with move_on_after(2, shield=True):
                     await db.close()
