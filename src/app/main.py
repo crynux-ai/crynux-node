@@ -322,7 +322,7 @@ if __name__ == "__main__":
 
         if system_name == "Darwin":
             resdir = os.path.join(os.path.dirname(app_path), "Resources")
-            crynux_config.set_data_dir(resdir)
+            crynux_config.set_data_dir(os.path.join(resdir, "data"))
             config_file_path = crynux_config.config_file_path()
 
             _logger.debug(f"Config file path on mac: {config_file_path}")
