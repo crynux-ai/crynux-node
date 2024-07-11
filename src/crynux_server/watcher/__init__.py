@@ -1,13 +1,9 @@
 from typing import Optional
 
-from .block_cache import BlockNumberCache, DbBlockNumberCache, MemoryBlockNumberCache
 from .watcher import EventWatcher
 
 __all__ = [
     "EventWatcher",
-    "BlockNumberCache",
-    "DbBlockNumberCache",
-    "MemoryBlockNumberCache",
     "get_watcher",
     "set_watcher",
 ]
