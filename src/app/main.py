@@ -284,6 +284,12 @@ def main():
         with loop:
             loop.run_until_complete(_main())
         _logger.debug("app quit")
+    except asyncio.CancelledError as e:
+        _logger.debug("app stopped for being cancelled")
+        _logger.debug(e, exc_info=True)
+    except Exception as e:
+        _logger.debug("app stopped by exception")
+        _logger.debug(e, exc_info=True)
     finally:
         proc = psutil.Process(os.getpid())
         for p in proc.children(recursive=True):
