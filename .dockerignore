@@ -1,6 +1,4 @@
-build
 venv
-stable-diffusion-task/venv
 .idea
 .vscode
 *.iml
@@ -17,3 +15,5 @@ db/*
 logs/*
 config.json
 dist/*
+tmp/
+worker/
