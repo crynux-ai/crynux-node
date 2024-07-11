@@ -46,12 +46,13 @@ class W3Guard(ABC):
         return self._w3
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
-        if isinstance(exc_val, ConnectionClosed):
-            await self.close()
-            _logger.error(f"w3 guard {self._id} is closed due to ConnectionClosed")
-            return True
-        await self._on_idle(self._id)
-        return False
+        with move_on_after(5, shield=True):
+            if isinstance(exc_val, ConnectionClosed):
+                await self.close()
+                _logger.error(f"w3 guard {self._id} is closed due to ConnectionClosed")
+                return True
+            await self._on_idle(self._id)
+            return False
 
     @abstractmethod
     async def close(self): ...

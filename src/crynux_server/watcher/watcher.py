@@ -1,19 +1,16 @@
 import logging
+from asyncio import Queue
 from datetime import datetime
 from typing import Any, Awaitable, Callable, Dict, List, Optional
 
-from anyio import (TASK_STATUS_IGNORED, CancelScope, CapacityLimiter,
-                   create_memory_object_stream, create_task_group, fail_after,
-                   sleep)
-from anyio.abc import (ObjectReceiveStream, ObjectSendStream, TaskGroup,
-                       TaskStatus)
+from anyio import (TASK_STATUS_IGNORED, CancelScope, create_task_group,
+                   get_cancelled_exc_class, move_on_after, sleep)
+from anyio.abc import TaskGroup, TaskStatus
 from hexbytes import HexBytes
 from web3.logs import DISCARD
 from web3.types import EventData, TxReceipt
 
 from crynux_server.contracts import Contracts, ContractWrapper
-
-from .block_cache import BlockNumberCache
 
 EventCallback = Callable[[EventData], Awaitable[None]]
 
@@ -31,7 +28,9 @@ def wrap_callback(callback: EventCallback) -> EventCallback:
     return inner
 
 
-def _filter_event(event: EventData, filter_args: Optional[Dict[str, Any]] = None) -> bool:
+def _filter_event(
+    event: EventData, filter_args: Optional[Dict[str, Any]] = None
+) -> bool:
     if filter_args is None:
         return True
     for key, val in filter_args.items():
@@ -58,8 +57,12 @@ class EventFilter(object):
         self.filter_args = filter_args
 
     async def process_receipt(self, receipt: TxReceipt):
-        events = await self.contract.event_process_receipt(self.event_name, receipt, errors=DISCARD)
-        filtered_events = [event for event in events if _filter_event(event, self.filter_args)]
+        events = await self.contract.event_process_receipt(
+            self.event_name, receipt, errors=DISCARD
+        )
+        filtered_events = [
+            event for event in events if _filter_event(event, self.filter_args)
+        ]
         for event in filtered_events:
             _logger.debug(f"Watcher {self.filter_id}: watch event: {event}")
             await wrap_callback(self.callback)(event)
@@ -70,9 +73,15 @@ class EventFilter(object):
         blocknum = block_receipts[0]["blockNumber"]
         filtered_events = []
         for receipt in block_receipts:
-            events = await self.contract.event_process_receipt(self.event_name, receipt, errors=DISCARD)
-            filtered_events.extend([event for event in events if _filter_event(event, self.filter_args)])
-        _logger.debug(f"Watcher {self.filter_id}: {len(filtered_events)} events from block {blocknum}")
+            events = await self.contract.event_process_receipt(
+                self.event_name, receipt, errors=DISCARD
+            )
+            filtered_events.extend(
+                [event for event in events if _filter_event(event, self.filter_args)]
+            )
+        _logger.debug(
+            f"Watcher {self.filter_id}: {len(filtered_events)} events from block {blocknum}"
+        )
 
         for event in filtered_events:
             _logger.debug(f"Watcher {self.filter_id}: watch event: {event}")
@@ -86,9 +95,10 @@ class EventWatcher(object):
         self._event_filters: Dict[int, EventFilter] = {}
         self._next_filter_id: int = 0
 
-        self._cache: Optional[BlockNumberCache] = None
-
         self._cancel_scope: Optional[CancelScope] = None
+
+        self._blocknum_queue = Queue[int](100)
+        self._tx_hash_queue = Queue[HexBytes](100)
 
     @classmethod
     def from_contracts(cls, contracts: Contracts) -> "EventWatcher":
@@ -96,15 +106,6 @@ class EventWatcher(object):
 
         res = cls(contracts)
         return res
-
-    def set_blocknumber_cache(self, cache: BlockNumberCache):
-        self._cache = cache
-
-    def get_blocknumber_cache(self):
-        return self._cache
-
-    def remove_blocknumber_cache(self):
-        self._cache = None
 
     def watch_event(
         self,
@@ -157,64 +158,86 @@ class EventWatcher(object):
 
             with self._cancel_scope:
 
-                tx_hashes_sender, tx_hashes_receiver = create_memory_object_stream(100, item_type=HexBytes)
+                async def _process_block():
+                    while True:
+                        blocknum = await self._blocknum_queue.get()
+                        try:
+                            block = await self.contracts.get_block(blocknum)
+                            assert "transactions" in block
+                            with move_on_after(5, shield=True):
+                                for tx_hash in block["transactions"]:
+                                    assert isinstance(tx_hash, bytes)
+                                    await self._tx_hash_queue.put(tx_hash)
+                            self._blocknum_queue.task_done()
+                            assert "timestamp" in block
+                            blocktime = datetime.fromtimestamp(
+                                block["timestamp"]
+                            ).strftime("%Y-%m-%d %H:%M:%S")
+                            tx_count = len(block["transactions"])
+                            _logger.debug(
+                                f"block {blocknum} produced at {blocktime}, {tx_count} txs"
+                            )
+                        except get_cancelled_exc_class():
+                            with move_on_after(1, shield=True):
+                                await self._blocknum_queue.put(blocknum)
+                            raise
+                        except Exception:
+                            with move_on_after(1, shield=True):
+                                await self._blocknum_queue.put(blocknum)
+                            raise
 
-                async def _process_block(sender: ObjectSendStream[HexBytes], blocknum: int, limiter: CapacityLimiter):
-                    async with limiter:
-                        block = await self.contracts.get_block(blocknum)
-                        assert "transactions" in block
-                        for tx_hash in block["transactions"]:
-                            assert isinstance(tx_hash, bytes)
-                            await sender.send(tx_hash)
-                        assert "timestamp" in block
-                        blocktime = datetime.fromtimestamp(block["timestamp"]).strftime("%Y-%m-%d %H:%M:%S")
-                        _logger.debug(f"get block {blocknum} produced at {blocktime}")
+                async def _process_tx_receipt():
+                    while True:
+                        tx_hash = await self._tx_hash_queue.get()
+                        try:
+                            receipt = await self.contracts.get_tx_receipt(tx_hash)
+                            event_filters = list(self._event_filters.values())
+                            async with create_task_group() as tg:
+                                with move_on_after(5, shield=True):
+                                    for event_filter in event_filters:
+                                        tg.start_soon(
+                                            event_filter.process_receipt, receipt
+                                        )
+                            self._tx_hash_queue.task_done()
+                            blocknum = receipt["blockNumber"]
+                            tx_index = receipt["transactionIndex"]
+                            _logger.debug(
+                                f"process receipt {tx_index} of block {blocknum}"
+                            )
+                        except get_cancelled_exc_class():
+                            with move_on_after(1, shield=True):
+                                await self._tx_hash_queue.put(tx_hash)
+                            raise
+                        except Exception:
+                            with move_on_after(1, shield=True):
+                                await self._tx_hash_queue.put(tx_hash)
+                            raise
 
+                async with create_task_group() as tg:
+                    for _ in range(4):
+                        tg.start_soon(_process_tx_receipt)
 
-                async def _process_blocks(sender: ObjectSendStream[HexBytes], from_block: int, to_block: int):
+                    for _ in range(4):
+                        tg.start_soon(_process_block)
+
                     if from_block == 0:
-                        if self._cache is not None:
-                            from_block = await self._cache.get()
-                            if from_block == 0:
-                                from_block = await self.contracts.get_current_block_number()
-                        else:
-                            from_block = await self.contracts.get_current_block_number()
-                    else:
-                        if self._cache is not None:
-                            await self._cache.set(from_block)
+                        from_block = await self.contracts.get_current_block_number()
                     # signal the event watcher is started
                     task_status.started()
 
-                    limiter = CapacityLimiter(4)
-                    async with sender:
-                        async with create_task_group() as tg:
-                            while to_block <= 0 or from_block <= to_block:
-                                latest_blocknum = await self.contracts.get_current_block_number()
-                                while from_block <= latest_blocknum:
-                                    tg.start_soon(_process_block, sender, from_block, limiter)
-                                    from_block += 1
-                                with fail_after(delay=5, shield=True):
-                                    if self._cache is not None:
-                                        await self._cache.set(from_block)
-                                await sleep(interval)
+                    while to_block <= 0 or from_block <= to_block:
+                        latest_blocknum = (
+                            await self.contracts.get_current_block_number()
+                        )
+                        while from_block <= latest_blocknum:
+                            await self._blocknum_queue.put(from_block)
+                            from_block += 1
+                        await sleep(interval)
 
+                    await self._blocknum_queue.join()
+                    await self._tx_hash_queue.join()
 
-                async def _process_tx_receipt(receiver: ObjectReceiveStream[HexBytes]):
-                    async with receiver:
-                        async with create_task_group() as tg:
-                            async for tx_hash in receiver:
-                                receipt = await self.contracts.get_tx_receipt(tx_hash)
-                                event_filters = list(self._event_filters.values())
-                                for event_filter in event_filters:
-                                    tg.start_soon(event_filter.process_receipt, receipt)
-                
-                async with create_task_group() as tg:
-                    tg.start_soon(_process_blocks, tx_hashes_sender, from_block, to_block)
-
-                    for _ in range(4):
-                        tg.start_soon(_process_tx_receipt, tx_hashes_receiver.clone())
-                    
-                    tx_hashes_receiver.close()
+                    tg.cancel_scope.cancel()
         finally:
             self._cancel_scope = None
 

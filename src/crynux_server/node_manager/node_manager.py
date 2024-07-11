@@ -4,23 +4,11 @@ import logging
 from datetime import datetime
 from typing import Optional, Type
 
-from anyio import (
-    TASK_STATUS_IGNORED,
-    Event,
-    create_task_group,
-    fail_after,
-    get_cancelled_exc_class,
-    move_on_after,
-    sleep,
-)
+from anyio import (TASK_STATUS_IGNORED, Event, create_task_group, fail_after,
+                   get_cancelled_exc_class, move_on_after, sleep)
 from anyio.abc import TaskGroup, TaskStatus
-from tenacity import (
-    AsyncRetrying,
-    before_sleep_log,
-    stop_after_attempt,
-    stop_never,
-    wait_fixed,
-)
+from tenacity import (AsyncRetrying, before_sleep_log, stop_after_attempt,
+                      stop_never, wait_fixed)
 from web3 import Web3
 from web3.types import EventData
 
@@ -29,35 +17,16 @@ from crynux_server.config import Config, wait_privkey
 from crynux_server.contracts import Contracts, set_contracts
 from crynux_server.event_queue import DbEventQueue, EventQueue, set_event_queue
 from crynux_server.relay import Relay, WebRelay, set_relay
-from crynux_server.task import (
-    DbTaskStateCache,
-    InferenceTaskRunner,
-    TaskStateCache,
-    TaskSystem,
-    set_task_state_cache,
-    set_task_system,
-)
-from crynux_server.watcher import (
-    BlockNumberCache,
-    DbBlockNumberCache,
-    EventWatcher,
-    set_watcher,
-)
-from crynux_server.worker_manager import (
-    PrefetchError,
-    TaskCancelled,
-    TaskError,
-    WorkerManager,
-    get_worker_manager,
-)
+from crynux_server.task import (DbTaskStateCache, InferenceTaskRunner,
+                                TaskStateCache, TaskSystem,
+                                set_task_state_cache, set_task_system)
+from crynux_server.watcher import EventWatcher, set_watcher
+from crynux_server.worker_manager import (PrefetchError, TaskCancelled,
+                                          TaskError, WorkerManager,
+                                          get_worker_manager)
 
-from .state_cache import (
-    DbNodeStateCache,
-    DbTxStateCache,
-    ManagerStateCache,
-    StateCache,
-    set_manager_state_cache,
-)
+from .state_cache import (DbNodeStateCache, DbTxStateCache, ManagerStateCache,
+                          StateCache, set_manager_state_cache)
 from .state_manager import NodeStateManager, set_node_state_manager
 
 _logger = logging.getLogger(__name__)
@@ -96,15 +65,10 @@ def _make_event_queue(queue_cls: Type[EventQueue]) -> EventQueue:
     return queue
 
 
-async def _make_watcher(
+def _make_watcher(
     contracts: Contracts,
-    block_number_cache_cls: Type[BlockNumberCache],
 ):
     watcher = EventWatcher.from_contracts(contracts)
-
-    block_cache = block_number_cache_cls()
-    await block_cache.set(0)
-    watcher.set_blocknumber_cache(block_cache)
 
     set_watcher(watcher)
     return watcher
@@ -144,7 +108,6 @@ class NodeManager(object):
         gpu_name: str,
         gpu_vram: int,
         event_queue_cls: Type[EventQueue] = DbEventQueue,
-        block_number_cache_cls: Type[BlockNumberCache] = DbBlockNumberCache,
         task_state_cache_cls: Type[TaskStateCache] = DbTaskStateCache,
         node_state_cache_cls: Type[StateCache[models.NodeState]] = DbNodeStateCache,
         tx_state_cache_cls: Type[StateCache[models.TxState]] = DbTxStateCache,
@@ -165,7 +128,6 @@ class NodeManager(object):
         self.gpu_vram = gpu_vram
 
         self.event_queue_cls = event_queue_cls
-        self.block_number_cache_cls = block_number_cache_cls
         self.task_state_cache_cls = task_state_cache_cls
         if manager_state_cache is None:
             manager_state_cache = ManagerStateCache(
@@ -238,9 +200,8 @@ class NodeManager(object):
 
         if self._watcher is None:
             if self._watcher is None:
-                self._watcher = await _make_watcher(
+                self._watcher = _make_watcher(
                     contracts=self._contracts,
-                    block_number_cache_cls=self.block_number_cache_cls,
                 )
         _logger.info("Node manager components initializing complete.")
 
@@ -298,11 +259,6 @@ class NodeManager(object):
         assert self._contracts is not None
         assert self._task_system is not None
         assert self._watcher is not None
-
-        # only recover when watcher hasn't started
-        blocknumber_cache = self._watcher.get_blocknumber_cache()
-        if blocknumber_cache is not None and await blocknumber_cache.get() > 0:
-            return
 
         async for attemp in AsyncRetrying(
             stop=stop_never if self._retry else stop_after_attempt(1),
