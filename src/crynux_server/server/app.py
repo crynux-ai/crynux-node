@@ -9,14 +9,24 @@ from fastapi.staticfiles import StaticFiles
 from hypercorn.asyncio import serve
 from hypercorn.config import Config
 
+from .lifespan import Lifespan
 from .middleware import add_middleware
 from .v1 import router as v1_router
 
 _logger = logging.getLogger(__name__)
 
+
 class Server(object):
-    def __init__(self, web_dist: str = "") -> None:
-        self._app = FastAPI()
+    def __init__(
+        self, base_model_dir: str, lora_model_dir: str, log_dir: str, web_dist: str = ""
+    ) -> None:
+        lifespan = Lifespan(
+            base_model_dir=base_model_dir,
+            lora_model_dir=lora_model_dir,
+            log_dir=log_dir,
+            system_info_update_interval=10,
+        )
+        self._app = FastAPI(lifespan=lifespan.run)
         self._app.include_router(v1_router, prefix="/manager")
         if web_dist != "":
             self._app.mount("/", StaticFiles(directory=web_dist, html=True), name="web")
