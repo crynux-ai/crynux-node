@@ -47,7 +47,7 @@ mkdir "$WORK_DIR/webui"
 cd "$GIT_DIR/src/webui"
 cp src/config.example.json  src/config.json
 
-yarn && yarn build
+yarn --immutable && yarn build
 cp -R "$GIT_DIR/src/webui/dist" "$WORK_DIR/webui/dist"
 
 

@@ -38,7 +38,7 @@ if (Test-Path -Path "dist") {
 
 New-Item -ItemType Directory -Path "dist"
 
-yarn
+yarn --immutable
 yarn build
 
 ## Copy the dist WebUI package to the release folder
