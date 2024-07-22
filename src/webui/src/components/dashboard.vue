@@ -541,7 +541,7 @@ const copyText = async (text) => {
                                 :icon="h(PauseCircleOutlined)"
                                 @click="sendNodeAction('pause')"
                                 :loading="isTxSending || nodeStatus.tx_status === nodeAPI.TX_STATUS_PENDING"
-                                :disabled="!ethEnough()"
+                                :disabled="!ethEnoughForGas()"
                             >Pause
                             </a-button
                             >
@@ -555,7 +555,7 @@ const copyText = async (text) => {
                                 :icon="h(LogoutOutlined)"
                                 @click="sendNodeAction('stop')"
                                 :loading="isTxSending || nodeStatus.tx_status === nodeAPI.TX_STATUS_PENDING"
-                                :disabled="!ethEnough()"
+                                :disabled="!ethEnoughForGas()"
                             >Stop
                             </a-button
                             >
@@ -577,7 +577,7 @@ const copyText = async (text) => {
                                 :icon="h(PlayCircleOutlined)"
                                 @click="sendNodeAction('resume')"
                                 :loading="isTxSending || nodeStatus.tx_status === nodeAPI.TX_STATUS_PENDING"
-                                :disabled="!ethEnough()"
+                                :disabled="!ethEnoughForGas()"
                             >Resume
                             </a-button
                             >
