@@ -75,7 +75,12 @@ class CrynuxRunner(object):
             set_worker_manager(worker_manager)
 
             _logger.info(f"Serving WebUI from: {os.path.abspath(self.config.web_dist)}")
-            self._server = Server(self.config.web_dist)
+            self._server = Server(
+                base_model_dir=self.config.task_config.hf_cache_dir,
+                lora_model_dir=self.config.task_config.external_cache_dir,
+                log_dir=self.config.log.dir,
+                web_dist=self.config.web_dist
+            )
             set_server(self._server)
             _logger.info("Web server init completed.")
 
