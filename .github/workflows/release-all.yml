@@ -88,7 +88,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '22.x'
+          node-version: '18.x'
 
       - name: Install the Apple certificate
         env:
@@ -144,7 +144,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '22.x'
+          node-version: '18.x'
 
       - name: Run the build script
         run: ./build/windows/build.ps1
@@ -182,7 +182,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '22.x'
+          node-version: '18.x'
 
       - name: Run the build script
         run: ./build/linux-server/build.sh
