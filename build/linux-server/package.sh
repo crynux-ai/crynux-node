@@ -1,6 +1,6 @@
 #!/bin/bash
 # Example call: ./package.sh
-VERSION=2.0.7
+VERSION=2.1.0
 
 ## Package the worker
 source worker/venv/bin/activate
@@ -17,15 +17,8 @@ pyinstaller crynux.spec
 ## Copy the worker
 mv "dist/crynux_worker_process" "dist/crynux-node/crynux_worker_process"
 
-## Create the data and config folders
-mkdir "dist/crynux-node/config"
-cp "../../config/config.yml.package_example" "dist/crynux-node/config/config.yml"
-
-mkdir "dist/crynux-node/data"
-mkdir "dist/crynux-node/data/external"
-mkdir "dist/crynux-node/data/huggingface"
-mkdir "dist/crynux-node/data/results"
-mkdir "dist/crynux-node/data/inference-logs"
+## Copy the data dir
+cp -r "data" "dist/crynux-node/data"
 
 ## Copy the Web UI
 mkdir "dist/crynux-node/webui"

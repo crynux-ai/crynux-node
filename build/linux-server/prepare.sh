@@ -2,11 +2,9 @@
 # Build package from source
 # Example call: bash build/macos/prepare.sh -w ~/crynux_app
 
-while getopts ":w:d:" opt; do
+while getopts ":w:" opt; do
   case $opt in
     w) WORK_DIR="$OPTARG"
-    ;;
-    d) DATA_DIR="$OPTARG"
     ;;
     \?) echo "Invalid option -$OPTARG" >&2
     exit 1
@@ -65,7 +63,7 @@ cp $GIT_DIR/requirements_docker.txt requirements.txt
 cp $GIT_DIR/MANIFEST.in MANIFEST.in
 cp $GIT_DIR/go.mod go.mod
 cp $GIT_DIR/go.sum go.sum
-pip install -r requirements.txt && pip install .[app]
+pip install -r requirements.txt && pip install .
 
 
 # 3. Prepare the worker
@@ -73,7 +71,7 @@ cd $GIT_DIR
 git submodule update --init --recursive
 cd $WORK_DIR
 mkdir "$WORK_DIR/worker"
-cp $GIT_DIR/src/crynux_worker_process.py worker/
+cp $GIT_DIR/crynux-worker/crynux_worker_process.py worker/
 
 python3.10 -m venv worker/venv
 source "$WORK_DIR/worker/venv/bin/activate"
@@ -81,30 +79,22 @@ pip install pyinstaller==6.5.0
 
 cp -R $GIT_DIR/stable-diffusion-task stable-diffusion-task
 cd stable-diffusion-task
-pip install -r requirements_cuda.txt
+pip install -r requirements_macos.txt
 pip install .
 cd $WORK_DIR
 
 cp -R $GIT_DIR/gpt-task gpt-task
 cd gpt-task
-pip install -r requirements_cuda.txt
+pip install -r requirements_macos.txt
+pip install .
+
+cp -R $GIT_DIR/crynux-worker crynux-worker
+cd crynux-worker
+pip install -r requirements.txt
 pip install .
 
 cd $WORK_DIR
 
-mkdir config
-cp $GIT_DIR/config/config.yml.package_example config/config.yml
-cp $GIT_DIR/start.sh start.sh
-cp -r $GIT_DIR/build/linux-server/* .
-chmod +x *.sh
-
-
-## Prepare the data folder
-if [ $DATA_DIR ] && [ -d $DATA_DIR ]; then
-  # In case the data has been stored elsewhere
-  echo "$DATA_DIR exist, copy it to dist"
-  mkdir "data"
-  cp -R $DATA_DIR/* "data/"
-else
-  cp -R $GIT_DIR/build/data .
-fi
+cp -R $GIT_DIR/build/data .
+cp $GIT_DIR/build/config/config.yml.package_example data/config/config.yml
+cp $GIT_DIR/build/linux-server/* .
