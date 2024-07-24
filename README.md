@@ -7,7 +7,7 @@
 [Start a node using Docker](https://docs.crynux.ai/node-hosting/start-a-node-docker)
 
 
-# Crynux Node for the Helium(He) Network
+# Crynux Node
 
 [![](https://dcbadge.limes.pink/api/server/https://discord.gg/zmU9GRwU6f)](https://discord.gg/zmU9GRwU6f)
 [![X](https://img.shields.io/badge/@crynuxai-%23000000.svg?style=for-the-badge&logo=X&logoColor=white)](https://x.com/crynuxai)
