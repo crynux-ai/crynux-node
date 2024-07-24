@@ -9,6 +9,9 @@
 
 # Crynux Node for the Helium(He) Network
 
+[![](https://dcbadge.limes.pink/api/server/https://discord.gg/zmU9GRwU6f)](https://discord.gg/zmU9GRwU6f)
+[![X](https://img.shields.io/badge/@crynuxai-%23000000.svg?style=for-the-badge&logo=X&logoColor=white)](https://x.com/crynuxai)
+
 Start a Crynux Node to share the spared local GPU to others in exchange for tokens. Crynux Node will join the Crynux Network, receive the AI inference/training/fine-tuning tasks from the network, and execute them locally.
 
 ![Crynux Node WebUI](./docs/webui.png)
