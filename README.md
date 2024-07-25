@@ -12,6 +12,7 @@
 [![](https://dcbadge.limes.pink/api/server/https://discord.gg/zmU9GRwU6f)](https://discord.gg/zmU9GRwU6f)
 [![X](https://img.shields.io/badge/@crynuxai-%23000000.svg?style=for-the-badge&logo=X&logoColor=white)](https://x.com/crynuxai)
 [![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/crynux-ai/crynux-node/release-all.yml?style=for-the-badge&logo=githubactions)](https://github.com/crynux-ai/crynux-node/releases)
+[![Static Badge](https://img.shields.io/badge/Gitbook-Documentation-blue?style=for-the-badge&logo=gitbook)](https://docs.crynux.ai)
 
 Start a Crynux Node to share the spared local GPU to others in exchange for tokens. Crynux Node will join the Crynux Network, receive the AI inference/training/fine-tuning tasks from the network, and execute them locally.
 
