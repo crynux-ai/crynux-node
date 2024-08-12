@@ -7,6 +7,7 @@ from pydantic import BaseModel
 class TaskType(IntEnum):
     SD = 0
     LLM = 1
+    SD_FT = 2
 
 class ChainTask(BaseModel):
     id: int
@@ -70,3 +71,4 @@ class TaskState(BaseModel):
     disclosed: bool = False
     waiting_tx_hash: bytes = b""
     waiting_tx_method: str = ""
+    checkpoint: str = ""

@@ -30,6 +30,9 @@ class TaskState(Base, BaseMixin):
     waiting_tx_method: Mapped[str] = mapped_column(
         nullable=False, index=False, default=""
     )
+    checkpoint: Mapped[str] = mapped_column(
+        nullable=False, index=False, default=""
+    )
 
 
 class TaskEvent(Base, BaseMixin):

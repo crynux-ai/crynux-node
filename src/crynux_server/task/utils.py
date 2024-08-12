@@ -47,22 +47,35 @@ async def run_task(
 
     files = []
     hashes = []
-    for i, result in enumerate(results):
-        if task_type == TaskType.SD:
+    checkpoint = ""
+    if task_type == TaskType.SD:
+        for i, result in enumerate(results):
             assert isinstance(result, Image)
             filename = os.path.join(task_dir, f"{i}.png")
             result.save(filename)
             files.append(filename)
             hashes.append(get_image_hash(filename))
-        elif task_type == TaskType.LLM:
+    elif task_type == TaskType.LLM:
+        for i, result in enumerate(results):
             filename = os.path.join(task_dir, f"{i}.json")
             with open(filename, mode="w", encoding="utf-8") as f:
                 json.dump(result, f)
             files.append(filename)
             hashes.append(get_gpt_resp_hash(filename))
+    elif task_type == TaskType.SD_FT:
+        assert len(results) == 1
+        result_dir = results[0]
+        img_dir = os.path.join(result_dir, "validation")
+        img_names = sorted(os.listdir(img_dir))
+        for img_name in img_names:
+            img_file = os.path.join(img_dir, img_name)
+            files.append(img_file)
+            hashes.append(get_image_hash(img_file))
+        checkpoint = os.path.join(result_dir, "checkpoint")
 
     return TaskResultReady(
         task_id=task_id,
         hashes=hashes,
         files=files,
+        checkpoint=checkpoint,
     )

@@ -1,10 +1,12 @@
 import json
 import os
+import tempfile
+import shutil
 from contextlib import ExitStack
-from typing import BinaryIO, List
+from typing import BinaryIO, List, Optional
 
 import httpx
-from anyio import wrap_file
+from anyio import wrap_file, to_thread, open_file
 
 from crynux_server.models import RelayTask
 
@@ -51,6 +53,53 @@ class WebRelay(Relay):
         data = content["data"]
         return RelayTask.model_validate(data)
 
+    async def upload_checkpoint(self, task_id: int, checkpoint_dir: str):
+        input = {"task_id": task_id}
+        timestamp, signature = self.signer.sign(input)
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            # zip checkpoint dir to a archive file
+            checkpoint_file = os.path.join(tmp_dir, "checkpoint.zip")
+            await to_thread.run_sync(
+                shutil.make_archive, checkpoint_file[:-4], "zip", checkpoint_dir
+            )
+
+            with ExitStack() as stack:
+                filename = os.path.basename(checkpoint_file)
+                file_obj = stack.enter_context(open(checkpoint_file, "rb"))
+                files = [("checkpoint", (filename, file_obj))]
+
+                resp = await self.client.post(
+                    f"/v1/inference_tasks/{task_id}/checkpoint",
+                    data={"timestamp": timestamp, "signature": signature},
+                    files=files,
+                    timeout=None,
+                )
+                resp = _process_resp(resp, "uploadCheckpoint")
+                content = await resp.json()
+                message = content["message"]
+                if message != "success":
+                    raise RelayError(resp.status_code, "uploadCheckpoint", message)
+
+    async def get_checkpoint(self, task_id: int, result_checkpoint_dir: str):
+        input = {"task_id": task_id}
+        timestamp, signature = self.signer.sign(input)
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            checkpoint_file = os.path.join(tmp_dir, "checkpoint.zip")
+            async with await open_file(checkpoint_file, mode="wb") as f:
+                resp = await self.client.get(
+                    f"/v1/inference_tasks/{task_id}/checkpoint",
+                    params={"timestamp": timestamp, "signature": signature},
+                )
+                resp = _process_resp(resp, "getCheckpoint")
+                async for chunk in resp.aiter_bytes(4096):
+                    await f.write(chunk)
+
+            await to_thread.run_sync(
+                shutil.unpack_archive, checkpoint_file, result_checkpoint_dir
+            )
+
     async def get_task(self, task_id: int) -> RelayTask:
         input = {"task_id": task_id}
         timestamp, signature = self.signer.sign(input)
@@ -64,7 +113,7 @@ class WebRelay(Relay):
         data = content["data"]
         return RelayTask.model_validate(data)
 
-    async def upload_task_result(self, task_id: int, file_paths: List[str]):
+    async def upload_task_result(self, task_id: int, file_paths: List[str], checkpoint_dir: Optional[str] = None):
         input = {"task_id": task_id}
         timestamp, signature = self.signer.sign(input)
 
@@ -74,6 +123,14 @@ class WebRelay(Relay):
                 filename = os.path.basename(file_path)
                 file_obj = stack.enter_context(open(file_path, "rb"))
                 files.append(("images", (filename, file_obj)))
+
+            if checkpoint_dir is not None:
+                tmp_dir = stack.enter_context(tempfile.TemporaryDirectory())
+                checkpoint_file = os.path.join(tmp_dir, "checkpoint.zip")
+                await to_thread.run_sync(shutil.make_archive, checkpoint_file[:-4], "zip", checkpoint_dir)
+                filename = os.path.basename(checkpoint_file)
+                file_obj = stack.enter_context(open(checkpoint_file, "rb"))
+                files.append(("checkpoint", (filename, file_obj)))
 
             # disable timeout because there may be many images or image size may be very large
             resp = await self.client.post(
@@ -102,6 +159,25 @@ class WebRelay(Relay):
             resp = _process_resp(resp, "getTask")
             async for chunk in resp.aiter_bytes():
                 await async_dst.write(chunk)
+
+    async def get_result_checkpoint(self, task_id: int, result_checkpoint_dir: str):
+        input = {"task_id": task_id}
+        timestamp, signature = self.signer.sign(input)
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            checkpoint_file = os.path.join(tmp_dir, "checkpoint.zip")
+            async with await open_file(checkpoint_file, mode="wb") as f:
+                resp = await self.client.get(
+                    f"/v1/inference_tasks/{task_id}/results/checkpoint",
+                    params={"timestamp": timestamp, "signature": signature},
+                )
+                resp = _process_resp(resp, "getResultCheckpoint")
+                async for chunk in resp.aiter_bytes(4096):
+                    await f.write(chunk)
+
+            await to_thread.run_sync(
+                shutil.unpack_archive, checkpoint_file, result_checkpoint_dir
+            )
 
     async def now(self) -> int:
         resp = await self.client.get("/v1/now")

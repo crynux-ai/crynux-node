@@ -29,6 +29,7 @@ class DbTaskStateCache(TaskStateCache):
                     disclosed=state.disclosed,
                     waiting_tx_hash=state.waiting_tx_hash,
                     waiting_tx_method=state.waiting_tx_method,
+                    checkpoint=state.checkpoint,
                 )
             else:
                 raise KeyError(f"Task state of {task_id} not found.")
@@ -52,6 +53,7 @@ class DbTaskStateCache(TaskStateCache):
                     disclosed=task_state.disclosed,
                     waiting_tx_hash=task_state.waiting_tx_hash,
                     waiting_tx_method=task_state.waiting_tx_method,
+                    checkpoint=task_state.checkpoint,
                 )
                 sess.add(state)
             else:
@@ -100,6 +102,7 @@ class DbTaskStateCache(TaskStateCache):
                     disclosed=state.disclosed,
                     waiting_tx_hash=state.waiting_tx_hash,
                     waiting_tx_method=state.waiting_tx_method,
+                    checkpoint=state.checkpoint,
                 )
                 for state in states
             ]

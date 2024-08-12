@@ -48,6 +48,7 @@ class TaskResultReady(TaskEvent):
     kind: TaskKind = Field(default="TaskResultReady", init_var=False, frozen=True)
     hashes: List[str]
     files: List[str]
+    checkpoint: str = ""
 
 
 class TaskResultCommitmentsReady(TaskEvent):

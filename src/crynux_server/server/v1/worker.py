@@ -162,6 +162,10 @@ async def _process_one_inference_task(
                     assert task_input.task_type == TaskType.LLM
                     res = await websocket.receive_json()
                     results.append(res)
+                elif msg.payload_type == PayloadType.Text:
+                    assert task_input.task_type == TaskType.SD_FT
+                    res = await websocket.receive_text()
+                    results.append(res)
             if not msg.has_next:
                 break
         task_result.set_result(results)
