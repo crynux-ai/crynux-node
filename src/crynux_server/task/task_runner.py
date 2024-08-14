@@ -437,7 +437,8 @@ class InferenceTaskRunner(TaskRunner):
 
         if event.task_type == models.TaskType.SD_FT_LORA:
             args = json.loads(task.task_args)
-            if "checkpoint" in args:
+            checkpoint = args.get("checkpoint", default=None)
+            if checkpoint is not None:
                 checkpoint_dir = os.path.join(task_dir, "input_checkpoint")
                 await get_checkpoint(checkpoint_dir)
                 args["checkpoint"] = checkpoint_dir
