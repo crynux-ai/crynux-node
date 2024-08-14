@@ -163,7 +163,7 @@ async def _process_one_inference_task(
                     res = await websocket.receive_json()
                     results.append(res)
                 elif msg.payload_type == PayloadType.Text:
-                    assert task_input.task_type == TaskType.SD_FT
+                    assert task_input.task_type == TaskType.SD_FT_LORA
                     res = await websocket.receive_text()
                     results.append(res)
             if not msg.has_next:

@@ -62,7 +62,7 @@ async def run_task(
                 json.dump(result, f)
             files.append(filename)
             hashes.append(get_gpt_resp_hash(filename))
-    elif task_type == TaskType.SD_FT:
+    elif task_type == TaskType.SD_FT_LORA:
         assert len(results) == 1
         result_dir = results[0]
         img_dir = os.path.join(result_dir, "validation")

@@ -7,7 +7,7 @@ from pydantic import BaseModel
 class TaskType(IntEnum):
     SD = 0
     LLM = 1
-    SD_FT = 2
+    SD_FT_LORA = 2
 
 class ChainTask(BaseModel):
     id: int
