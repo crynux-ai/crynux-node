@@ -30,9 +30,11 @@ class TaskContract(ContractWrapper):
         vram_limit: int,
         task_fee: int,
         cap: int,
+        gpu_name: str,
+        gpu_vram: int,
         *,
         option: "Optional[TxOption]" = None,
-        w3: Optional[AsyncWeb3] = None,
+        w3: Optional[AsyncWeb3] = None
     ) -> TxWaiter:
         return await self._transaction_call(
             "createTask",
@@ -42,6 +44,8 @@ class TaskContract(ContractWrapper):
             dataHash=data_hash,
             vramLimit=vram_limit,
             cap=cap,
+            gpuName=gpu_name,
+            gpuVram=gpu_vram,
             value=task_fee,
             w3=w3,
         )

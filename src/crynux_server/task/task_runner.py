@@ -1,3 +1,4 @@
+import json
 import logging
 import os.path
 import shutil
@@ -10,7 +11,7 @@ from typing import Awaitable, Callable, Deque, List, Optional, Tuple
 from anyio import (CancelScope, Condition, create_task_group, fail_after,
                    get_cancelled_exc_class, sleep_until, to_process, to_thread)
 from hexbytes import HexBytes
-from tenacity import (retry, retry_if_exception, stop_after_delay, wait_chain,
+from tenacity import (retry, retry_if_exception, stop_after_delay, wait_chain, stop_after_attempt,
                       wait_fixed)
 from web3.types import EventData
 
@@ -421,8 +422,27 @@ class InferenceTaskRunner(TaskRunner):
         )
         async def get_task():
             return await self.relay.get_task(event.task_id)
+        
+        @retry(
+            stop=stop_after_attempt(3),
+            wait=wait_fixed(30),
+            reraise=True,
+        )
+        async def get_checkpoint(checkpoint_dir: str):
+            await self.relay.get_checkpoint(event.task_id, checkpoint_dir)
+
+        task_dir = os.path.join(self.config.task_config.output_dir, str(self.task_id))
 
         task = await get_task()
+
+        if event.task_type == models.TaskType.SD_FT_LORA:
+            args = json.loads(task.task_args)
+            checkpoint = args.get("checkpoint", None)
+            if checkpoint is not None:
+                checkpoint_dir = os.path.join(task_dir, "input_checkpoint")
+                await get_checkpoint(checkpoint_dir)
+                args["checkpoint"] = checkpoint_dir
+                task.task_args = json.dumps(args)
 
         _logger.info(
             f"task id: {task.task_id},"
@@ -430,7 +450,6 @@ class InferenceTaskRunner(TaskRunner):
             f"task_args: {task.task_args},"
         )
         _logger.info("Start inference task")
-        task_dir = os.path.join(self.config.task_config.output_dir, str(task.task_id))
         if not os.path.exists(task_dir):
             os.makedirs(task_dir, exist_ok=True)
         try:
@@ -487,6 +506,7 @@ class InferenceTaskRunner(TaskRunner):
             _logger.info(f"Task {self.task_id} result 0x{self.state.result.hex()}")
             self.state.status = models.TaskStatus.ResultUploaded
             self.state.files = event.files
+            self.state.checkpoint = event.checkpoint
 
     async def commitment_ready(
         self,
@@ -517,7 +537,7 @@ class InferenceTaskRunner(TaskRunner):
 
         async with self.state_context():
             if event.result_node == self.contracts.account:
-                await self.relay.upload_task_result(self.task_id, self.state.files)
+                await self.relay.upload_task_result(self.task_id, self.state.files, self.state.checkpoint)
                 self.state.status = models.TaskStatus.ResultFileUploaded
                 await self._call_task_contract_method(
                     "reportResultsUploaded",

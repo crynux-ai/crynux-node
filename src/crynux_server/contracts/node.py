@@ -94,3 +94,7 @@ class NodeContract(ContractWrapper):
     ) -> List[GpuInfo]:
         res = await self._function_call("getAvailableGPUs", w3=w3)
         return [GpuInfo(name=item[0], vram=item[1]) for item in res]
+
+    async def get_staked_amount(self, *, w3: Optional[AsyncWeb3] = None) -> int:
+        res = await self._function_call("getStakedAmount", w3=w3)
+        return res
