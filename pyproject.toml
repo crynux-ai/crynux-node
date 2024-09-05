@@ -28,7 +28,7 @@ dependencies = [
     "eth-rlp==1.0.1",
     "Pillow",
 ]
-version = "2.1.0"
+version = "2.1.1"
 
 [tool.setuptools.packages.find]
 where = ["src"]
