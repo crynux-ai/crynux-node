@@ -1,11 +1,11 @@
 log:
   # The directory to save the log files
   dir: "logs"
-  
+
   # Log level could be "DEBUG", "INFO", "WARNING", "ERROR"
   level: "INFO"
 
-ethereum: 
+ethereum:
   # The JSON RPC endpoint of the Blockchain node
   # Here we use the private chain for the Hydrogen Network
   provider: "https://crynux-testnet.public.blastapi.io"
@@ -41,20 +41,19 @@ web_dist: dist
 # The resource dir for icons etc.
 resource_dir: res
 
-task_config: 
+task_config:
   # Models that will be preloaded before any task execution
   # Other models specified by the task
   # will be downloaded during the task execution
   preloaded_models:
     sd_base:
-      - id: "runwayml/stable-diffusion-v1-5"
-      - id: "stabilityai/stable-diffusion-xl-base-1.0"
+      - id: "crynux-ai/stable-diffusion-v1-5"
+      - id: "crynux-ai/stable-diffusion-xl-base-1.0"
     gpt_base:
       - id: "gpt2"
-      - id: "tiiuae/falcon-7b-instruct"
     controlnet: []
     vae: []
-    
+
   # The proxy server used when downloading models.
   proxy:
     host: ""
