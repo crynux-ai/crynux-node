@@ -7,7 +7,7 @@ from typing_extensions import Annotated
 
 from crynux_server import models, utils
 
-from ..depends import NodeStateManagerDep, ManagerStateCacheDep
+from ..depends import NodeStateManagerDep, ManagerStateCacheDep, WorkerManagerDep
 from .utils import CommonResponse
 
 router = APIRouter(prefix="/node")
@@ -45,16 +45,21 @@ async def control_node(
     input: Annotated[ControlNodeInput, Body()],
     *,
     state_manager: NodeStateManagerDep,
+    worker_manager: WorkerManagerDep,
     background: BackgroundTasks
 ):
     if state_manager is None:
         raise HTTPException(400, detail="Private key has not been set.")
     if input.action == "start":
         gpu_info = await utils.get_gpu_info()
-        wait = await state_manager.start(
-            gpu_name=gpu_info.model,
-            gpu_vram=math.ceil(gpu_info.vram_total_mb / 1024)
-        )
+        async with worker_manager.wait_connected():
+            version = worker_manager.version
+            assert version is not None
+            wait = await state_manager.start(
+                gpu_name=gpu_info.model,
+                gpu_vram=math.ceil(gpu_info.vram_total_mb / 1024),
+                version=version
+            )
     elif input.action == "pause":
         wait = await state_manager.pause()
     elif input.action == "resume":

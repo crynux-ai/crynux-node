@@ -28,6 +28,8 @@ class NodeContract(ContractWrapper):
         self,
         gpu_name: str,
         gpu_vram: int,
+        version: str,
+        public_key: bytes,
         *,
         stake_amount: int = _default_stake_amount,
         option: "Optional[TxOption]" = None,
@@ -37,7 +39,23 @@ class NodeContract(ContractWrapper):
             "join",
             gpuName=gpu_name,
             gpuVram=gpu_vram,
+            version=version,
+            publicKey=public_key,
             value=stake_amount,
+            option=option,
+            w3=w3,
+        )
+
+    async def update_version(
+        self,
+        version: str,
+        *,
+        option: "Optional[TxOption]" = None,
+        w3: Optional[AsyncWeb3] = None,
+    ):
+        return await self._transaction_call(
+            "updateVersion",
+            version=version,
             option=option,
             w3=w3,
         )
@@ -82,6 +100,10 @@ class NodeContract(ContractWrapper):
             status=ChainNodeStatus(res[0]),
             gpu_id=res[1],
             gpu=GpuInfo(name=res[2][0], vram=res[2][1]),
+            score=res[3],
+            version=res[4],
+            public_key=res[5],
+            last_model_id=res[6],
         )
         return info
 

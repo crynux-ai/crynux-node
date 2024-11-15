@@ -7,7 +7,7 @@ from crynux_server import models
 
 class TaskStateCache(ABC):
     @abstractmethod
-    async def load(self, task_id: int) -> models.TaskState:
+    async def load(self, task_id_commitment: bytes) -> models.TaskState:
         ...
 
     @abstractmethod
@@ -15,7 +15,7 @@ class TaskStateCache(ABC):
         ...
 
     @abstractmethod
-    async def has(self, task_id: int) -> bool:
+    async def has(self, task_id_commitment: bytes) -> bool:
         ...
 
     @abstractmethod

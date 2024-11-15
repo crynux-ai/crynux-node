@@ -109,7 +109,7 @@ class NodeStateManager(object):
             raise
 
     async def try_start(
-        self, gpu_name: str, gpu_vram: int, interval: float = 5, retry: bool = True, *, option: "Optional[TxOption]" = None
+        self, gpu_name: str, gpu_vram: int, version: str, interval: float = 5, retry: bool = True, *, option: "Optional[TxOption]" = None
     ):
         _logger.info("Trying to join the network automatically...")
         while True:
@@ -141,6 +141,8 @@ class NodeStateManager(object):
                 waiter = await self.contracts.node_contract.join(
                     gpu_name=gpu_name,
                     gpu_vram=gpu_vram,
+                    public_key=self.contracts.public_key,
+                    version=version,
                     option=option,
                     stake_amount=node_amount
                 )
@@ -179,6 +181,7 @@ class NodeStateManager(object):
         self,
         gpu_name: str,
         gpu_vram: int,
+        version: str,
         *,
         option: "Optional[TxOption]" = None,
     ):
@@ -202,6 +205,8 @@ class NodeStateManager(object):
             waiter = await self.contracts.node_contract.join(
                 gpu_name=gpu_name,
                 gpu_vram=gpu_vram,
+                public_key=self.contracts.public_key,
+                version=version,
                 option=option,
                 stake_amount=node_amount
             )

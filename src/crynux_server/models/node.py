@@ -21,6 +21,10 @@ class ChainNodeInfo(BaseModel):
     status: ChainNodeStatus
     gpu_id: bytes
     gpu: GpuInfo
+    score: int
+    version: str
+    public_key: bytes
+    last_model_id: str
 
 
 class ChainNetworkNodeInfo(BaseModel):

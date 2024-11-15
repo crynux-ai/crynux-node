@@ -2,11 +2,11 @@ import os
 import json
 import logging
 import subprocess
-from contextlib import contextmanager
+from contextlib import contextmanager, asynccontextmanager
 from typing import AsyncGenerator, Dict, Optional, Union
 
 import psutil
-from anyio import sleep
+from anyio import sleep, Condition
 
 from crynux_server.config import Config, get_config
 
@@ -41,6 +41,12 @@ class WorkerManager(object):
         self._worker_process: Optional[subprocess.Popen] = None
 
         self._version: Optional[str] = None
+
+        self._connect_condition = Condition()
+
+    @property
+    def version(self):
+        return self._version
 
     @contextmanager
     def start(self):
@@ -93,14 +99,16 @@ class WorkerManager(object):
                 proc.kill()
             process.kill()
 
-    def connect(self, version: str) -> int:
+    async def connect(self, version: str) -> int:
         worker_id = self._next_worker_id
         self._next_worker_id += 1
-        self._current_worker_id = worker_id
-        self._version = version
+        async with self._connect_condition:
+            self._current_worker_id = worker_id
+            self._version = version
+            self._connect_condition.notify_all()
         return worker_id
 
-    def disconnect(self, worker_id: int):
+    async def disconnect(self, worker_id: int):
         assert (
             worker_id == self._current_worker_id
         ), f"Worker {worker_id} is disconnected"
@@ -109,7 +117,26 @@ class WorkerManager(object):
             self._current_task.cancel()
             self._current_task = None
 
-        self._current_worker_id = 0
+        async with self._connect_condition:
+            self._current_worker_id = 0
+            self._version = None
+            self._connect_condition.notify_all()
+
+    async def is_connected(self) -> bool:
+        return self._current_worker_id > 0
+
+    @asynccontextmanager
+    async def wait_connected(self):
+        async with self._connect_condition:
+            while self._current_worker_id == 0:
+                await self._connect_condition.wait()
+            yield
+
+    @asynccontextmanager
+    async def wait_connection_changed(self):
+        async with self._connect_condition:
+            await self._connect_condition.wait()
+            yield
 
     async def send_task(self, input: TaskInput):
         return await self._exchange.send_task(input)

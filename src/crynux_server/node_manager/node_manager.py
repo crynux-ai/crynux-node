@@ -75,14 +75,14 @@ def _make_watcher(
 
 
 def _make_task_system(
-    queue: EventQueue,
     retry: bool,
+    contracts: Contracts,
     task_state_cache_cls: Type[TaskStateCache],
 ) -> TaskSystem:
     cache = task_state_cache_cls()
     set_task_state_cache(cache)
 
-    system = TaskSystem(state_cache=cache, queue=queue, retry=retry)
+    system = TaskSystem(state_cache=cache, contracts=contracts, retry=retry)
     system.set_runner_cls(runner_cls=InferenceTaskRunner)
 
     set_task_system(system)
@@ -142,7 +142,6 @@ class NodeManager(object):
         self._contracts = contracts
         self._relay = relay
         self._node_state_manager = node_state_manager
-        self._watcher = watcher
         self._task_system = task_system
         if worker_manager is None:
             worker_manager = get_worker_manager()
@@ -168,12 +167,6 @@ class NodeManager(object):
         if self._event_queue is None:
             self._event_queue = _make_event_queue(self.event_queue_cls)
 
-        if self._task_system is None:
-            self._task_system = _make_task_system(
-                queue=self._event_queue,
-                retry=self._retry,
-                task_state_cache_cls=self.task_state_cache_cls,
-            )
 
         if self._contracts is None or self._relay is None:
             if self._privkey is None:
@@ -192,17 +185,19 @@ class NodeManager(object):
             if self._relay is None:
                 self._relay = _make_relay(self._privkey, self.config.relay_url)
 
+        if self._task_system is None:
+            self._task_system = _make_task_system(
+                retry=self._retry,
+                contracts=self._contracts,
+                task_state_cache_cls=self.task_state_cache_cls,
+            )
+
         if self._node_state_manager is None:
             self._node_state_manager = _make_node_state_manager(
                 state_cache=self.state_cache,
                 contracts=self._contracts,
             )
 
-        if self._watcher is None:
-            if self._watcher is None:
-                self._watcher = _make_watcher(
-                    contracts=self._contracts,
-                )
         _logger.info("Node manager components initializing complete.")
 
     async def _init(self):
@@ -255,77 +250,6 @@ class NodeManager(object):
 
         _logger.info("Node manager initializing complete.")
 
-    async def _recover(self):
-        assert self._contracts is not None
-        assert self._task_system is not None
-        assert self._watcher is not None
-
-        async for attemp in AsyncRetrying(
-            stop=stop_never if self._retry else stop_after_attempt(1),
-            wait=wait_fixed(self._retry_delay),
-            reraise=True,
-        ):
-            with attemp:
-                task_id = await self._contracts.task_contract.get_node_task(
-                    self._contracts.account
-                )
-                if task_id == 0:
-                    return
-
-                task = await self._contracts.task_contract.get_task(task_id=task_id)
-
-        round = task.selected_nodes.index(self._contracts.account)
-        state = models.TaskState(
-            task_id=task_id,
-            round=round,
-            timeout=task.timeout,
-            status=models.TaskStatus.Pending,
-        )
-
-        events = []
-        # task created
-        event = models.TaskStarted(
-            task_id=task_id,
-            task_type=task.task_type,
-            creator=Web3.to_checksum_address(task.creator),
-            selected_node=self._contracts.account,
-            task_hash=Web3.to_hex(task.task_hash),
-            data_hash=Web3.to_hex(task.data_hash),
-            round=round,
-        )
-        events.append(event)
-
-        # has submitted result commitment
-        if round < len(task.commitments) and task.commitments[round] != bytes([0] * 32):
-            # has reported error, skip the task
-            err_commitment = bytes([0] * 31 + [1])
-            if task.commitments[round] == err_commitment:
-                return
-
-            state.result = bytes([0] * 31 + [2])
-            event = models.TaskResultCommitmentsReady(task_id=task_id)
-            events.append(event)
-
-        # has disclosed
-        if round < len(task.results) and task.results[round] != b"":
-            state.disclosed = True
-            # task is success
-            if task.result_node != "0x" + bytes([0] * 20).hex():
-                result = task.results[round]
-                event = models.TaskSuccess(
-                    task_id=task_id,
-                    result=Web3.to_hex(result),
-                    result_node=Web3.to_checksum_address(task.result_node),
-                )
-                state.result = result
-                events.append(event)
-
-        for event in events:
-            await self._task_system.event_queue.put(event=event)
-            _logger.debug(f"Recover event from chain {event}")
-        await self._task_system.state_cache.dump(state)
-        _logger.debug(f"Recover task state {state}")
-
     async def _sync_state(self):
         assert self._node_state_manager is not None
 
@@ -347,76 +271,9 @@ class NodeManager(object):
                         )
                     raise
 
-    async def _watch_events(
-        self, *, task_status: TaskStatus[None] = TASK_STATUS_IGNORED
-    ):
-        assert self._watcher is not None
-        assert self._event_queue is not None
-        assert self._contracts is not None
-
-        queue = self._event_queue
-        account = self._contracts.account
-
-        async def _push_event(event_data: EventData):
-            event = models.load_event_from_contracts(event_data)
-            await queue.put(event)
-
-        self._watcher.watch_event(
-            "task",
-            "TaskStarted",
-            callback=_push_event,
-            filter_args={"selectedNode": account},
-        )
-
-        async def _node_kicked_out(event_data: EventData):
-            address = event_data["args"]["nodeAddress"]
-            if address == account:
-                _logger.info("Node is kicked out")
-                await self.state_cache.set_node_state(
-                    status=models.NodeStatus.Stopped, message="Node is kicked out"
-                )
-
-        self._watcher.watch_event("node", "NodeKickedOut", callback=_node_kicked_out)
-
-        async def _node_slashed(event_data: EventData):
-            address = event_data["args"]["nodeAddress"]
-            if address == account:
-                _logger.info("Node is slashed")
-                await self.state_cache.set_node_state(
-                    status=models.NodeStatus.Stopped, message="Node is slashed"
-                )
-
-        self._watcher.watch_event("node", "NodeSlashed", callback=_node_slashed)
-
-        # call task_status.started() only once
-        task_status_set = False
-
-        async for attemp in AsyncRetrying(
-            stop=stop_never if self._retry else stop_after_attempt(1),
-            wait=wait_fixed(self._retry_delay),
-            reraise=True,
-        ):
-            with attemp:
-                try:
-                    async with create_task_group() as tg:
-                        if not task_status_set:
-                            await tg.start(self._watcher.start)
-                            task_status.started()
-                            task_status_set = True
-                        else:
-                            await self._watcher.start()
-                except Exception as e:
-                    _logger.exception(e)
-                    _logger.error("Cannot watch events from chain, retrying")
-                    with fail_after(5, shield=True):
-                        await self.state_cache.set_node_state(
-                            status=models.NodeStatus.Error,
-                            message="Node manager running error: cannot watch events from chain, retrying...",
-                        )
-                    raise
-
     async def _check_time(self):
         assert self._relay is not None
+        remote_now = 0
         async for attemp in AsyncRetrying(
             stop=stop_after_attempt(3),
             wait=wait_fixed(self._retry_delay),
@@ -472,6 +329,36 @@ class NodeManager(object):
                     raise
         return False
 
+    async def _update_version(self):
+
+        async def _update():
+            assert self._contracts is not None
+            current_version = self._worker_manager.version
+            while True:
+                async with self._worker_manager.wait_connection_changed():
+                    version = self._worker_manager.version
+                    if version is not None and version != current_version:
+                        await self._contracts.node_contract.update_version(version)
+                    current_version = version
+
+        async for attemp in AsyncRetrying(
+            stop=stop_never if self._retry else stop_after_attempt(1),
+            wait=wait_fixed(self._retry_delay),
+            reraise=True,
+        ):
+            with attemp:
+                try:
+                    await _update()
+                except Exception as e:
+                    _logger.exception(e)
+                    _logger.error(f"Cannot get update node version, retrying")
+                    with fail_after(5, shield=True):
+                        await self.state_cache.set_node_state(
+                            status=models.NodeStatus.Error,
+                            message="Node manager running error: cannot get update node version, retrying...",
+                        )
+                    raise
+
     async def _run(self, prefetch: bool = True):
         assert self._tg is None, "Node manager is running."
 
@@ -511,7 +398,6 @@ class NodeManager(object):
                     models.NodeStatus.Init,
                     init_message="Synchronizing node status from the blockchain",
                 )
-                await self._recover()
 
                 assert self._task_system is not None
                 tg.start_soon(self._task_system.start)
@@ -522,11 +408,6 @@ class NodeManager(object):
                         status=models.NodeStatus.Stopped
                     )
                     await sleep(5)
-
-                # wait the event watcher to start first and then join the network sequentially
-                # because the node may be selected to execute one task in the same tx of join,
-                # start watcher after the joining operation will cause missing the TaskStarted event.
-                await tg.start(self._watch_events)
 
                 assert self._node_state_manager is not None
 
@@ -542,9 +423,14 @@ class NodeManager(object):
                     ):
                         with attemp:
                             try:
-                                await self._node_state_manager.try_start(
-                                    self.gpu_name, self.gpu_vram
-                                )
+                                async with self._worker_manager.wait_connected():
+                                    version = self._worker_manager.version
+                                    assert version is not None
+                                    await self._node_state_manager.try_start(
+                                        gpu_name=self.gpu_name, 
+                                        gpu_vram=self.gpu_vram,
+                                        version=version
+                                    )
                             except Exception as e:
                                 _logger.warning(e)
                                 _logger.info("Cannot auto join the network")
@@ -555,6 +441,7 @@ class NodeManager(object):
                         await self.state_cache.set_tx_state(models.TxStatus.Success)
 
                 tg.start_soon(self._sync_state)
+                tg.start_soon(self._update_version)
 
         finally:
             self._tg = None
@@ -580,9 +467,6 @@ class NodeManager(object):
     async def stop(self):
         if not self._stoped:
             try:
-                if self._watcher is not None:
-                    self._watcher.stop()
-                    self._watcher = None
                 if self._task_system is not None:
                     self._task_system.stop()
                     self._task_system = None

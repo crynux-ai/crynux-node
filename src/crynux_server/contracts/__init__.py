@@ -44,10 +44,9 @@ class Contracts(object):
 
     def __init__(
         self,
+        privkey: str,
         provider: Optional[AsyncBaseProvider] = None,
         provider_path: Optional[str] = None,
-        privkey: str = "",
-        default_account_index: Optional[int] = None,
         pool_size: int = 5,
         timeout: int = 10,
     ):
@@ -55,10 +54,9 @@ class Contracts(object):
             pool_size = 1
 
         self._w3_pool = W3Pool(
+            privkey=privkey,
             provider=provider,
             provider_path=provider_path,
-            privkey=privkey,
-            default_account_index=default_account_index,
             pool_size=pool_size,
             timeout=timeout,
         )
@@ -245,6 +243,10 @@ class Contracts(object):
     @property
     def account(self) -> ChecksumAddress:
         return self._w3_pool.account
+    
+    @property
+    def public_key(self) -> bytes:
+        return self._w3_pool.public_key
 
     async def get_current_block_number(self) -> int:
         async with await self._w3_pool.get() as w3:

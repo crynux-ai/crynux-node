@@ -6,7 +6,7 @@ from anyio.abc import TaskGroup
 from tenacity import (AsyncRetrying, stop_after_attempt, stop_never,
                       wait_fixed)
 
-from crynux_server.event_queue import EventQueue
+from crynux_server.contracts import Contracts
 from crynux_server.models import TaskStatus
 
 from .state_cache import TaskStateCache
@@ -22,18 +22,20 @@ class TaskSystem(object):
     def __init__(
         self,
         state_cache: TaskStateCache,
-        queue: EventQueue,
+        contracts: Contracts,
         retry: bool = True,
         task_name: str = "inference",
+        interval: int = 1,
     ) -> None:
         self._state_cache = state_cache
-        self._queue = queue
+        self._contracts = contracts
         self._retry = retry
         self._task_name = task_name
+        self._interval = interval
 
         self._tg: Optional[TaskGroup] = None
 
-        self._runners: Dict[int, TaskRunner] = {}
+        self._runners: Dict[bytes, TaskRunner] = {}
 
         self._runner_cls: Type[TaskRunner] = InferenceTaskRunner
 
@@ -44,13 +46,9 @@ class TaskSystem(object):
     def state_cache(self) -> TaskStateCache:
         return self._state_cache
 
-    @property
-    def event_queue(self) -> EventQueue:
-        return self._queue
-
-    async def _run_task(self, task_id: int):
+    async def _run_task(self, task_id_commitment: bytes):
         try:
-            runner = self._runners[task_id]
+            runner = self._runners[task_id_commitment]
 
             async for attemp in AsyncRetrying(
                 stop=stop_never if self._retry else stop_after_attempt(1),
@@ -59,36 +57,40 @@ class TaskSystem(object):
             ):
                 with attemp:
                     try:
-                        await runner.run()
+                        await runner.run(self._interval)
                     except get_cancelled_exc_class():
                         raise
                     except Exception as e:
                         _logger.exception(e)
-                        _logger.error(f"Task {task_id} error: {str(e)}")
+                        _logger.error(f"Task {task_id_commitment.hex()} error: {str(e)}")
                         raise
         finally:
-            del self._runners[task_id]
+            del self._runners[task_id_commitment]
+
+    async def _get_node_task(self):
+        return await self._contracts.task_contract.get_node_task(self._contracts.account)
 
     async def _recover(self, tg: TaskGroup):
         running_status = [
-            TaskStatus.Pending,
-            TaskStatus.Executing,
-            TaskStatus.ResultUploaded,
-            TaskStatus.Disclosed,
-            TaskStatus.ResultFileUploaded,
+            TaskStatus.Queued,
+            TaskStatus.Started,
+            TaskStatus.ParametersUploaded,
+            TaskStatus.ScoreReady,
+            TaskStatus.Validated,
+            TaskStatus.GroupValidated
         ]
         running_states = await self.state_cache.find(status=running_status)
         for state in running_states:
             runner = self._runner_cls(
-                task_id=state.task_id,
-                state_cache=self._state_cache,
-                queue=self._queue,
+                task_id_commitment=state.task_id_commitment,
                 task_name=self._task_name,
+                state_cache=self._state_cache,
+                contracts=self._contracts
             )
             runner.state = state
-            self._runners[state.task_id] = runner
-            tg.start_soon(self._run_task, state.task_id)
-            _logger.debug(f"Recreate task runner for {state.task_id}")
+            self._runners[state.task_id_commitment] = runner
+            tg.start_soon(self._run_task, state.task_id_commitment)
+            _logger.debug(f"Recreate task runner for {state.task_id_commitment.hex()}")        
 
     async def start(self):
         assert self._tg is None, "The TaskSystem has already been started."
@@ -98,21 +100,16 @@ class TaskSystem(object):
                 self._tg = tg
                 await self._recover(tg)
                 while True:
-                    ack_id, event = await self.event_queue.get()
-                    task_id = event.task_id
-                    if task_id in self._runners:
-                        runner = self._runners[task_id]
-                    else:
+                    task_id_commitment = await self._get_node_task()
+                    if task_id_commitment not in self._runners:
                         runner = self._runner_cls(
-                            task_id=task_id,
-                            state_cache=self._state_cache,
-                            queue=self._queue,
+                            task_id_commitment=task_id_commitment,
                             task_name=self._task_name,
+                            state_cache=self._state_cache,
+                            contracts=self._contracts
                         )
-                        self._runners[task_id] = runner
-                        tg.start_soon(self._run_task, task_id)
-
-                    await runner.send(ack_id, event)
+                        self._runners[task_id_commitment] = runner
+                        tg.start_soon(self._run_task, task_id_commitment)
 
         except get_cancelled_exc_class():
             raise

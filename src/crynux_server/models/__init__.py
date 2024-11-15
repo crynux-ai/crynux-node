@@ -1,19 +1,28 @@
-from .event import (TaskAborted, TaskStarted, TaskEvent, TaskKind,
-                    TaskResultCommitmentsReady, TaskResultReady, TaskSuccess,
+from .event import (TaskEndAborted, TaskEndGroupRefund, TaskEndGroupSuccess,
+                    TaskEndInvalidated, TaskEndSuccess, TaskErrorReported,
+                    TaskEvent, TaskKind, TaskParametersUploaded, TaskQueued,
+                    TaskScoreReady, TaskStarted, TaskValidated,
                     load_event_from_contracts, load_event_from_json)
-from .node import (ChainNodeInfo, ChainNodeStatus, GpuInfo, NodeState,
-                   NodeStatus, convert_node_status, ChainNetworkNodeInfo)
-from .task import ChainTask, TaskType, RelayTask, TaskState, TaskStatus
+from .node import (ChainNetworkNodeInfo, ChainNodeInfo, ChainNodeStatus,
+                   GpuInfo, NodeState, NodeStatus, convert_node_status)
+from .task import (ChainTask, RelayTask, TaskAbortReason, TaskError, TaskState,
+                   TaskStatus, TaskType)
 from .tx import TxState, TxStatus
 
 __all__ = [
     "TaskKind",
     "TaskEvent",
+    "TaskQueued",
     "TaskStarted",
-    "TaskResultCommitmentsReady",
-    "TaskResultReady",
-    "TaskSuccess",
-    "TaskAborted",
+    "TaskParametersUploaded",
+    "TaskErrorReported",
+    "TaskScoreReady",
+    "TaskValidated",
+    "TaskEndSuccess",
+    "TaskEndInvalidated",
+    "TaskEndAborted",
+    "TaskEndGroupSuccess",
+    "TaskEndGroupRefund",
     "load_event_from_json",
     "load_event_from_contracts",
     "ChainTask",
@@ -30,4 +39,6 @@ __all__ = [
     "TaskState",
     "TxStatus",
     "TxState",
+    "TaskError",
+    "TaskAbortReason",
 ]

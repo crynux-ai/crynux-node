@@ -35,11 +35,13 @@ async def get_task_stats(
         status =  "idle"
     else:
         running_status = [
-            TaskStatus.Pending,
-            TaskStatus.Executing,
-            TaskStatus.ResultUploaded,
-            TaskStatus.Disclosed,
-            TaskStatus.ResultFileUploaded,
+            TaskStatus.Queued,
+            TaskStatus.Started,
+            TaskStatus.ParametersUploaded,
+            TaskStatus.ErrorReported,
+            TaskStatus.ScoreReady,
+            TaskStatus.Validated,
+            TaskStatus.GroupValidated,
         ]
         running_states = await task_state_cache.find(status=running_status)
         if len(running_states) > 0:
@@ -53,9 +55,15 @@ async def get_task_stats(
         today_ts = time.mktime(date.timetuple())
         today = datetime.fromtimestamp(today_ts)
 
-        today_states = await task_state_cache.find(start=today, status=[TaskStatus.Success])
+        success_status = [
+            TaskStatus.EndSuccess,
+            TaskStatus.EndGroupRefund,
+            TaskStatus.EndGroupSuccess
+        ]
 
-        total_states = await task_state_cache.find(status=[TaskStatus.Success])
+        today_states = await task_state_cache.find(start=today, status=success_status)
+
+        total_states = await task_state_cache.find(status=success_status)
 
         num_today = len(today_states)
         num_total = len(total_states)

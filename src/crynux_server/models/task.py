@@ -1,4 +1,4 @@
-from enum import Enum, IntEnum
+from enum import IntEnum
 from typing import List
 
 from pydantic import BaseModel
@@ -9,23 +9,57 @@ class TaskType(IntEnum):
     LLM = 1
     SD_FT_LORA = 2
 
+
+class TaskError(IntEnum):
+    ParametersValidationFailed = 0
+
+
+class TaskAbortReason(IntEnum):
+    Timeout = 0
+    ModelDownloadFailed = 1
+    IncorrectResult = 2
+    TaskFeeTooLow = 3
+
+
+class TaskStatus(IntEnum):
+    Queued = 0
+    Started = 1
+    ParametersUploaded = 2
+    ErrorReported = 3
+    ScoreReady = 4
+    Validated = 5
+    GroupValidated = 6
+    EndInvalidated = 7
+    EndSuccess = 8
+    EndAborted = 9
+    EndGroupRefund = 10
+    EndGroupSuccess = 11
+
+
 class ChainTask(BaseModel):
-    id: int
     task_type: TaskType
     creator: str
-    task_hash: bytes
-    data_hash: bytes
-    vram_limit: int
-    is_success: bool
-    selected_nodes: List[str]
-    commitments: List[bytes]
-    nonces: List[bytes]
-    commitment_submit_rounds: List[int]
-    results: List[bytes]
-    result_disclosed_rounds: List[int]
-    result_node: str
-    aborted: bool
+    task_id_commitment: bytes
+    sampling_seed: bytes
+    nonce: bytes
+    sequence: int
+    status: TaskStatus
+    selected_node: str
     timeout: int
+    score: bytes
+    task_fee: int
+    task_size: int
+    model_id: str
+    min_vram: int
+    required_gpu: str
+    required_gpu_vram: int
+    task_version: str
+    abort_reason: TaskAbortReason
+    error: TaskError
+    payment_addresses: List[str]
+    payments: List[int]
+    start_blocknum: int
+    finish_blocknum: int
 
 
 class TaskConfig(BaseModel):
@@ -44,31 +78,18 @@ class PoseConfig(BaseModel):
 
 
 class RelayTask(BaseModel):
-    task_id: int
+    task_id_commitment: bytes
     creator: str
-    task_hash: str
-    data_hash: str
     task_args: str
 
 
-class TaskStatus(Enum):
-    Pending = "pending"
-    Executing = "executing"
-    ResultUploaded = "result_uploaded"
-    Disclosed = "disclosed"
-    ResultFileUploaded = "result_file_uploaded"
-    Success = "success"
-    Aborted = "aborted"
-
-
 class TaskState(BaseModel):
-    task_id: int
-    round: int
+    task_id_commitment: bytes
     timeout: int
     status: TaskStatus
+    task_type: TaskType
     files: List[str] = []
-    result: bytes = b""
-    disclosed: bool = False
+    score: bytes = b""
     waiting_tx_hash: bytes = b""
     waiting_tx_method: str = ""
     checkpoint: str = ""

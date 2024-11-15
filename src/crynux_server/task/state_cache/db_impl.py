@@ -11,66 +11,64 @@ from .abc import TaskStateCache
 
 
 class DbTaskStateCache(TaskStateCache):
-    async def load(self, task_id: int) -> TaskState:
+    async def load(self, task_id_commitment: bytes) -> TaskState:
         async with db.session_scope() as sess:
             q = sa.select(db_models.TaskState).where(
-                db_models.TaskState.task_id == task_id
+                db_models.TaskState.task_id_commitment == task_id_commitment.hex()
             )
             state = (await sess.scalars(q)).one_or_none()
             if state is not None:
                 files = state.files.split(",")
                 return TaskState(
-                    task_id=task_id,
-                    round=state.round,
+                    task_id_commitment=bytes.fromhex(state.task_id_commitment),
                     timeout=state.timeout,
                     status=state.status,
+                    task_type=state.task_type,
                     files=files,
-                    result=state.result,
-                    disclosed=state.disclosed,
+                    score=state.score,
                     waiting_tx_hash=state.waiting_tx_hash,
                     waiting_tx_method=state.waiting_tx_method,
                     checkpoint=state.checkpoint,
                 )
             else:
-                raise KeyError(f"Task state of {task_id} not found.")
+                raise KeyError(f"Task state of {task_id_commitment.hex()} not found.")
 
     async def dump(self, task_state: TaskState):
         async with db.session_scope() as sess:
-            task_id = task_state.task_id
+            task_id_commitment = task_state.task_id_commitment
 
             q = sa.select(db_models.TaskState).where(
-                db_models.TaskState.task_id == task_id
+                db_models.TaskState.task_id_commitment == task_id_commitment.hex()
             )
             state = (await sess.scalars(q)).one_or_none()
             if state is None:
                 state = db_models.TaskState(
-                    task_id=task_id,
-                    round=task_state.round,
+                    task_id_commitment=task_id_commitment.hex(),
                     timeout=task_state.timeout,
                     status=task_state.status,
+                    task_type=task_state.task_type,
                     files=",".join(task_state.files),
-                    result=task_state.result,
-                    disclosed=task_state.disclosed,
+                    score=task_state.score,
                     waiting_tx_hash=task_state.waiting_tx_hash,
                     waiting_tx_method=task_state.waiting_tx_method,
                     checkpoint=task_state.checkpoint,
                 )
                 sess.add(state)
             else:
-                state.round = task_state.round
                 state.timeout = task_state.timeout
                 state.status = task_state.status
+                state.task_type = task_state.task_type
                 state.files = ",".join(task_state.files)
-                state.result = task_state.result
-                state.disclosed = task_state.disclosed
+                state.score = task_state.score
                 state.waiting_tx_hash = task_state.waiting_tx_hash
                 state.waiting_tx_method = task_state.waiting_tx_method
+                state.checkpoint = task_state.checkpoint
             await sess.commit()
 
-    async def has(self, task_id: int) -> bool:
+    async def has(self, task_id_commitment: bytes) -> bool:
         async with db.session_scope() as sess:
             q = sa.select(db_models.TaskState).where(
-                db_models.TaskState.task_id == task_id
+                db_models.TaskState.task_id_commitment == task_id_commitment.hex()
             )
             state = (await sess.scalars(q)).one_or_none()
             return state is not None
@@ -93,13 +91,12 @@ class DbTaskStateCache(TaskStateCache):
             states = (await sess.execute(q)).scalars().all()
             return [
                 TaskState(
-                    task_id=state.task_id,
-                    round=state.round,
+                    task_id_commitment=bytes.fromhex(state.task_id_commitment),
                     timeout=state.timeout,
                     status=state.status,
+                    task_type=state.task_type,
                     files=state.files.split(","),
-                    result=state.result,
-                    disclosed=state.disclosed,
+                    score=state.score,
                     waiting_tx_hash=state.waiting_tx_hash,
                     waiting_tx_method=state.waiting_tx_method,
                     checkpoint=state.checkpoint,

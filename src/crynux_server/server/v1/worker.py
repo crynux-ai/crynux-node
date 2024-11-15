@@ -149,7 +149,7 @@ async def _process_one_inference_task(
                         exc = TaskExecutionError(err_msg)
                     task_result.set_error(exc)
                     _logger.error(
-                        f"worker {worker_id} inference task {task_input.task_id} error:\n{err_msg}"
+                        f"worker {worker_id} inference task {task_input.task_id_commitment_str} error:\n{err_msg}"
                     )
                     return
                 elif msg.payload_type == PayloadType.PNG:
@@ -170,13 +170,13 @@ async def _process_one_inference_task(
                 break
         task_result.set_result(results)
     except WebSocketDisconnect:
-        _logger.error(f"worker {worker_id} disconnects, cancel inference task {task_input.task_id}")
+        _logger.error(f"worker {worker_id} disconnects, cancel inference task {task_input.task_id_commitment_str}")
         task_result.cancel()
         raise
     except Exception as e:
         _logger.exception(e)
         _logger.error(
-            f"worker {worker_id} inferece task {task_input.task_id} unexpected error"
+            f"worker {worker_id} inferece task {task_input.task_id_commitment_str} unexpected error"
         )
         task_result.set_error(TaskError(f"unexpected error: {str(e)}"))
         raise e
@@ -205,7 +205,7 @@ async def worker(websocket: WebSocket, worker_manager: WorkerManagerDep):
     await websocket.accept()
     version_msg = await websocket.receive_json()
     version = version_msg["version"]
-    worker_id = worker_manager.connect(version)
+    worker_id = await worker_manager.connect(version)
     await websocket.send_json({"worker_id": worker_id})
     try:
         while True:
@@ -220,4 +220,4 @@ async def worker(websocket: WebSocket, worker_manager: WorkerManagerDep):
     except WebSocketDisconnect:
         pass
     finally:
-        worker_manager.disconnect(worker_id)
+        await worker_manager.disconnect(worker_id)
