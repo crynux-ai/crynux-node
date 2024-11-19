@@ -11,14 +11,16 @@ class TaskType(IntEnum):
 
 
 class TaskError(IntEnum):
-    ParametersValidationFailed = 0
+    NONE = 0
+    ParametersValidationFailed = 1
 
 
 class TaskAbortReason(IntEnum):
-    Timeout = 0
-    ModelDownloadFailed = 1
-    IncorrectResult = 2
-    TaskFeeTooLow = 3
+    NONE = 0
+    Timeout = 1
+    ModelDownloadFailed = 2
+    IncorrectResult = 3
+    TaskFeeTooLow = 4
 
 
 class TaskStatus(IntEnum):
