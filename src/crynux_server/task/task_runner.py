@@ -387,8 +387,9 @@ class MockTaskRunner(TaskRunner):
             error=models.TaskError.ParametersValidationFailed,
             payment_addresses=[],
             payments=[],
-            start_blocknum=0,
-            finish_blocknum=0,
+            create_timestamp=0,
+            start_timestamp=0,
+            score_ready_timestamp=0,
         )
 
     async def cancel_task(self):

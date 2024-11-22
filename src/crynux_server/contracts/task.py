@@ -215,8 +215,9 @@ class TaskContract(ContractWrapper):
             error=TaskError(res[18]),
             payment_addresses=res[19],
             payments=res[20],
-            start_blocknum=res[21],
-            finish_blocknum=res[22],
+            create_timestamp=res[21],
+            start_timestamp=res[22],
+            score_ready_timestamp=res[23],
         )
         return task
 

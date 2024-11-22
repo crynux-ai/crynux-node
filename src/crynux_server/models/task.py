@@ -60,8 +60,9 @@ class ChainTask(BaseModel):
     error: TaskError
     payment_addresses: List[str]
     payments: List[int]
-    start_blocknum: int
-    finish_blocknum: int
+    create_timestamp: int
+    start_timestamp: int
+    score_ready_timestamp: int
 
 
 class TaskConfig(BaseModel):
