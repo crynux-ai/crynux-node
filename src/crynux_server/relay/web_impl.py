@@ -42,44 +42,29 @@ class WebRelay(Relay):
         self.client = httpx.AsyncClient(base_url=base_url, timeout=30)
         self.signer = Signer(privkey=privkey)
 
-    async def create_task(self, task_id_commitment: bytes, task_args: str) -> RelayTask:
+    async def create_task(self, task_id_commitment: bytes, task_args: str, checkpoint_dir: Optional[str] = None) -> RelayTask:
         input: Dict[str, Any] = {"task_id_commitment": task_id_commitment.hex(), "task_args": task_args}
         timestamp, signature = self.signer.sign(input)
         input.update({"timestamp": timestamp, "signature": signature})
 
-        resp = await self.client.post("/v1/inference_tasks", json=input)
-        resp = _process_resp(resp, "createTask")
-        content = resp.json()
-        data = content["data"]
-        return RelayTask.model_validate(data)
-
-    async def upload_checkpoint(self, task_id_commitment: bytes, checkpoint_dir: str):
-        input = {"task_id_commitment": task_id_commitment.hex()}
-        timestamp, signature = self.signer.sign(input)
-
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            # zip checkpoint dir to a archive file
-            checkpoint_file = os.path.join(tmp_dir, "checkpoint.zip")
-            await to_thread.run_sync(
-                shutil.make_archive, checkpoint_file[:-4], "zip", checkpoint_dir
-            )
-
+        if checkpoint_dir is not None:
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                checkpoint_file = os.path.join(tmp_dir, "checkpoint.zip")
+                await to_thread.run_sync(
+                    shutil.make_archive, checkpoint_file[:-4], "zip", checkpoint_dir
+                )
             with ExitStack() as stack:
                 filename = os.path.basename(checkpoint_file)
                 file_obj = stack.enter_context(open(checkpoint_file, "rb"))
                 files = [("checkpoint", (filename, file_obj))]
-
-                resp = await self.client.post(
-                    f"/v1/inference_tasks/{task_id_commitment.hex()}/checkpoint",
-                    data={"timestamp": timestamp, "signature": signature},
-                    files=files,
-                    timeout=None,
-                )
-                resp = _process_resp(resp, "uploadCheckpoint")
-                content = await resp.json()
-                message = content["message"]
-                if message != "success":
-                    raise RelayError(resp.status_code, "uploadCheckpoint", message)
+                
+                resp = await self.client.post(f"/v1/inference_tasks/{task_id_commitment.hex()}", data=input, files=files, timeout=None)
+        else:
+            resp = await self.client.post(f"/v1/inference_tasks/{task_id_commitment.hex()}", data=input)
+        resp = _process_resp(resp, "createTask")
+        content = resp.json()
+        data = content["data"]
+        return RelayTask.model_validate(data)
 
     async def get_checkpoint(self, task_id_commitment: bytes, result_checkpoint_dir: str):
         input = {"task_id_commitment": task_id_commitment.hex()}

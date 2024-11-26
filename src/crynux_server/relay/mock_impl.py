@@ -47,7 +47,7 @@ class MockRelay(Relay):
         except Exception as e:
             raise RelayError(status_code=500, method=method, message=str(e))
 
-    async def create_task(self, task_id_commitment: bytes, task_args: str) -> RelayTask:
+    async def create_task(self, task_id_commitment: bytes, task_args: str, checkpoint_dir: Optional[str] = None) -> RelayTask:
         with self.wrap_error("createTask"):
             t = RelayTask(
                 task_id_commitment=task_id_commitment,
@@ -55,20 +55,19 @@ class MockRelay(Relay):
                 task_args=task_args,
             )
             self.tasks[task_id_commitment] = t
+            if checkpoint_dir is not None:
+                condition = self.get_condition(task_id_commitment)
+                async with condition:
+                    task_dir = os.path.join(self._tempdir, task_id_commitment.hex())
+                    if not os.path.exists(task_dir):
+                        os.makedirs(task_dir, exist_ok=True)
+
+                    dst_path = os.path.join(task_dir, "input_checkpoint")
+                    await to_thread.run_sync(shutil.copytree, checkpoint_dir, dst_path)
+                    self.task_input_checkpoint[task_id_commitment] = dst_path
+                    condition.notify()
+
             return t
-
-    async def upload_checkpoint(self, task_id_commitment: bytes, checkpoint_dir: str):
-        with self.wrap_error("uploadCheckpoint"):
-            condition = self.get_condition(task_id_commitment)
-            async with condition:
-                task_dir = os.path.join(self._tempdir, task_id_commitment.hex())
-                if not os.path.exists(task_dir):
-                    os.makedirs(task_dir, exist_ok=True)
-
-                dst_path = os.path.join(task_dir, "input_checkpoint")
-                await to_thread.run_sync(shutil.copytree, checkpoint_dir, dst_path)
-                self.task_input_checkpoint[task_id_commitment] = dst_path
-                condition.notify()
 
     async def get_checkpoint(self, task_id_commitment: bytes, result_checkpoint_dir: str):
         with self.wrap_error("getCheckpoint"):
