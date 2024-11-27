@@ -65,6 +65,7 @@ class TaskContract(ContractWrapper):
     # Interfaces for applications
     async def create_task(
         self,
+        task_fee: int,
         task_type: TaskType,
         task_id_commitment: bytes,
         nonce: bytes,
@@ -89,6 +90,7 @@ class TaskContract(ContractWrapper):
             requiredGPUVRAM=required_gpu_vram,
             taskVersion=task_version,
             taskSize=task_size,
+            value=task_fee,
             option=option,
             w3=w3,
         )
