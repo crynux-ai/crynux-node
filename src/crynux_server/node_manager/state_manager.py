@@ -141,7 +141,7 @@ class NodeStateManager(object):
                 waiter = await self.contracts.node_contract.join(
                     gpu_name=gpu_name,
                     gpu_vram=gpu_vram,
-                    public_key=self.contracts.public_key,
+                    public_key=self.contracts.public_key.to_bytes(),
                     version=version,
                     option=option,
                     stake_amount=node_amount
@@ -205,7 +205,7 @@ class NodeStateManager(object):
             waiter = await self.contracts.node_contract.join(
                 gpu_name=gpu_name,
                 gpu_vram=gpu_vram,
-                public_key=self.contracts.public_key,
+                public_key=self.contracts.public_key.to_bytes(),
                 version=version,
                 option=option,
                 stake_amount=node_amount

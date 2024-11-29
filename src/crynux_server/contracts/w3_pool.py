@@ -12,6 +12,7 @@ from aiohttp import ClientSession, ClientTimeout, TCPConnector
 from anyio import Condition, Lock, move_on_after
 from eth_account import Account
 from eth_keys import keys
+from eth_keys.datatypes import PrivateKey, PublicKey
 from eth_account.signers.local import LocalAccount
 from eth_typing import ChecksumAddress
 from web3 import AsyncHTTPProvider, AsyncWeb3, WebsocketProviderV2
@@ -133,8 +134,8 @@ class W3Pool(object):
         if privkey.startswith("0x"):
             privkey = privkey[2:]
         privkey_bytes = bytes.fromhex(privkey)
-        self._privkey = keys.PrivateKey(privkey_bytes)
-        self._pubkey: bytes = self._privkey.public_key.to_bytes()
+        self._privkey: PrivateKey = keys.PrivateKey(privkey_bytes)
+        self._pubkey: PublicKey = self._privkey.public_key
         self._account: ChecksumAddress = self._privkey.public_key.to_checksum_address()
 
         self._pool_size = pool_size
@@ -188,8 +189,12 @@ class W3Pool(object):
         return self._account
 
     @property
-    def public_key(self) -> bytes:
+    def public_key(self) -> PublicKey:
         return self._pubkey
+    
+    @property
+    def private_key(self) -> PrivateKey:
+        return self._privkey
 
     async def _new_w3(self) -> W3Guard:
         if self.provider_type == ProviderType.HTTP:

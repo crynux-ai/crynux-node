@@ -3,6 +3,7 @@ from enum import IntEnum
 from typing import Any, Dict, Optional
 
 from anyio import Condition
+from eth_keys.datatypes import PrivateKey, PublicKey
 from eth_typing import ChecksumAddress
 from hexbytes import HexBytes
 from web3.logs import WARN
@@ -245,8 +246,12 @@ class Contracts(object):
         return self._w3_pool.account
     
     @property
-    def public_key(self) -> bytes:
+    def public_key(self) -> PublicKey:
         return self._w3_pool.public_key
+    
+    @property
+    def private_key(self) -> PrivateKey:
+        return self._w3_pool._privkey
 
     async def get_current_block_number(self) -> int:
         async with await self._w3_pool.get() as w3:
