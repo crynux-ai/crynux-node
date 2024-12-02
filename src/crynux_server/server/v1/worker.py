@@ -9,9 +9,15 @@ from PIL import Image
 from pydantic import BaseModel
 
 from crynux_server.models import TaskType
-from crynux_server.worker_manager import (TaskError, TaskExecutionError,
-                                          TaskInput, TaskInvalid, TaskResult,
-                                          WorkerManager, is_task_invalid)
+from crynux_server.worker_manager import (
+    TaskError,
+    TaskExecutionError,
+    TaskInput,
+    TaskInvalid,
+    TaskResult,
+    WorkerManager,
+    is_task_invalid,
+)
 
 from ..depends import WorkerManagerDep
 
@@ -112,7 +118,9 @@ async def process_init_inference(
             worker_manager.init_inference_task_success(worker_id)
             _logger.info(f"worker {worker_id} complete init inference task")
     except WebSocketDisconnect:
-        _logger.error(f"worker {worker_id} disconnects during running initial inference task")
+        _logger.error(
+            f"worker {worker_id} disconnects during running initial inference task"
+        )
         worker_manager.cancel_init_inference_task(worker_id)
         raise
     except Exception as e:
@@ -149,7 +157,7 @@ async def _process_one_inference_task(
                         exc = TaskExecutionError(err_msg)
                     task_result.set_error(exc)
                     _logger.error(
-                        f"worker {worker_id} inference task {task_input.task_id_commitment_str} error:\n{err_msg}"
+                        f"worker {worker_id} inference task {task_input.task_id_commitment} error:\n{err_msg}"
                     )
                     return
                 elif msg.payload_type == PayloadType.PNG:
@@ -170,13 +178,15 @@ async def _process_one_inference_task(
                 break
         task_result.set_result(results)
     except WebSocketDisconnect:
-        _logger.error(f"worker {worker_id} disconnects, cancel inference task {task_input.task_id_commitment_str}")
+        _logger.error(
+            f"worker {worker_id} disconnects, cancel inference task {task_input.task_id_commitment}"
+        )
         task_result.cancel()
         raise
     except Exception as e:
         _logger.exception(e)
         _logger.error(
-            f"worker {worker_id} inferece task {task_input.task_id_commitment_str} unexpected error"
+            f"worker {worker_id} inferece task {task_input.task_id_commitment} unexpected error"
         )
         task_result.set_error(TaskError(f"unexpected error: {str(e)}"))
         raise e

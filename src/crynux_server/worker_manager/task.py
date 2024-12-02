@@ -10,7 +10,7 @@ from .error import TaskCancelled
 
 
 class TaskInput(BaseModel):
-    task_id_commitment_str: str
+    task_id_commitment: str
     task_name: str
     task_type: TaskType
     task_args: str

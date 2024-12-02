@@ -30,7 +30,7 @@ async def run_task(
 ):
     worker_manager = get_worker_manager()
     task_input = TaskInput(
-        task_id_commitment_str=task_id_commitment.hex(),
+        task_id_commitment=task_id_commitment.hex(),
         task_name=task_name,
         task_type=task_type,
         task_args=task_args,
