@@ -1,14 +1,18 @@
 import logging
 from asyncio import Queue
 from datetime import datetime
-from typing import Any, Awaitable, Callable, Dict, List, Optional
+from typing import (Any, Awaitable, Callable, Dict, Generic, List, Optional,
+                    TypeVar)
 
-from anyio import (TASK_STATUS_IGNORED, CancelScope, create_task_group,
-                   get_cancelled_exc_class, move_on_after, sleep)
+from anyio import (TASK_STATUS_IGNORED, CancelScope, Condition,
+                   create_task_group, get_cancelled_exc_class, move_on_after,
+                   sleep)
 from anyio.abc import TaskGroup, TaskStatus
 from hexbytes import HexBytes
 from web3.logs import DISCARD
-from web3.types import EventData, TxReceipt
+from web3.types import EventData, TxReceipt, BlockData
+from web3.exceptions import BlockNotFound, TransactionNotFound
+from tenacity import retry, wait_fixed, stop_after_attempt, retry_if_exception_type
 
 from crynux_server.contracts import Contracts, ContractWrapper
 
@@ -88,6 +92,27 @@ class EventFilter(object):
             tg.start_soon(wrap_callback(self.callback), event)
 
 
+KT = TypeVar("KT")
+VT = TypeVar("VT")
+
+
+class CondMap(Generic[KT, VT]):
+    def __init__(self) -> None:
+        self._data: Dict[KT, VT] = {}
+        self._cond = Condition()
+
+    async def get(self, key: KT):
+        async with self._cond:
+            while key not in self._data:
+                await self._cond.wait()
+            return self._data[key]
+
+    async def set(self, key: KT, value: VT):
+        async with self._cond:
+            self._data[key] = value
+            self._cond.notify_all()
+
+
 class EventWatcher(object):
     def __init__(self, contracts: Contracts):
         self.contracts = contracts
@@ -99,6 +124,10 @@ class EventWatcher(object):
 
         self._blocknum_queue = Queue[int](100)
         self._tx_hash_queue = Queue[HexBytes](100)
+
+        self._block_map = CondMap[int, BlockData]()
+        self._tx_receipt_map = CondMap[HexBytes, TxReceipt]()
+
 
     @classmethod
     def from_contracts(cls, contracts: Contracts) -> "EventWatcher":
@@ -133,6 +162,90 @@ class EventWatcher(object):
         if filter_id in self._event_filters:
             event_filter = self._event_filters.pop(filter_id)
             _logger.debug(f"Remove event watcher {event_filter.event_name}")
+
+    @retry(
+        wait=wait_fixed(3),
+        stop=stop_after_attempt(5),
+        retry=retry_if_exception_type(BlockNotFound),
+        reraise=True,
+    )
+    async def _get_block(self, blocknum: int):
+        block = await self.contracts.get_block(blocknum)
+        assert "transactions" in block
+        with move_on_after(5, shield=True):
+            for tx_hash in block["transactions"]:
+                assert isinstance(tx_hash, bytes)
+                await self._tx_hash_queue.put(tx_hash)
+            await self._block_map.set(blocknum, block)
+        assert "timestamp" in block
+        blocktime = datetime.fromtimestamp(
+            block["timestamp"]
+        ).strftime("%Y-%m-%d %H:%M:%S")
+        tx_count = len(block["transactions"])
+        _logger.debug(
+            f"get block {blocknum} produced at {blocktime}, {tx_count} txs"
+        )
+
+    async def _get_blocks(self):
+        while True:
+            blocknum = await self._blocknum_queue.get()
+            try:
+                await self._get_block(blocknum)
+            except get_cancelled_exc_class():
+                with move_on_after(1, shield=True):
+                    await self._blocknum_queue.put(blocknum)
+                raise
+            except Exception:
+                with move_on_after(1, shield=True):
+                    await self._blocknum_queue.put(blocknum)
+                raise
+            
+            self._blocknum_queue.task_done()
+
+    @retry(
+        wait=wait_fixed(3),
+        stop=stop_after_attempt(5),
+        retry=retry_if_exception_type(TransactionNotFound),
+        reraise=True,
+    )
+    async def _get_tx_receipt(self, tx_hash: HexBytes):
+        receipt = await self.contracts.get_tx_receipt(tx_hash)
+        await self._tx_receipt_map.set(tx_hash, receipt)
+        blocknum = receipt["blockNumber"]
+        tx_index = receipt["transactionIndex"]
+        _logger.debug(
+            f"get receipt {tx_index} of block {blocknum}"
+        )
+
+    async def _get_tx_receipts(self):
+        while True:
+            tx_hash = await self._tx_hash_queue.get()
+            try:
+                await self._get_tx_receipt(tx_hash)
+            except get_cancelled_exc_class():
+                with move_on_after(1, shield=True):
+                    await self._tx_hash_queue.put(tx_hash)
+                raise
+            except Exception:
+                with move_on_after(1, shield=True):
+                    await self._tx_hash_queue.put(tx_hash)
+                raise
+            
+            self._tx_hash_queue.task_done()
+
+    async def _process_events(self, from_block: int, to_block: int):
+        async with create_task_group() as tg:
+            for blocknum in range(from_block, to_block + 1):
+                block = await self._block_map.get(blocknum)
+                assert "transactions" in block
+
+                for tx_hash in block["transactions"]:
+                    assert isinstance(tx_hash, bytes)
+                    receipt = await self._tx_receipt_map.get(tx_hash)
+
+                    event_filters = list(self._event_filters.values())
+                    for event_filter in event_filters:
+                        tg.start_soon(event_filter.process_receipt, receipt)
 
     async def start(
         self,
@@ -215,10 +328,10 @@ class EventWatcher(object):
 
                 async with create_task_group() as tg:
                     for _ in range(4):
-                        tg.start_soon(_process_tx_receipt)
+                        tg.start_soon(self._get_blocks)
 
                     for _ in range(4):
-                        tg.start_soon(_process_block)
+                        tg.start_soon(self._get_tx_receipts)
 
                     if from_block == 0:
                         from_block = await self.contracts.get_current_block_number()
@@ -229,9 +342,13 @@ class EventWatcher(object):
                         latest_blocknum = (
                             await self.contracts.get_current_block_number()
                         )
-                        while from_block <= latest_blocknum:
-                            await self._blocknum_queue.put(from_block)
-                            from_block += 1
+                        if from_block <= latest_blocknum:
+                            tg.start_soon(self._process_events, from_block, latest_blocknum)
+
+                            for blocknum in range(from_block, latest_blocknum + 1):
+                                await self._blocknum_queue.put(blocknum)                            
+                            from_block = latest_blocknum + 1
+
                         await sleep(interval)
 
                     await self._blocknum_queue.join()
