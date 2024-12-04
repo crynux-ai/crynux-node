@@ -107,7 +107,7 @@ class WebRelay(Relay):
             for file_path in file_paths:
                 filename = os.path.basename(file_path)
                 file_obj = stack.enter_context(open(file_path, "rb"))
-                files.append(("images", (filename, file_obj)))
+                files.append(("files", (filename, file_obj)))
 
             if checkpoint_dir is not None:
                 tmp_dir = stack.enter_context(tempfile.TemporaryDirectory())
