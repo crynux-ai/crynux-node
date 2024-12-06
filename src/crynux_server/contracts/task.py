@@ -208,7 +208,7 @@ class TaskContract(ContractWrapper):
             score=res[9],
             task_fee=res[10],
             task_size=res[11],
-            model_id=res[12],
+            task_model_id=res[12],
             min_vram=res[13],
             required_gpu=res[14],
             required_gpu_vram=res[15],

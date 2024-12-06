@@ -51,7 +51,7 @@ class ChainTask(BaseModel):
     score: bytes
     task_fee: int
     task_size: int
-    model_id: str
+    task_model_id: str
     min_vram: int
     required_gpu: str
     required_gpu_vram: int

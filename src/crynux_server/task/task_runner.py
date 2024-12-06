@@ -8,15 +8,13 @@ from abc import ABC, abstractmethod
 from contextlib import asynccontextmanager
 from typing import Awaitable, Callable, List, Optional
 
-from anyio import (fail_after, get_cancelled_exc_class, sleep, to_thread, move_on_after)
+from anyio import fail_after, get_cancelled_exc_class, sleep, to_thread, move_on_after
 from hexbytes import HexBytes
-from tenacity import (retry,  stop_after_attempt,
-                      wait_fixed)
+from tenacity import retry, stop_after_attempt, wait_fixed
 
 from crynux_server import models
 from crynux_server.config import Config, get_config
-from crynux_server.contracts import (Contracts, TxRevertedError, TxWaiter,
-                                     get_contracts)
+from crynux_server.contracts import Contracts, TxRevertedError, TxWaiter, get_contracts
 from crynux_server.relay import Relay, get_relay
 from crynux_server.worker_manager import TaskInvalid
 
@@ -37,7 +35,7 @@ class TaskRunner(ABC):
         task_id_commitment: bytes,
         task_name: str,
         state_cache: Optional[TaskStateCache] = None,
-        contracts: Optional[Contracts] = None
+        contracts: Optional[Contracts] = None,
     ):
         self.task_id_commitment = task_id_commitment
         self.task_name = task_name
@@ -85,7 +83,7 @@ class TaskRunner(ABC):
                         task_id_commitment=self.task_id_commitment,
                         timeout=0,
                         status=models.TaskStatus.Queued,
-                        task_type=models.TaskType.SD
+                        task_type=models.TaskType.SD,
                     )
                     self.state = state
                     need_dump = True
@@ -126,7 +124,7 @@ class TaskRunner(ABC):
             models.TaskStatus.EndGroupSuccess,
             models.TaskStatus.EndInvalidated,
             models.TaskStatus.EndSuccess,
-            models.TaskStatus.ErrorReported
+            models.TaskStatus.ErrorReported,
         ]
 
     async def change_task_status(self, status: models.TaskStatus, interval: float = 1):
@@ -136,7 +134,10 @@ class TaskRunner(ABC):
         async with self.state_context():
             if status == models.TaskStatus.ParametersUploaded:
                 await self.execute_task()
-            elif status == models.TaskStatus.Validated or status == models.TaskStatus.GroupValidated:
+            elif (
+                status == models.TaskStatus.Validated
+                or status == models.TaskStatus.GroupValidated
+            ):
                 await self.upload_result()
             self.state.status = status
 
@@ -230,7 +231,9 @@ class InferenceTaskRunner(TaskRunner):
 
         try:
             await self._call_task_contract_method(
-                "reportTaskError", task_id_commitment=self.task_id_commitment, error=models.TaskError.ParametersValidationFailed
+                "reportTaskError",
+                task_id_commitment=self.task_id_commitment,
+                error=models.TaskError.ParametersValidationFailed,
             )
             _logger.info(
                 f"Task {self.task_id_commitment.hex()} error. Report the task error to contract."
@@ -249,12 +252,18 @@ class InferenceTaskRunner(TaskRunner):
 
     async def cancel_task(self):
         try:
-            waiter = await self.contracts.task_contract.abort_task(self.task_id_commitment, models.TaskAbortReason.Timeout)
+            waiter = await self.contracts.task_contract.abort_task(
+                self.task_id_commitment, models.TaskAbortReason.Timeout
+            )
             await waiter.wait()
-            _logger.info(f"Task {self.task_id_commitment.hex()} timeout. Cancel the task.")
+            _logger.info(
+                f"Task {self.task_id_commitment.hex()} timeout. Cancel the task."
+            )
         except TxRevertedError as e:
             if "Task not exist" not in e.reason:
-                _logger.error(f"Cancel task {self.task_id_commitment.hex()} failed due to {e.reason}")
+                _logger.error(
+                    f"Cancel task {self.task_id_commitment.hex()} failed due to {e.reason}"
+                )
                 raise
         except get_cancelled_exc_class():
             raise
@@ -270,7 +279,7 @@ class InferenceTaskRunner(TaskRunner):
         )
         async def get_task():
             return await self.relay.get_task(self.task_id_commitment)
-        
+
         @retry(
             stop=stop_after_attempt(3),
             wait=wait_fixed(30),
@@ -280,7 +289,9 @@ class InferenceTaskRunner(TaskRunner):
             await self.relay.get_checkpoint(self.task_id_commitment, checkpoint_dir)
 
         async def execute_task_in_worker():
-            task_dir = os.path.join(self.config.task_config.output_dir, self.task_id_commitment.hex())
+            task_dir = os.path.join(
+                self.config.task_config.output_dir, self.task_id_commitment.hex()
+            )
             task = await get_task()
 
             if self.state.task_type == models.TaskType.SD_FT_LORA:
@@ -319,15 +330,25 @@ class InferenceTaskRunner(TaskRunner):
                 with fail_after(delay=60, shield=True):
                     await self._report_error()
 
-        if len(self.state.files) == 0 or len(self.state.score) == 0 or len(self.state.checkpoint) == 0:
+        if (
+            len(self.state.files) == 0
+            or len(self.state.score) == 0
+            or len(self.state.checkpoint) == 0
+        ):
             await execute_task_in_worker()
 
-        await self._call_task_contract_method("submitTaskScore", task_id_commitment=self.task_id_commitment, score=self.state.score)
+        await self._call_task_contract_method(
+            "submitTaskScore",
+            task_id_commitment=self.task_id_commitment,
+            score=self.state.score,
+        )
         _logger.info("Submiting task score success")
 
     async def upload_result(self):
         async with self.state_context():
-            await self.relay.upload_task_result(self.task_id_commitment, self.state.files, self.state.checkpoint)
+            await self.relay.upload_task_result(
+                self.task_id_commitment, self.state.files, self.state.checkpoint
+            )
             _logger.info(f"Task {self.task_id_commitment.hex()} success")
 
     async def cleanup(self):
@@ -378,7 +399,7 @@ class MockTaskRunner(TaskRunner):
             score=b"",
             task_fee=0,
             task_size=1,
-            model_id="crynux-ai/stable-diffusion-v1-5",
+            task_model_id="crynux-ai/stable-diffusion-v1-5",
             min_vram=0,
             required_gpu="",
             required_gpu_vram=0,
