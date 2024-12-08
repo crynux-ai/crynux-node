@@ -144,7 +144,7 @@ class TaskRunner(ABC):
     async def run(self, interval: float = 1):
         try:
             await self.sync_status()
-            if self.should_stop():
+            if await self.should_stop():
                 return
             delay = self.state.timeout - time.time()
             if delay <= 0:
@@ -155,12 +155,12 @@ class TaskRunner(ABC):
                     await self.change_task_status(task.status, interval=interval)
         except TimeoutError:
             # cancel task
-            if not self.should_stop():
+            if not await self.should_stop():
                 await self.cancel_task()
                 async with self.state_context():
                     self.state.status = models.TaskStatus.EndAborted
         finally:
-            if self.should_stop():
+            if await self.should_stop():
                 with move_on_after(5, shield=True):
                     await self.cleanup()
 
