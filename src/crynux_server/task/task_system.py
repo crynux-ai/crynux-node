@@ -1,10 +1,9 @@
 import logging
 from typing import Dict, Optional, Type, TypeVar
 
-from anyio import create_task_group, get_cancelled_exc_class
+from anyio import create_task_group, get_cancelled_exc_class, sleep
 from anyio.abc import TaskGroup
-from tenacity import (AsyncRetrying, stop_after_attempt, stop_never,
-                      wait_fixed)
+from tenacity import AsyncRetrying, stop_after_attempt, stop_never, wait_fixed
 
 from crynux_server.contracts import Contracts
 from crynux_server.models import TaskStatus
@@ -16,6 +15,10 @@ _logger = logging.getLogger(__name__)
 
 
 T = TypeVar("T", bound=TaskRunner)
+
+
+def _is_task_id_commitment_empty(task_id_commitment: bytes):
+    return all(v == 0 for v in task_id_commitment)
 
 
 class TaskSystem(object):
@@ -62,13 +65,17 @@ class TaskSystem(object):
                         raise
                     except Exception as e:
                         _logger.exception(e)
-                        _logger.error(f"Task {task_id_commitment.hex()} error: {str(e)}")
+                        _logger.error(
+                            f"Task {task_id_commitment.hex()} error: {str(e)}"
+                        )
                         raise
         finally:
             del self._runners[task_id_commitment]
 
     async def _get_node_task(self):
-        return await self._contracts.task_contract.get_node_task(self._contracts.account)
+        return await self._contracts.task_contract.get_node_task(
+            self._contracts.account
+        )
 
     async def _recover(self, tg: TaskGroup):
         running_status = [
@@ -77,7 +84,7 @@ class TaskSystem(object):
             TaskStatus.ParametersUploaded,
             TaskStatus.ScoreReady,
             TaskStatus.Validated,
-            TaskStatus.GroupValidated
+            TaskStatus.GroupValidated,
         ]
         running_states = await self.state_cache.find(status=running_status)
         for state in running_states:
@@ -85,12 +92,12 @@ class TaskSystem(object):
                 task_id_commitment=state.task_id_commitment,
                 task_name=self._task_name,
                 state_cache=self._state_cache,
-                contracts=self._contracts
+                contracts=self._contracts,
             )
             runner.state = state
             self._runners[state.task_id_commitment] = runner
             tg.start_soon(self._run_task, state.task_id_commitment)
-            _logger.debug(f"Recreate task runner for {state.task_id_commitment.hex()}")        
+            _logger.debug(f"Recreate task runner for {state.task_id_commitment.hex()}")
 
     async def start(self):
         assert self._tg is None, "The TaskSystem has already been started."
@@ -101,15 +108,21 @@ class TaskSystem(object):
                 await self._recover(tg)
                 while True:
                     task_id_commitment = await self._get_node_task()
-                    if task_id_commitment not in self._runners:
+                    if (
+                        not _is_task_id_commitment_empty(task_id_commitment)
+                        and task_id_commitment not in self._runners
+                    ):
                         runner = self._runner_cls(
                             task_id_commitment=task_id_commitment,
                             task_name=self._task_name,
                             state_cache=self._state_cache,
-                            contracts=self._contracts
+                            contracts=self._contracts,
                         )
                         self._runners[task_id_commitment] = runner
                         tg.start_soon(self._run_task, task_id_commitment)
+                    
+                    await sleep(self._interval)
+
 
         except get_cancelled_exc_class():
             raise
