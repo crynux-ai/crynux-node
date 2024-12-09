@@ -150,7 +150,7 @@ class TaskRunner(ABC):
             if delay <= 0:
                 raise TimeoutError
             with fail_after(delay, shield=False):
-                while not self.should_stop():
+                while not await self.should_stop():
                     task = await self.get_task()
                     await self.change_task_status(task.status, interval=interval)
         except TimeoutError:

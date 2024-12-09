@@ -109,7 +109,7 @@ class NodeStateManager(object):
             raise
 
     async def try_start(
-        self, gpu_name: str, gpu_vram: int, version: str, interval: float = 5, retry: bool = True, *, option: "Optional[TxOption]" = None
+        self, gpu_name: str, gpu_vram: int, version: str, interval: float = 5, *, option: "Optional[TxOption]" = None
     ):
         _logger.info("Trying to join the network automatically...")
         while True:
