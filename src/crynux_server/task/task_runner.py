@@ -8,13 +8,15 @@ from abc import ABC, abstractmethod
 from contextlib import asynccontextmanager
 from typing import Awaitable, Callable, List, Optional
 
-from anyio import fail_after, get_cancelled_exc_class, sleep, to_thread, move_on_after
+from anyio import (fail_after, get_cancelled_exc_class, move_on_after, sleep,
+                   to_thread)
 from hexbytes import HexBytes
 from tenacity import retry, stop_after_attempt, wait_fixed
 
 from crynux_server import models
 from crynux_server.config import Config, get_config
-from crynux_server.contracts import Contracts, TxRevertedError, TxWaiter, get_contracts
+from crynux_server.contracts import (Contracts, TxRevertedError, TxWaiter,
+                                     get_contracts)
 from crynux_server.relay import Relay, get_relay
 from crynux_server.worker_manager import TaskInvalid
 
@@ -37,7 +39,7 @@ class TaskRunner(ABC):
         state_cache: Optional[TaskStateCache] = None,
         contracts: Optional[Contracts] = None,
     ):
-        self.task_id_commitment = task_id_commitment
+        self.task_id_commitment = HexBytes(task_id_commitment)
         self.task_name = task_name
         if state_cache is None:
             state_cache = get_task_state_cache()
@@ -127,19 +129,18 @@ class TaskRunner(ABC):
             models.TaskStatus.ErrorReported,
         ]
 
-    async def change_task_status(self, status: models.TaskStatus, interval: float = 1):
-        if status == self.state.status:
-            await sleep(interval)
-            return
+    async def change_task_status(self, status: models.TaskStatus):
+        _logger.debug(f"task {self.task_id_commitment.hex()} status: {status}")
         async with self.state_context():
-            if status == models.TaskStatus.ParametersUploaded:
-                await self.execute_task()
-            elif (
-                status == models.TaskStatus.Validated
-                or status == models.TaskStatus.GroupValidated
-            ):
-                await self.upload_result()
             self.state.status = status
+
+        if status == models.TaskStatus.ParametersUploaded:
+            await self.execute_task()
+        elif (
+            status == models.TaskStatus.Validated
+            or status == models.TaskStatus.GroupValidated
+        ):
+            await self.upload_result()
 
     async def run(self, interval: float = 1):
         try:
@@ -149,10 +150,15 @@ class TaskRunner(ABC):
             delay = self.state.timeout - time.time()
             if delay <= 0:
                 raise TimeoutError
+
             with fail_after(delay, shield=False):
+                await self.change_task_status(self.state.status)
                 while not await self.should_stop():
                     task = await self.get_task()
-                    await self.change_task_status(task.status, interval=interval)
+                    if task.status != self.state.status:
+                        await self.change_task_status(task.status)
+                    else:
+                        await sleep(interval)
         except TimeoutError:
             # cancel task
             if not await self.should_stop():
@@ -247,6 +253,9 @@ class InferenceTaskRunner(TaskRunner):
         task = await self.contracts.task_contract.get_task(self.task_id_commitment)
         # task not exist
         if task.task_id_commitment != self.task_id_commitment:
+            _logger.error(
+                f"local task id commitment: {self.task_id_commitment.hex()}, remote task id commitment: {task.task_id_commitment.hex()}"
+            )
             raise ValueError("Task not found")
         return task
 
@@ -278,7 +287,9 @@ class InferenceTaskRunner(TaskRunner):
             reraise=True,
         )
         async def get_task():
-            return await self.relay.get_task(self.task_id_commitment)
+            task = await self.relay.get_task(self.task_id_commitment)
+            _logger.debug(f"get task {self.task_id_commitment.hex()} from relay")
+            return task
 
         @retry(
             stop=stop_after_attempt(3),
@@ -287,6 +298,7 @@ class InferenceTaskRunner(TaskRunner):
         )
         async def get_checkpoint(checkpoint_dir: str):
             await self.relay.get_checkpoint(self.task_id_commitment, checkpoint_dir)
+            _logger.debug(f"get task {self.task_id_commitment.hex()} from relay")
 
         async def execute_task_in_worker():
             task_dir = os.path.join(
@@ -308,7 +320,7 @@ class InferenceTaskRunner(TaskRunner):
                 f"task type: {self.state.task_type.name},"
                 f"task_args: {task.task_args},"
             )
-            _logger.info("Start executing task")
+            _logger.info(f"Start executing task {self.task_id_commitment.hex()}")
             if not os.path.exists(task_dir):
                 os.makedirs(task_dir, exist_ok=True)
             try:
@@ -319,16 +331,20 @@ class InferenceTaskRunner(TaskRunner):
                     task_args=task.task_args,
                     task_dir=task_dir,
                 )
-                _logger.info("Task execution success")
+                _logger.info(f"Task {self.task_id_commitment.hex()} execution success")
                 async with self.state_context():
                     self.state.files = files
                     self.state.score = b"".join(hashes)
                     self.state.checkpoint = checkpoint
             except TaskInvalid as e:
                 _logger.exception(e)
-                _logger.error("Task error, report error to the chain.")
+                _logger.error(
+                    f"Task {self.task_id_commitment.hex()} error, report error to the chain."
+                )
                 with fail_after(delay=60, shield=True):
                     await self._report_error()
+
+        _logger.debug(f"task {self.task_id_commitment} state: {self.state}")
 
         if (
             len(self.state.files) == 0
