@@ -3,7 +3,7 @@ from typing import Dict, Optional, Type, TypeVar
 
 from anyio import create_task_group, get_cancelled_exc_class, sleep
 from anyio.abc import TaskGroup
-from tenacity import AsyncRetrying, stop_after_attempt, stop_never, wait_fixed
+from tenacity import retry, stop_after_attempt, stop_never, wait_fixed
 
 from crynux_server.contracts import Contracts
 from crynux_server.models import TaskStatus
@@ -53,22 +53,25 @@ class TaskSystem(object):
         try:
             runner = self._runners[task_id_commitment]
 
-            async for attemp in AsyncRetrying(
+            @retry(
                 stop=stop_never if self._retry else stop_after_attempt(1),
                 wait=wait_fixed(30),
                 reraise=True,
-            ):
-                with attemp:
-                    try:
-                        await runner.run(self._interval)
-                    except get_cancelled_exc_class():
-                        raise
-                    except Exception as e:
-                        _logger.exception(e)
-                        _logger.error(
-                            f"Task {task_id_commitment.hex()} error: {str(e)}"
-                        )
-                        raise
+            )
+            async def _run_task_with_retry():
+                try:
+                    await runner.run(self._interval)
+                except get_cancelled_exc_class():
+                    raise
+                except Exception as e:
+                    _logger.exception(e)
+                    _logger.error(
+                        f"Task {task_id_commitment.hex()} error: {str(e)}"
+                    )
+                    raise
+            
+            await _run_task_with_retry()
+
         finally:
             del self._runners[task_id_commitment]
 
@@ -100,37 +103,45 @@ class TaskSystem(object):
             _logger.debug(f"Recreate task runner for {state.task_id_commitment.hex()}")
 
     async def start(self):
-        assert self._tg is None, "The TaskSystem has already been started."
+        @retry(
+            stop=stop_never if self._retry else stop_after_attempt(1),
+            wait=wait_fixed(30),
+            reraise=True,
+        )
+        async def _start():
+            assert self._tg is None, "The TaskSystem has already been started."
 
-        try:
-            async with create_task_group() as tg:
-                self._tg = tg
-                await self._recover(tg)
-                while True:
-                    task_id_commitment = await self._get_node_task()
-                    if (
-                        not _is_task_id_commitment_empty(task_id_commitment)
-                        and task_id_commitment not in self._runners
-                    ):
-                        runner = self._runner_cls(
-                            task_id_commitment=task_id_commitment,
-                            task_name=self._task_name,
-                            state_cache=self._state_cache,
-                            contracts=self._contracts,
-                        )
-                        self._runners[task_id_commitment] = runner
-                        tg.start_soon(self._run_task, task_id_commitment)
-                    
-                    await sleep(self._interval)
+            try:
+                async with create_task_group() as tg:
+                    self._tg = tg
+                    await self._recover(tg)
+                    while True:
+                        task_id_commitment = await self._get_node_task()
+                        if (
+                            not _is_task_id_commitment_empty(task_id_commitment)
+                            and task_id_commitment not in self._runners
+                        ):
+                            runner = self._runner_cls(
+                                task_id_commitment=task_id_commitment,
+                                task_name=self._task_name,
+                                state_cache=self._state_cache,
+                                contracts=self._contracts,
+                            )
+                            self._runners[task_id_commitment] = runner
+                            tg.start_soon(self._run_task, task_id_commitment)
+                        
+                        await sleep(self._interval)
 
+            except get_cancelled_exc_class():
+                raise
+            except Exception as e:
+                _logger.error(f"Some error occurs when running task system, retrying")
+                _logger.exception(e)
+                raise
+            finally:
+                self._tg = None
 
-        except get_cancelled_exc_class():
-            raise
-        except Exception as e:
-            _logger.exception(e)
-            raise
-        finally:
-            self._tg = None
+        await _start()
 
     def stop(self):
         if self._tg is not None and not self._tg.cancel_scope.cancel_called:
