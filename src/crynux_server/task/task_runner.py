@@ -11,7 +11,7 @@ from typing import Awaitable, Callable, List, Optional
 from anyio import (fail_after, get_cancelled_exc_class, move_on_after, sleep,
                    to_thread)
 from hexbytes import HexBytes
-from tenacity import retry, stop_after_attempt, wait_fixed
+from tenacity import retry, stop_after_attempt, wait_chain, wait_fixed
 
 from crynux_server import models
 from crynux_server.config import Config, get_config
@@ -130,7 +130,7 @@ class TaskRunner(ABC):
         ]
 
     async def change_task_status(self, status: models.TaskStatus):
-        _logger.debug(f"task {self.task_id_commitment.hex()} status: {status}")
+        _logger.info(f"task {self.task_id_commitment.hex()} status: {status.name}")
         async with self.state_context():
             self.state.status = status
 
@@ -282,8 +282,8 @@ class InferenceTaskRunner(TaskRunner):
 
     async def execute_task(self):
         @retry(
-            stop=stop_after_attempt(3),
-            wait=wait_fixed(30),
+            stop=stop_after_attempt(10),
+            wait=wait_chain(*[wait_fixed(1) for _ in range(5)] + [wait_fixed(5)]),
             reraise=True,
         )
         async def get_task():
@@ -292,8 +292,8 @@ class InferenceTaskRunner(TaskRunner):
             return task
 
         @retry(
-            stop=stop_after_attempt(3),
-            wait=wait_fixed(30),
+            stop=stop_after_attempt(10),
+            wait=wait_chain(*[wait_fixed(1) for _ in range(5)] + [wait_fixed(5)]),
             reraise=True,
         )
         async def get_checkpoint(checkpoint_dir: str):
@@ -361,11 +361,11 @@ class InferenceTaskRunner(TaskRunner):
         _logger.info("Submiting task score success")
 
     async def upload_result(self):
-        async with self.state_context():
-            await self.relay.upload_task_result(
-                self.task_id_commitment, self.state.files, self.state.checkpoint
-            )
-            _logger.info(f"Task {self.task_id_commitment.hex()} success")
+        _logger.info(f"Task {self.task_id_commitment.hex()} start uploading results")
+        await self.relay.upload_task_result(
+            self.task_id_commitment, self.state.files, self.state.checkpoint
+        )
+        _logger.info(f"Task {self.task_id_commitment.hex()} success")
 
     async def cleanup(self):
         if not self._cleaned:
