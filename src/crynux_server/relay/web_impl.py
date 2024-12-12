@@ -137,7 +137,7 @@ class WebRelay(Relay):
 
     async def get_result(self, task_id_commitment: bytes, index: int, dst: BinaryIO):
         task_id_commitment_hex = HexBytes(task_id_commitment).hex()
-        input = {"task_id_commitment": task_id_commitment_hex, "image_num": str(index)}
+        input = {"task_id_commitment": task_id_commitment_hex, "index": str(index)}
         timestamp, signature = self.signer.sign(input)
 
         async_dst = wrap_file(dst)
