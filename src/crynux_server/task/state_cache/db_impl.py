@@ -91,7 +91,7 @@ class DbTaskStateCache(TaskStateCache):
             states = (await sess.execute(q)).scalars().all()
             return [
                 TaskState(
-                    task_id_commitment=bytes.fromhex(state.task_id_commitment),
+                    task_id_commitment=bytes.fromhex(state.task_id_commitment[2:]),
                     timeout=state.timeout,
                     status=state.status,
                     task_type=state.task_type,
