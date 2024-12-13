@@ -132,7 +132,7 @@ class TaskContract(ContractWrapper):
             taskIDCommitment3=task_id_commitment3,
             taskGUID=task_id,
             vrfProof=vrf_proof,
-            public_key=public_key,
+            publicKey=public_key,
             option=option,
             w3=w3,
         )
