@@ -119,7 +119,7 @@ class TaskRunner(ABC):
     @abstractmethod
     async def upload_result(self): ...
 
-    async def should_stop(self):
+    def should_stop(self):
         return self.state.status in [
             models.TaskStatus.EndAborted,
             models.TaskStatus.EndGroupRefund,
@@ -145,7 +145,7 @@ class TaskRunner(ABC):
     async def run(self, interval: float = 1):
         try:
             await self.sync_status()
-            if await self.should_stop():
+            if self.should_stop():
                 return
             delay = self.state.timeout - time.time()
             if delay <= 0:
@@ -153,7 +153,7 @@ class TaskRunner(ABC):
 
             with fail_after(delay, shield=False):
                 await self.change_task_status(self.state.status)
-                while not await self.should_stop():
+                while not self.should_stop():
                     task = await self.get_task()
                     if task.status != self.state.status:
                         await self.change_task_status(task.status)
@@ -161,12 +161,12 @@ class TaskRunner(ABC):
                         await sleep(interval)
         except TimeoutError:
             # cancel task
-            if not await self.should_stop():
+            if not self.should_stop():
                 await self.cancel_task()
                 async with self.state_context():
                     self.state.status = models.TaskStatus.EndAborted
         finally:
-            if await self.should_stop():
+            if self.should_stop():
                 with move_on_after(5, shield=True):
                     await self.cleanup()
 
@@ -349,7 +349,7 @@ class InferenceTaskRunner(TaskRunner):
         if (
             len(self.state.files) == 0
             or len(self.state.score) == 0
-            or len(self.state.checkpoint) == 0
+            or self.state.checkpoint is None
         ):
             await execute_task_in_worker()
 

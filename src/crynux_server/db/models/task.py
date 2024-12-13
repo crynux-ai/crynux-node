@@ -1,4 +1,4 @@
-from typing import get_args
+from typing import Optional, get_args
 
 import sqlalchemy as sa
 from sqlalchemy.orm import Mapped, mapped_column
@@ -31,7 +31,7 @@ class TaskState(Base, BaseMixin):
     waiting_tx_method: Mapped[str] = mapped_column(
         nullable=False, index=False, default=""
     )
-    checkpoint: Mapped[str] = mapped_column(nullable=False, index=False, default="")
+    checkpoint: Mapped[Optional[str]] = mapped_column(nullable=True, index=False, default="")
 
 
 class TaskEvent(Base, BaseMixin):

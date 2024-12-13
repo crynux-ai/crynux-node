@@ -1,5 +1,5 @@
 from enum import IntEnum
-from typing import List
+from typing import List, Optional
 
 from pydantic import BaseModel
 
@@ -95,4 +95,4 @@ class TaskState(BaseModel):
     score: bytes = b""
     waiting_tx_hash: bytes = b""
     waiting_tx_method: str = ""
-    checkpoint: str = ""
+    checkpoint: Optional[str] = None

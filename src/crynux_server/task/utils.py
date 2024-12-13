@@ -1,11 +1,9 @@
 import hashlib
 import json
 import os
-import secrets
-from typing import List, Tuple
+from typing import List, Optional
 
 from PIL.Image import Image
-from web3 import Web3
 
 import imhash
 from crynux_server.models import TaskType
@@ -42,7 +40,7 @@ async def run_task(
 
     files: List[str] = []
     hashes: List[bytes] = []
-    checkpoint = ""
+    checkpoint: Optional[str] = None
     if task_type == TaskType.SD:
         for i, result in enumerate(results):
             assert isinstance(result, Image)
