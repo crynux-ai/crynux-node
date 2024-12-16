@@ -5,7 +5,6 @@ from typing_extensions import Annotated
 
 from crynux_server.config import Config, get_config
 from crynux_server.contracts import Contracts, get_contracts
-from crynux_server.event_queue import EventQueue, get_event_queue
 from crynux_server.node_manager import (
     ManagerStateCache,
     NodeStateManager,
@@ -22,7 +21,6 @@ __all__ = [
     "NodeStateManagerDep",
     "TaskStateCacheDep",
     "ContractsDep",
-    "EventQueueDep",
     "WorkerManagerDep",
     "SystemInfoDep"
 ]
@@ -41,15 +39,6 @@ async def _get_node_state_manager():
         return get_node_state_manager()
     except AssertionError as e:
         if "NodeStateManager has not been set" in str(e):
-            return None
-        raise
-
-
-async def _get_event_queue():
-    try:
-        return get_event_queue()
-    except AssertionError as e:
-        if "Event queue has not been set" in str(e):
             return None
         raise
 
@@ -83,7 +72,6 @@ async def _get_system_info():
 ConfigDep = Annotated[Config, Depends(_get_config)]
 ManagerStateCacheDep = Annotated[ManagerStateCache, Depends(_get_manager_state_cache)]
 NodeStateManagerDep = Annotated[Optional[NodeStateManager], Depends(_get_node_state_manager)]
-EventQueueDep = Annotated[Optional[EventQueue], Depends(_get_event_queue)]
 TaskStateCacheDep = Annotated[Optional[TaskStateCache], Depends(_get_task_state_cache)]
 ContractsDep = Annotated[Optional[Contracts], Depends(_get_contracts)]
 WorkerManagerDep = Annotated[WorkerManager, Depends(_get_worker_manager)]

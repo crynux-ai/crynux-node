@@ -15,7 +15,6 @@ from web3.types import EventData
 from crynux_server import models
 from crynux_server.config import Config, wait_privkey
 from crynux_server.contracts import Contracts, set_contracts
-from crynux_server.event_queue import DbEventQueue, EventQueue, set_event_queue
 from crynux_server.relay import Relay, WebRelay, set_relay
 from crynux_server.task import (DbTaskStateCache, InferenceTaskRunner,
                                 TaskStateCache, TaskSystem,
@@ -57,12 +56,6 @@ def _make_relay(privkey: str, relay_url: str) -> Relay:
     relay = WebRelay(base_url=relay_url, privkey=privkey)
     set_relay(relay)
     return relay
-
-
-def _make_event_queue(queue_cls: Type[EventQueue]) -> EventQueue:
-    queue = queue_cls()
-    set_event_queue(queue)
-    return queue
 
 
 def _make_watcher(
@@ -107,13 +100,11 @@ class NodeManager(object):
         config: Config,
         gpu_name: str,
         gpu_vram: int,
-        event_queue_cls: Type[EventQueue] = DbEventQueue,
         task_state_cache_cls: Type[TaskStateCache] = DbTaskStateCache,
         node_state_cache_cls: Type[StateCache[models.NodeState]] = DbNodeStateCache,
         tx_state_cache_cls: Type[StateCache[models.TxState]] = DbTxStateCache,
         manager_state_cache: Optional[ManagerStateCache] = None,
         privkey: Optional[str] = None,
-        event_queue: Optional[EventQueue] = None,
         contracts: Optional[Contracts] = None,
         relay: Optional[Relay] = None,
         node_state_manager: Optional[NodeStateManager] = None,
@@ -127,7 +118,6 @@ class NodeManager(object):
         self.gpu_name = gpu_name
         self.gpu_vram = gpu_vram
 
-        self.event_queue_cls = event_queue_cls
         self.task_state_cache_cls = task_state_cache_cls
         if manager_state_cache is None:
             manager_state_cache = ManagerStateCache(
@@ -138,10 +128,10 @@ class NodeManager(object):
         self.state_cache = manager_state_cache
 
         self._privkey = privkey
-        self._event_queue = event_queue
         self._contracts = contracts
         self._relay = relay
         self._node_state_manager = node_state_manager
+        self._watcher = watcher
         self._task_system = task_system
         if worker_manager is None:
             worker_manager = get_worker_manager()
@@ -163,10 +153,6 @@ class NodeManager(object):
 
     async def _init_components(self):
         _logger.info("Initializing node manager components.")
-
-        if self._event_queue is None:
-            self._event_queue = _make_event_queue(self.event_queue_cls)
-
 
         if self._contracts is None or self._relay is None:
             if self._privkey is None:
@@ -197,6 +183,9 @@ class NodeManager(object):
                 state_cache=self.state_cache,
                 contracts=self._contracts,
             )
+
+        if self._watcher is None:
+            self._watcher = _make_watcher(contracts=self._contracts)
 
         _logger.info("Node manager components initializing complete.")
 
@@ -268,6 +257,61 @@ class NodeManager(object):
                         await self.state_cache.set_node_state(
                             status=models.NodeStatus.Error,
                             message="Node manager running error: cannot sync node state from chain, retrying...",
+                        )
+                    raise
+
+    async def _watch_events(
+        self, *, task_status: TaskStatus[None] = TASK_STATUS_IGNORED
+    ):
+        assert self._watcher is not None
+        assert self._contracts is not None
+
+        account = self._contracts.account
+
+        async def _node_kicked_out(event_data: EventData):
+            address = event_data["args"]["nodeAddress"]
+            if address == account:
+                _logger.info("Node is kicked out")
+                await self.state_cache.set_node_state(
+                    status=models.NodeStatus.Stopped, message="Node is kicked out"
+                )
+
+        self._watcher.watch_event("node", "NodeKickedOut", callback=_node_kicked_out)
+
+        async def _node_slashed(event_data: EventData):
+            address = event_data["args"]["nodeAddress"]
+            if address == account:
+                _logger.info("Node is slashed")
+                await self.state_cache.set_node_state(
+                    status=models.NodeStatus.Stopped, message="Node is slashed"
+                )
+
+        self._watcher.watch_event("node", "NodeSlashed", callback=_node_slashed)
+
+        # call task_status.started() only once
+        task_status_set = False
+
+        async for attemp in AsyncRetrying(
+            stop=stop_never if self._retry else stop_after_attempt(1),
+            wait=wait_fixed(self._retry_delay),
+            reraise=True,
+        ):
+            with attemp:
+                try:
+                    async with create_task_group() as tg:
+                        if not task_status_set:
+                            await tg.start(self._watcher.start)
+                            task_status.started()
+                            task_status_set = True
+                        else:
+                            await self._watcher.start()
+                except Exception as e:
+                    _logger.exception(e)
+                    _logger.error("Cannot watch events from chain, retrying")
+                    with fail_after(5, shield=True):
+                        await self.state_cache.set_node_state(
+                            status=models.NodeStatus.Error,
+                            message="Node manager running error: cannot watch events from chain, retrying...",
                         )
                     raise
 
@@ -409,6 +453,8 @@ class NodeManager(object):
                     )
                     await sleep(5)
 
+                await tg.start(self._watch_events)
+
                 assert self._node_state_manager is not None
 
                 try:
@@ -427,9 +473,9 @@ class NodeManager(object):
                                     version = self._worker_manager.version
                                     assert version is not None
                                     await self._node_state_manager.try_start(
-                                        gpu_name=self.gpu_name, 
+                                        gpu_name=self.gpu_name,
                                         gpu_vram=self.gpu_vram,
-                                        version=version
+                                        version=version,
                                     )
                             except Exception as e:
                                 _logger.warning(e)
