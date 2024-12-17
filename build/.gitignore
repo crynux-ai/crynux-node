@@ -7,6 +7,7 @@ crynux_node/
 !linux-server/
 !Dockerfile
 !bump-version.ps1
+!bump-version.sh
 !changelog-template.md
 !start.sh
 !*/
