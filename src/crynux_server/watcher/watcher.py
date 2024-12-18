@@ -270,62 +270,6 @@ class EventWatcher(object):
             self._cancel_scope = CancelScope()
 
             with self._cancel_scope:
-
-                async def _process_block():
-                    while True:
-                        blocknum = await self._blocknum_queue.get()
-                        try:
-                            block = await self.contracts.get_block(blocknum)
-                            assert "transactions" in block
-                            with move_on_after(5, shield=True):
-                                for tx_hash in block["transactions"]:
-                                    assert isinstance(tx_hash, bytes)
-                                    await self._tx_hash_queue.put(tx_hash)
-                            self._blocknum_queue.task_done()
-                            assert "timestamp" in block
-                            blocktime = datetime.fromtimestamp(
-                                block["timestamp"]
-                            ).strftime("%Y-%m-%d %H:%M:%S")
-                            tx_count = len(block["transactions"])
-                            _logger.debug(
-                                f"block {blocknum} produced at {blocktime}, {tx_count} txs"
-                            )
-                        except get_cancelled_exc_class():
-                            with move_on_after(1, shield=True):
-                                await self._blocknum_queue.put(blocknum)
-                            raise
-                        except Exception:
-                            with move_on_after(1, shield=True):
-                                await self._blocknum_queue.put(blocknum)
-                            raise
-
-                async def _process_tx_receipt():
-                    while True:
-                        tx_hash = await self._tx_hash_queue.get()
-                        try:
-                            receipt = await self.contracts.get_tx_receipt(tx_hash)
-                            event_filters = list(self._event_filters.values())
-                            async with create_task_group() as tg:
-                                with move_on_after(5, shield=True):
-                                    for event_filter in event_filters:
-                                        tg.start_soon(
-                                            event_filter.process_receipt, receipt
-                                        )
-                            self._tx_hash_queue.task_done()
-                            blocknum = receipt["blockNumber"]
-                            tx_index = receipt["transactionIndex"]
-                            _logger.debug(
-                                f"process receipt {tx_index} of block {blocknum}"
-                            )
-                        except get_cancelled_exc_class():
-                            with move_on_after(1, shield=True):
-                                await self._tx_hash_queue.put(tx_hash)
-                            raise
-                        except Exception:
-                            with move_on_after(1, shield=True):
-                                await self._tx_hash_queue.put(tx_hash)
-                            raise
-
                 async with create_task_group() as tg:
                     for _ in range(4):
                         tg.start_soon(self._get_blocks)
