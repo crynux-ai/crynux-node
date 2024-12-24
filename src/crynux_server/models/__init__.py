@@ -8,6 +8,8 @@ from .node import (ChainNetworkNodeInfo, ChainNodeInfo, ChainNodeStatus,
 from .task import (ChainTask, RelayTask, TaskAbortReason, TaskError, TaskState,
                    TaskStatus, TaskType)
 from .tx import TxState, TxStatus
+from .worker import (DownloadTaskInput, InferenceTaskInput, ModelConfig,
+                     TaskInput)
 
 __all__ = [
     "TaskKind",
@@ -41,4 +43,8 @@ __all__ = [
     "TxState",
     "TaskError",
     "TaskAbortReason",
+    "DownloadTaskInput", 
+    "InferenceTaskInput", 
+    "ModelConfig",
+    "TaskInput"
 ]

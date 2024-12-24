@@ -2,8 +2,9 @@ from collections import deque
 from typing import Deque, Tuple
 
 from anyio import Condition
+from crynux_server.models import TaskInput
 
-from .task import TaskInput, TaskResult
+from .task import TaskResult
 
 
 class TaskExchange(object):
