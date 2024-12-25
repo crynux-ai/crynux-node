@@ -52,7 +52,7 @@ task_config:
     gpt_base:
       - id: "gpt2"
     controlnet: []
-    vae: []
+    lora: []
 
   # The proxy server used when downloading models.
   proxy:
