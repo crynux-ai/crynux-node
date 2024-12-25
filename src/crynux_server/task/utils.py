@@ -1,13 +1,11 @@
 import hashlib
-import json
 import os
-from typing import List, Optional
-
-from PIL.Image import Image
+import re
+from typing import List
 
 import imhash
-from crynux_server.models import TaskType
-from crynux_server.worker_manager import TaskInput, get_worker_manager
+from crynux_server.models import InferenceTaskInput, TaskInput, TaskType
+from crynux_server.worker_manager import get_worker_manager
 
 
 def get_image_hash(filename: str) -> bytes:
@@ -19,51 +17,46 @@ def get_gpt_resp_hash(filename: str) -> bytes:
         return hashlib.sha256(f.read()).digest()
 
 
-async def run_task(
-    task_name: str,
+async def run_inference_task(
     task_id_commitment: bytes,
     task_type: TaskType,
+    model_id: str,
     task_args: str,
     task_dir: str,
 ):
     worker_manager = get_worker_manager()
     task_input = TaskInput(
-        task_id_commitment=task_id_commitment.hex(),
-        task_name=task_name,
-        task_type=task_type,
-        task_args=task_args,
+        task=InferenceTaskInput(
+            task_name="inference",
+            task_type=task_type,
+            task_id_commitment=task_id_commitment.hex(),
+            model_id=model_id,
+            task_args=task_args,
+            output_dir=task_dir,
+        )
     )
-
     task_result = await worker_manager.send_task(task_input)
-    results = await task_result.get()
-    assert isinstance(results, list)
+    await task_result.get()
 
     files: List[str] = []
     hashes: List[bytes] = []
-    checkpoint: Optional[str] = None
+    checkpoint: str | None = None
     if task_type == TaskType.SD:
-        for i, result in enumerate(results):
-            assert isinstance(result, Image)
-            filename = os.path.join(task_dir, f"{i}.png")
-            result.save(filename)
-            files.append(filename)
-            hashes.append(get_image_hash(filename))
+        files = [f for f in os.listdir(task_dir) if re.match(r"[0-9]+\.png", f)]
+        files.sort(key=lambda f: int(f.split(".")[0]))
+        files = [os.path.join(task_dir, f) for f in files]
+        hashes = [get_image_hash(filename) for filename in files]
     elif task_type == TaskType.LLM:
-        for i, result in enumerate(results):
-            filename = os.path.join(task_dir, f"{i}.json")
-            with open(filename, mode="w", encoding="utf-8") as f:
-                json.dump(result, f)
-            files.append(filename)
-            hashes.append(get_gpt_resp_hash(filename))
+        files = [f for f in os.listdir(task_dir) if re.match(r"[0-9]+\.json", f)]
+        files.sort(key=lambda f: int(f.split(".")[0]))
+        files = [os.path.join(task_dir, f) for f in files]
+        hashes = [get_gpt_resp_hash(filename) for filename in files]
     elif task_type == TaskType.SD_FT_LORA:
-        assert len(results) == 1
-        result_dir = results[0]
-        img_dir = os.path.join(result_dir, "validation")
-        img_names = sorted(os.listdir(img_dir))
-        for img_name in img_names:
-            img_file = os.path.join(img_dir, img_name)
-            files.append(img_file)
-            hashes.append(get_image_hash(img_file))
-        checkpoint = os.path.join(result_dir, "checkpoint")
+        img_dir = os.path.join(task_dir, "validation")
+        files = [f for f in os.listdir(img_dir) if re.match(r"[0-9]+\.png", f)]
+        files.sort(key=lambda f: int(f.split(".")[0]))
+        files = [os.path.join(img_dir, f) for f in files]
+        hashes = [get_image_hash(filename) for filename in files]
+        checkpoint = os.path.join(task_dir, "checkpoint")
 
     return files, hashes, checkpoint

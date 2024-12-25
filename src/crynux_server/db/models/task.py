@@ -16,10 +16,10 @@ class TaskState(Base, BaseMixin):
     )
     timeout: Mapped[int] = mapped_column(sa.Integer, nullable=False, index=False)
     status: Mapped[TaskStatus] = mapped_column(
-        sa.Enum(TaskStatus), nullable=False, index=False
+        sa.Enum(TaskStatus), nullable=False, index=True
     )
     task_type: Mapped[TaskType] = mapped_column(
-        sa.Enum(TaskType), nullable=False, index=False
+        sa.Enum(TaskType), nullable=False, index=True
     )
     files: Mapped[str] = mapped_column(sa.Text, nullable=False, index=False)
     score: Mapped[bytes] = mapped_column(

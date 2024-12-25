@@ -84,7 +84,14 @@ class RelayTask(BaseModel):
     task_id_commitment: bytes
     creator: str
     task_args: str
-
+    status: TaskStatus
+    task_type: TaskType
+    min_vram: int
+    required_gpu: str
+    required_gpu_vram: int
+    task_fee: float
+    task_size: int
+    model_id: str
 
 class TaskState(BaseModel):
     task_id_commitment: bytes

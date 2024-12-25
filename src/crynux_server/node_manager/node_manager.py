@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 from datetime import datetime
 from typing import Optional, Type
@@ -20,7 +21,7 @@ from crynux_server.task import (DbTaskStateCache, InferenceTaskRunner,
                                 TaskStateCache, TaskSystem,
                                 set_task_state_cache, set_task_system)
 from crynux_server.watcher import EventWatcher, set_watcher
-from crynux_server.worker_manager import (PrefetchError, TaskCancelled,
+from crynux_server.worker_manager import (TaskCancelled, TaskDownloadError,
                                           TaskError, WorkerManager,
                                           get_worker_manager)
 
@@ -189,6 +190,133 @@ class NodeManager(object):
 
         _logger.info("Node manager components initializing complete.")
 
+    async def _prefetch_models(self):
+        preload_models = self.config.task_config.preloaded_models
+        task_inputs = []
+        if preload_models is not None:
+            if preload_models.sd_base is not None:
+                for model in preload_models.sd_base:
+                    task_input = models.TaskInput(
+                        task=models.DownloadTaskInput(
+                            task_name="download",
+                            task_type=models.TaskType.SD,
+                            task_id_commitment=f"preload_models_{len(task_inputs)}",
+                            model_type="base",
+                            model=models.ModelConfig(
+                                id=model.id, variant=model.variant
+                            ),
+                        )
+                    )
+                    task_inputs.append(task_input)
+            if preload_models.gpt_base is not None:
+                for model in preload_models.gpt_base:
+                    task_input = models.TaskInput(
+                        task=models.DownloadTaskInput(
+                            task_name="download",
+                            task_type=models.TaskType.LLM,
+                            task_id_commitment=f"preload_models_{len(task_inputs)}",
+                            model_type="base",
+                            model=models.ModelConfig(
+                                id=model.id, variant=model.variant
+                            ),
+                        )
+                    )
+                    task_inputs.append(task_input)
+            if preload_models.controlnet is not None:
+                for model in preload_models.controlnet:
+                    task_input = models.TaskInput(
+                        task=models.DownloadTaskInput(
+                            task_name="download",
+                            task_type=models.TaskType.SD,
+                            task_id_commitment=f"preload_models_{len(task_inputs)}",
+                            model_type="controlnet",
+                            model=models.ModelConfig(
+                                id=model.id, variant=model.variant
+                            ),
+                        )
+                    )
+                    task_inputs.append(task_input)
+            if preload_models.lora is not None:
+                for model in preload_models.lora:
+                    task_input = models.TaskInput(
+                        task=models.DownloadTaskInput(
+                            task_name="download",
+                            task_type=models.TaskType.SD,
+                            task_id_commitment=f"preload_models_{len(task_inputs)}",
+                            model_type="lora",
+                            model=models.ModelConfig(
+                                id=model.id, variant=model.variant
+                            ),
+                        )
+                    )
+                    task_inputs.append(task_input)
+
+        for i, task_input in enumerate(task_inputs):
+            task_fut = await self._worker_manager.send_task(task_input)
+            try:
+                await task_fut.get()
+                msg = f"Downloading models............ ({i+1}/{len(task_inputs)})"
+                await self.state_cache.set_node_state(
+                    status=models.NodeStatus.Init, init_message=msg
+                )
+            except TaskCancelled:
+                raise ValueError(
+                    "Failed to download models due to worker internal error"
+                )
+            except TaskDownloadError as e:
+                raise ValueError(
+                    "Failed to download models due to network issue"
+                ) from e
+            except Exception as e:
+                raise ValueError("Failed to download models") from e
+
+    async def _run_initial_inference_task(self):
+        prompt = (
+            "a realistic photo of an old man sitting on a brown chair, "
+            "on the seaside, with blue sky and white clouds, a dog is lying "
+            "under his legs, masterpiece, high resolution"
+        )
+        task_args = {
+            "version": "3.0.0",
+            "base_model": {
+                "name": "crynux-ai/stable-diffusion-v1-5",
+                "variant": "fp16",
+            },
+            "prompt": prompt,
+            "negative_prompt": "",
+            "task_config": {
+                "num_images": 1,
+                "safety_checker": False,
+                "cfg": 7,
+                "seed": 99975892,
+                "steps": 40,
+            },
+        }
+
+        task_input = models.TaskInput(
+            task=models.InferenceTaskInput(
+                task_name="inference",
+                task_type=models.TaskType.SD,
+                task_id_commitment="initial_inference_task",
+                model_id="crynux-ai/stable-diffusion-v1-5",
+                task_args=json.dumps(task_args),
+                output_dir=self.config.task_config.output_dir,
+            )
+        )
+        try:
+            with fail_after(300):
+                task_fut = await self._worker_manager.send_task(task_input)
+                await task_fut.get()
+        except TimeoutError as e:
+            msg = (
+                "The initial inference task exceeded the timeout limit(5 min). Maybe your device does not meet "
+                "the lowest hardware requirements"
+            )
+            raise ValueError(msg) from e
+        except TaskError as e:
+            raise ValueError("The initial validation task failed") from e
+        _logger.info("Finish initial validation task")
+
     async def _init(self):
         _logger.info("Initialize node manager")
 
@@ -199,42 +327,13 @@ class NodeManager(object):
             reraise=True,
         ):
             with attemp:
-                try:
-                    async for (
-                        progress
-                    ) in self._worker_manager.get_prefetch_task_progress():
-                        await self.state_cache.set_node_state(
-                            status=models.NodeStatus.Init, init_message=progress
-                        )
-                except TaskCancelled:
-                    self._worker_manager.reset_prefetch_task()
-                    raise ValueError(
-                        "Failed to download models due to worker internal error"
-                    )
-                except PrefetchError as e:
-                    self._worker_manager.reset_prefetch_task()
-                    raise ValueError(
-                        "Failed to download models due to network issue"
-                    ) from e
-                except Exception as e:
-                    self._worker_manager.reset_prefetch_task()
-                    raise ValueError("Failed to download models") from e
+                await self._prefetch_models()
         _logger.info("Finish downloading models")
 
         await self.state_cache.set_node_state(
             status=models.NodeStatus.Init, init_message="Running local evaluation task"
         )
-        try:
-            with fail_after(300):
-                await self._worker_manager.get_init_inference_task_result()
-        except TimeoutError as e:
-            msg = (
-                "The initial inference task exceeded the timeout limit(5 min). Maybe your device does not meet "
-                "the lowest hardware requirements"
-            )
-            raise ValueError(msg) from e
-        except TaskError as e:
-            raise ValueError("The initial validation task failed") from e
+        await self._run_initial_inference_task()
         _logger.info("Finish initial validation task")
 
         _logger.info("Node manager initializing complete.")

@@ -21,7 +21,7 @@ from crynux_server.relay import Relay, get_relay
 from crynux_server.worker_manager import TaskInvalid
 
 from .state_cache import TaskStateCache, get_task_state_cache
-from .utils import run_task
+from .utils import run_inference_task
 
 _logger = logging.getLogger(__name__)
 
@@ -324,9 +324,9 @@ class InferenceTaskRunner(TaskRunner):
             if not os.path.exists(task_dir):
                 os.makedirs(task_dir, exist_ok=True)
             try:
-                files, hashes, checkpoint = await run_task(
-                    task_name=self.task_name,
+                files, hashes, checkpoint = await run_inference_task(
                     task_id_commitment=self.task_id_commitment,
+                    model_id=task.model_id,
                     task_type=self.state.task_type,
                     task_args=task.task_args,
                     task_dir=task_dir,

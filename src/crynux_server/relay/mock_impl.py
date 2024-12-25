@@ -7,8 +7,7 @@ from typing import BinaryIO, Dict, List, Optional
 
 from anyio import Condition, get_cancelled_exc_class, to_thread
 
-from crynux_server.models import RelayTask
-from crynux_server.utils import get_task_hash
+from crynux_server.models import RelayTask, TaskType, TaskStatus
 
 from .abc import Relay
 from .exceptions import RelayError
@@ -53,6 +52,14 @@ class MockRelay(Relay):
                 task_id_commitment=task_id_commitment,
                 creator="",
                 task_args=task_args,
+                status=TaskStatus.Started,
+                task_type=TaskType.SD,
+                min_vram=4,
+                required_gpu="",
+                required_gpu_vram=0,
+                task_fee=1,
+                task_size=1,
+                model_id=""
             )
             self.tasks[task_id_commitment] = t
             if checkpoint_dir is not None:

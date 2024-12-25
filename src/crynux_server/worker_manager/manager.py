@@ -11,9 +11,9 @@ from anyio import Condition, sleep
 from crynux_server.config import Config, get_config
 from crynux_server.models import TaskInput
 
-from .error import PrefetchError, TaskError
+from .error import TaskDownloadError, TaskError
 from .exchange import TaskExchange
-from .task import TaskResult
+from .task import TaskFuture
 from .utils import get_exe_head
 
 _logger = logging.getLogger(__name__)
@@ -28,7 +28,7 @@ class WorkerManager(object):
         self._exchange = TaskExchange()
 
         self._next_worker_id = 1
-        self._task_results: Dict[str, TaskResult] = {}
+        self._task_futures: Dict[str, TaskFuture] = {}
         self._current_worker_id = 0
 
         self._worker_process: Optional[subprocess.Popen] = None
@@ -108,10 +108,10 @@ class WorkerManager(object):
             worker_id == self._current_worker_id
         ), f"Worker {worker_id} is disconnected"
         # cancel the worker's running task
-        for task_result in self._task_results.values():
+        for task_result in self._task_futures.values():
             if not task_result.done():
                 task_result.cancel()
-        self._task_results.clear()
+        self._task_futures.clear()
 
         async with self._connect_condition:
             self._current_worker_id = 0
@@ -142,23 +142,23 @@ class WorkerManager(object):
         assert (
             worker_id == self._current_worker_id
         ), f"Worker {worker_id} is disconnected"
-        task_input, task_result = await self._exchange.get_task()
+        task_input, task_future = await self._exchange.get_task()
         task_id_commitment = task_input.task.task_id_commitment
-        self._task_results[task_id_commitment] = task_result
+        self._task_futures[task_id_commitment] = task_future
 
         def done_callback(_):
             if worker_id == self._current_worker_id:
-                del self._task_results[task_id_commitment]
+                del self._task_futures[task_id_commitment]
 
-        task_result.add_done_callback(done_callback)
+        task_future.add_done_callback(done_callback)
 
-        return task_input, task_result
+        return task_input, task_future
 
-    def get_task_result(self, worker_id: int, task_id_commitment: str) -> TaskResult:
+    def get_task_future(self, worker_id: int, task_id_commitment: str) -> TaskFuture:
         assert (
             worker_id == self._current_worker_id
         ), f"Worker {worker_id} is disconnected"
-        return self._task_results[task_id_commitment]
+        return self._task_futures[task_id_commitment]
 
 
 _default_worker_manager: Optional[WorkerManager] = None

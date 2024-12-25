@@ -3,7 +3,7 @@ from typing import Any, Callable
 
 from .error import TaskCancelled
 
-class TaskResult(object):
+class TaskFuture(object):
     def __init__(self) -> None:
         loop = asyncio.get_running_loop()
         self._future = loop.create_future()
