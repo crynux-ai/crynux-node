@@ -141,7 +141,7 @@ class TaskSystem(object):
             self._inference_runners[task_id_commitment] = runner
             await self._task_queue.put(("inference", task_id_commitment))
 
-    async def create_download_taks(self, task_id: str, task_type: TaskType, model_id: str):
+    async def create_download_task(self, task_id: str, task_type: TaskType, model_id: str):
         if task_id not in self._download_runners:
             state = DownloadTaskState(
                 task_id=task_id,

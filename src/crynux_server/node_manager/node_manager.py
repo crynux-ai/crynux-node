@@ -403,6 +403,27 @@ class NodeManager(object):
 
         self._watcher.watch_event("node", "NodeSlashed", callback=_node_slashed)
 
+        async def _inference_task_started(event_data: EventData):
+            assert self._task_system is not None
+            task_id_commitment = event_data["args"]["taskIDCommitment"]
+            selected_node = event_data["args"]["selectedNode"]
+            if selected_node == account:
+                await self._task_system.create_inference_task(task_id_commitment)
+
+        self._watcher.watch_event("task", "TaskStarted", callback=_inference_task_started)
+
+        async def _download_task_started(event_data: EventData):
+            assert self._task_system is not None
+            address = event_data["args"]["nodeAddress"]
+            model_id = event_data["args"]["modelID"]
+            task_type = models.TaskType(event_data["args"]["taskType"])
+            blocknum = event_data["blockNumber"]
+            if address == account:
+                task_id = f"{blocknum}_{address}_{model_id}"
+                await self._task_system.create_download_task(task_id, task_type, model_id)
+
+        self._watcher.watch_event("task", "DownloadModel", _download_task_started)
+
         # call task_status.started() only once
         task_status_set = False
 
