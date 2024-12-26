@@ -3,20 +3,25 @@ from typing import Optional, get_args
 import sqlalchemy as sa
 from sqlalchemy.orm import Mapped, mapped_column
 
-from crynux_server.models import TaskKind, TaskStatus, TaskType
+from crynux_server.models import (
+    TaskKind,
+    InferenceTaskStatus,
+    TaskType,
+    DownloadTaskStatus,
+)
 
 from .base import Base, BaseMixin
 
 
-class TaskState(Base, BaseMixin):
-    __tablename__ = "task_states"
+class InferenceTaskState(Base, BaseMixin):
+    __tablename__ = "inference_task_states"
 
     task_id_commitment: Mapped[str] = mapped_column(
         sa.String(length=64), nullable=False, index=True
     )
     timeout: Mapped[int] = mapped_column(sa.Integer, nullable=False, index=False)
-    status: Mapped[TaskStatus] = mapped_column(
-        sa.Enum(TaskStatus), nullable=False, index=True
+    status: Mapped[InferenceTaskStatus] = mapped_column(
+        sa.Enum(InferenceTaskStatus), nullable=False, index=True
     )
     task_type: Mapped[TaskType] = mapped_column(
         sa.Enum(TaskType), nullable=False, index=True
@@ -31,7 +36,22 @@ class TaskState(Base, BaseMixin):
     waiting_tx_method: Mapped[str] = mapped_column(
         nullable=False, index=False, default=""
     )
-    checkpoint: Mapped[Optional[str]] = mapped_column(nullable=True, index=False, default="")
+    checkpoint: Mapped[Optional[str]] = mapped_column(
+        nullable=True, index=False, default=""
+    )
+
+
+class DownloadTaskState(Base, BaseMixin):
+    __tablename__ = "download_task_states"
+
+    task_id: Mapped[str] = mapped_column(sa.String, nullable=False, index=True)
+    task_type: Mapped[TaskType] = mapped_column(
+        sa.Enum(TaskType), nullable=False, index=True
+    )
+    model_id: Mapped[str] = mapped_column(sa.Text, nullable=False, index=False)
+    status: Mapped[DownloadTaskStatus] = mapped_column(
+        sa.Enum(DownloadTaskStatus), nullable=False, index=True
+    )
 
 
 class TaskEvent(Base, BaseMixin):

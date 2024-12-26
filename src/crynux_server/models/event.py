@@ -5,7 +5,7 @@ from pydantic import BaseModel, Field
 from web3 import Web3
 from web3.types import EventData
 
-from .task import TaskAbortReason, TaskError, TaskStatus, TaskType
+from .task import TaskAbortReason, TaskError, InferenceTaskStatus, TaskType
 
 TaskKind = Literal[
     "TaskQueued",
@@ -78,8 +78,13 @@ class TaskEndGroupRefund(TaskEvent):
 class TaskEndAborted(TaskEvent):
     kind: TaskKind = Field(default="TaskEndAborted", init_var=False, frozen=True)
     abort_issuer: ChecksumAddress
-    last_status: TaskStatus
+    last_status: InferenceTaskStatus
     abort_reason: TaskAbortReason
+
+
+class DownloadModel(BaseModel):
+    node_address: str
+    model_id: str
 
 
 def load_event_from_json(kind: TaskKind, event_json: str) -> TaskEvent:
@@ -137,7 +142,7 @@ def load_event_from_contracts(event_data: EventData) -> TaskEvent:
         return TaskEndAborted(
             task_id_commitment=event_data["args"]["taskIDCommitment"],
             abort_issuer=Web3.to_checksum_address(event_data["args"]["abortIssuer"]),
-            last_status=TaskStatus(event_data["args"]["lastStatus"]),
+            last_status=InferenceTaskStatus(event_data["args"]["lastStatus"]),
             abort_reason=TaskAbortReason(event_data["args"]["abortReason"]),
         )
     else:

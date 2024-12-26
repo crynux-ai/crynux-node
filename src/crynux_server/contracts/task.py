@@ -9,7 +9,7 @@ from crynux_server.models import (
     TaskType,
     TaskError,
     TaskAbortReason,
-    TaskStatus,
+    InferenceTaskStatus,
 )
 
 from .utils import ContractWrapper, TxWaiter
@@ -202,13 +202,13 @@ class TaskContract(ContractWrapper):
             sampling_seed=res[3],
             nonce=res[4],
             sequence=res[5],
-            status=TaskStatus(res[6]),
+            status=InferenceTaskStatus(res[6]),
             selected_node=res[7],
             timeout=res[8],
             score=res[9],
             task_fee=res[10],
             task_size=res[11],
-            task_model_id=res[12],
+            task_model_ids=res[12],
             min_vram=res[13],
             required_gpu=res[14],
             required_gpu_vram=res[15],

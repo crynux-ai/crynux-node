@@ -5,8 +5,9 @@ from .event import (TaskEndAborted, TaskEndGroupRefund, TaskEndGroupSuccess,
                     load_event_from_contracts, load_event_from_json)
 from .node import (ChainNetworkNodeInfo, ChainNodeInfo, ChainNodeStatus,
                    GpuInfo, NodeState, NodeStatus, convert_node_status)
-from .task import (ChainTask, RelayTask, TaskAbortReason, TaskError, TaskState,
-                   TaskStatus, TaskType)
+from .task import (ChainTask, DownloadTaskState, DownloadTaskStatus,
+                   InferenceTaskState, InferenceTaskStatus, RelayTask,
+                   TaskAbortReason, TaskError, TaskType)
 from .tx import TxState, TxStatus
 from .worker import (DownloadTaskInput, ErrorResult, InferenceTaskInput,
                      ModelConfig, SuccessResult, TaskInput, TaskResult)
@@ -37,8 +38,10 @@ __all__ = [
     "convert_node_status",
     "NodeState",
     "TaskType",
-    "TaskStatus",
-    "TaskState",
+    "InferenceTaskStatus",
+    "InferenceTaskState",
+    "DownloadTaskStatus",
+    "DownloadTaskState",
     "TxStatus",
     "TxState",
     "TaskError",

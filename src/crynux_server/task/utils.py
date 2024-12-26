@@ -1,10 +1,16 @@
 import hashlib
 import os
 import re
-from typing import List
+from typing import List, Literal
 
 import imhash
-from crynux_server.models import InferenceTaskInput, TaskInput, TaskType
+from crynux_server.models import (
+    InferenceTaskInput,
+    TaskInput,
+    TaskType,
+    ModelConfig,
+    DownloadTaskInput,
+)
 from crynux_server.worker_manager import get_worker_manager
 
 
@@ -20,7 +26,7 @@ def get_gpt_resp_hash(filename: str) -> bytes:
 async def run_inference_task(
     task_id_commitment: bytes,
     task_type: TaskType,
-    model_id: str,
+    models: List[ModelConfig],
     task_args: str,
     task_dir: str,
 ):
@@ -29,8 +35,8 @@ async def run_inference_task(
         task=InferenceTaskInput(
             task_name="inference",
             task_type=task_type,
-            task_id_commitment=task_id_commitment.hex(),
-            model_id=model_id,
+            task_id=task_id_commitment.hex(),
+            models=models,
             task_args=task_args,
             output_dir=task_dir,
         )
@@ -60,3 +66,21 @@ async def run_inference_task(
         checkpoint = os.path.join(task_dir, "checkpoint")
 
     return files, hashes, checkpoint
+
+
+async def run_download_task(
+    task_id: str,
+    task_type: TaskType,
+    model: ModelConfig,
+):
+    worker_manager = get_worker_manager()
+    task_input = TaskInput(
+        task=DownloadTaskInput(
+            task_name="download",
+            task_type=task_type,
+            task_id=task_id,
+            model=model,
+        )
+    )
+    task_result = await worker_manager.send_task(task_input)
+    await task_result.get()

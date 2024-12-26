@@ -17,9 +17,13 @@ from crynux_server import models
 from crynux_server.config import Config, wait_privkey
 from crynux_server.contracts import Contracts, set_contracts
 from crynux_server.relay import Relay, WebRelay, set_relay
-from crynux_server.task import (DbTaskStateCache, InferenceTaskRunner,
-                                TaskStateCache, TaskSystem,
-                                set_task_state_cache, set_task_system)
+from crynux_server.task import (DbDownloadTaskStateCache,
+                                DbInferenceTaskStateCache,
+                                DownloadTaskStateCache, InferenceTaskRunner,
+                                InferenceTaskStateCache, TaskSystem,
+                                set_download_task_state_cache,
+                                set_inference_task_state_cache,
+                                set_task_system)
 from crynux_server.watcher import EventWatcher, set_watcher
 from crynux_server.worker_manager import (TaskCancelled, TaskDownloadError,
                                           TaskError, WorkerManager,
@@ -71,13 +75,20 @@ def _make_watcher(
 def _make_task_system(
     retry: bool,
     contracts: Contracts,
-    task_state_cache_cls: Type[TaskStateCache],
+    inference_state_cache_cls: Type[InferenceTaskStateCache],
+    download_state_cache_cls: Type[DownloadTaskStateCache],
 ) -> TaskSystem:
-    cache = task_state_cache_cls()
-    set_task_state_cache(cache)
+    inference_state_cache = inference_state_cache_cls()
+    set_inference_task_state_cache(inference_state_cache)
+    download_state_cache = download_state_cache_cls()
+    set_download_task_state_cache(download_state_cache)
 
-    system = TaskSystem(state_cache=cache, contracts=contracts, retry=retry)
-    system.set_runner_cls(runner_cls=InferenceTaskRunner)
+    system = TaskSystem(
+        inference_state_cache=inference_state_cache,
+        download_state_cache=download_state_cache,
+        contracts=contracts,
+        retry=retry,
+    )
 
     set_task_system(system)
     return system
@@ -101,7 +112,8 @@ class NodeManager(object):
         config: Config,
         gpu_name: str,
         gpu_vram: int,
-        task_state_cache_cls: Type[TaskStateCache] = DbTaskStateCache,
+        inference_state_cache_cls: Type[InferenceTaskStateCache] = DbInferenceTaskStateCache,
+        download_state_cache_cls: Type[DownloadTaskStateCache] = DbDownloadTaskStateCache,
         node_state_cache_cls: Type[StateCache[models.NodeState]] = DbNodeStateCache,
         tx_state_cache_cls: Type[StateCache[models.TxState]] = DbTxStateCache,
         manager_state_cache: Optional[ManagerStateCache] = None,
@@ -119,7 +131,8 @@ class NodeManager(object):
         self.gpu_name = gpu_name
         self.gpu_vram = gpu_vram
 
-        self.task_state_cache_cls = task_state_cache_cls
+        self.inference_state_cache_cls = inference_state_cache_cls
+        self.download_state_cache_cls = download_state_cache_cls
         if manager_state_cache is None:
             manager_state_cache = ManagerStateCache(
                 node_state_cache_cls=node_state_cache_cls,
@@ -176,7 +189,8 @@ class NodeManager(object):
             self._task_system = _make_task_system(
                 retry=self._retry,
                 contracts=self._contracts,
-                task_state_cache_cls=self.task_state_cache_cls,
+                inference_state_cache_cls=self.inference_state_cache_cls,
+                download_state_cache_cls=self.download_state_cache_cls
             )
 
         if self._node_state_manager is None:
@@ -200,10 +214,9 @@ class NodeManager(object):
                         task=models.DownloadTaskInput(
                             task_name="download",
                             task_type=models.TaskType.SD,
-                            task_id_commitment=f"preload_models_{len(task_inputs)}",
-                            model_type="base",
+                            task_id=f"preload_models_{len(task_inputs)}",
                             model=models.ModelConfig(
-                                id=model.id, variant=model.variant
+                                id=model.id, type="base", variant=model.variant
                             ),
                         )
                     )
@@ -214,10 +227,9 @@ class NodeManager(object):
                         task=models.DownloadTaskInput(
                             task_name="download",
                             task_type=models.TaskType.LLM,
-                            task_id_commitment=f"preload_models_{len(task_inputs)}",
-                            model_type="base",
+                            task_id=f"preload_models_{len(task_inputs)}",
                             model=models.ModelConfig(
-                                id=model.id, variant=model.variant
+                                id=model.id, type="base", variant=model.variant
                             ),
                         )
                     )
@@ -228,10 +240,9 @@ class NodeManager(object):
                         task=models.DownloadTaskInput(
                             task_name="download",
                             task_type=models.TaskType.SD,
-                            task_id_commitment=f"preload_models_{len(task_inputs)}",
-                            model_type="controlnet",
+                            task_id=f"preload_models_{len(task_inputs)}",
                             model=models.ModelConfig(
-                                id=model.id, variant=model.variant
+                                id=model.id, type="controlnet", variant=model.variant
                             ),
                         )
                     )
@@ -242,10 +253,9 @@ class NodeManager(object):
                         task=models.DownloadTaskInput(
                             task_name="download",
                             task_type=models.TaskType.SD,
-                            task_id_commitment=f"preload_models_{len(task_inputs)}",
-                            model_type="lora",
+                            task_id=f"preload_models_{len(task_inputs)}",
                             model=models.ModelConfig(
-                                id=model.id, variant=model.variant
+                                id=model.id, type="lora", variant=model.variant
                             ),
                         )
                     )
@@ -297,8 +307,14 @@ class NodeManager(object):
             task=models.InferenceTaskInput(
                 task_name="inference",
                 task_type=models.TaskType.SD,
-                task_id_commitment="initial_inference_task",
-                model_id="crynux-ai/stable-diffusion-v1-5",
+                task_id="initial_inference_task",
+                models=[
+                    models.ModelConfig(
+                        id="crynux-ai/stable-diffusion-v1-5",
+                        type="base",
+                        variant="fp16",
+                    )
+                ],
                 task_args=json.dumps(task_args),
                 output_dir=self.config.task_config.output_dir,
             )

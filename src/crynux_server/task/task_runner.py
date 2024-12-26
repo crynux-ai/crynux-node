@@ -20,8 +20,10 @@ from crynux_server.contracts import (Contracts, TxRevertedError, TxWaiter,
 from crynux_server.relay import Relay, get_relay
 from crynux_server.worker_manager import TaskInvalid
 
-from .state_cache import TaskStateCache, get_task_state_cache
-from .utils import run_inference_task
+from .state_cache import (DownloadTaskStateCache, InferenceTaskStateCache,
+                          get_download_task_state_cache,
+                          get_inference_task_state_cache)
+from .utils import run_download_task, run_inference_task
 
 _logger = logging.getLogger(__name__)
 
@@ -35,28 +37,26 @@ class TaskRunner(ABC):
     def __init__(
         self,
         task_id_commitment: bytes,
-        task_name: str,
-        state_cache: Optional[TaskStateCache] = None,
+        state_cache: Optional[InferenceTaskStateCache] = None,
         contracts: Optional[Contracts] = None,
     ):
         self.task_id_commitment = HexBytes(task_id_commitment)
-        self.task_name = task_name
         if state_cache is None:
-            state_cache = get_task_state_cache()
+            state_cache = get_inference_task_state_cache()
         self.cache = state_cache
         if contracts is None:
             contracts = get_contracts()
         self.contracts = contracts
 
-        self._state: Optional[models.TaskState] = None
+        self._state: Optional[models.InferenceTaskState] = None
 
     @property
-    def state(self) -> models.TaskState:
+    def state(self) -> models.InferenceTaskState:
         assert self._state is not None, "The task runner's state has not been set."
         return self._state
 
     @state.setter
-    def state(self, state: models.TaskState):
+    def state(self, state: models.InferenceTaskState):
         assert self._state is None, "The task runner's state has already been set."
         self._state = state
 
@@ -81,10 +81,10 @@ class TaskRunner(ABC):
                     state = await self.cache.load(self.task_id_commitment)
                     self.state = state
                 else:
-                    state = models.TaskState(
+                    state = models.InferenceTaskState(
                         task_id_commitment=self.task_id_commitment,
                         timeout=0,
-                        status=models.TaskStatus.Queued,
+                        status=models.InferenceTaskStatus.Queued,
                         task_type=models.TaskType.SD,
                     )
                     self.state = state
@@ -121,24 +121,24 @@ class TaskRunner(ABC):
 
     def should_stop(self):
         return self.state.status in [
-            models.TaskStatus.EndAborted,
-            models.TaskStatus.EndGroupRefund,
-            models.TaskStatus.EndGroupSuccess,
-            models.TaskStatus.EndInvalidated,
-            models.TaskStatus.EndSuccess,
-            models.TaskStatus.ErrorReported,
+            models.InferenceTaskStatus.EndAborted,
+            models.InferenceTaskStatus.EndGroupRefund,
+            models.InferenceTaskStatus.EndGroupSuccess,
+            models.InferenceTaskStatus.EndInvalidated,
+            models.InferenceTaskStatus.EndSuccess,
+            models.InferenceTaskStatus.ErrorReported,
         ]
 
-    async def change_task_status(self, status: models.TaskStatus):
+    async def change_task_status(self, status: models.InferenceTaskStatus):
         _logger.info(f"task {self.task_id_commitment.hex()} status: {status.name}")
         async with self.state_context():
             self.state.status = status
 
-        if status == models.TaskStatus.ParametersUploaded:
+        if status == models.InferenceTaskStatus.ParametersUploaded:
             await self.execute_task()
         elif (
-            status == models.TaskStatus.Validated
-            or status == models.TaskStatus.GroupValidated
+            status == models.InferenceTaskStatus.Validated
+            or status == models.InferenceTaskStatus.GroupValidated
         ):
             await self.upload_result()
 
@@ -164,7 +164,7 @@ class TaskRunner(ABC):
             if not self.should_stop():
                 await self.cancel_task()
                 async with self.state_context():
-                    self.state.status = models.TaskStatus.EndAborted
+                    self.state.status = models.InferenceTaskStatus.EndAborted
         finally:
             if self.should_stop():
                 with move_on_after(5, shield=True):
@@ -175,15 +175,13 @@ class InferenceTaskRunner(TaskRunner):
     def __init__(
         self,
         task_id_commitment: bytes,
-        task_name: str,
-        state_cache: Optional[TaskStateCache] = None,
+        state_cache: Optional[InferenceTaskStateCache] = None,
         contracts: Optional[Contracts] = None,
         relay: Optional[Relay] = None,
         config: Optional[Config] = None,
     ) -> None:
         super().__init__(
             task_id_commitment=task_id_commitment,
-            task_name=task_name,
             state_cache=state_cache,
             contracts=contracts,
         )
@@ -233,7 +231,7 @@ class InferenceTaskRunner(TaskRunner):
 
     async def _report_error(self):
         async with self.state_context():
-            self.state.status = models.TaskStatus.ErrorReported
+            self.state.status = models.InferenceTaskStatus.ErrorReported
 
         try:
             await self._call_task_contract_method(
@@ -324,10 +322,15 @@ class InferenceTaskRunner(TaskRunner):
             if not os.path.exists(task_dir):
                 os.makedirs(task_dir, exist_ok=True)
             try:
+                task_models = [
+                    models.ModelConfig.from_model_id(model_id)
+                    for model_id in task.model_ids
+                ]
+
                 files, hashes, checkpoint = await run_inference_task(
                     task_id_commitment=self.task_id_commitment,
-                    model_id=task.model_id,
                     task_type=self.state.task_type,
+                    models=task_models,
                     task_args=task.task_args,
                     task_dir=task_dir,
                 )
@@ -387,14 +390,12 @@ class MockTaskRunner(TaskRunner):
     def __init__(
         self,
         task_id_commitment: bytes,
-        task_name: str,
-        state_cache: Optional[TaskStateCache] = None,
+        state_cache: Optional[InferenceTaskStateCache] = None,
         contracts: Optional[Contracts] = None,
         timeout: int = 900,
     ):
         super().__init__(
             task_id_commitment=task_id_commitment,
-            task_name=task_name,
             state_cache=state_cache,
             contracts=contracts,
         )
@@ -409,13 +410,13 @@ class MockTaskRunner(TaskRunner):
             sampling_seed=random.randbytes(4),
             nonce=random.randbytes(4),
             sequence=random.randint(1, 10000),
-            status=models.TaskStatus.Queued,
+            status=models.InferenceTaskStatus.Queued,
             selected_node="",
             timeout=int(time.time()) + self._timeout,
             score=b"",
             task_fee=0,
             task_size=1,
-            task_model_id="crynux-ai/stable-diffusion-v1-5",
+            task_model_ids=["crynux-ai/stable-diffusion-v1-5:"],
             min_vram=0,
             required_gpu="",
             required_gpu_vram=0,
@@ -442,3 +443,56 @@ class MockTaskRunner(TaskRunner):
 
     async def cleanup(self):
         del self.state
+
+
+class DownloadTaskRunner(object):
+    def __init__(
+        self,
+        task_id: str,
+        state: models.DownloadTaskState,
+        state_cache: Optional[DownloadTaskStateCache] = None,
+        contracts: Optional[Contracts] = None,
+    ):
+        self.task_id = task_id
+        if state_cache is None:
+            state_cache = get_download_task_state_cache()
+        self.cache = state_cache
+        if contracts is None:
+            contracts = get_contracts()
+        self.contracts = contracts
+
+        self._state: models.DownloadTaskState = state
+
+    @asynccontextmanager
+    async def state_context(self):
+        try:
+            yield
+        finally:
+            with fail_after(10, shield=True):
+                await self.cache.dump(task_state=self._state)
+
+    async def run(self):
+        if await self.cache.has(self.task_id):
+            self._state = await self.cache.load(self.task_id)
+        else:
+            await self.cache.dump(self._state)
+        
+        if self._state.status == models.DownloadTaskStatus.Success:
+            return
+        
+        if self._state.status == models.DownloadTaskStatus.Started:
+            model = models.ModelConfig.from_model_id(self._state.model_id)
+            await run_download_task(
+                task_id=self.task_id,
+                task_type=self._state.task_type,
+                model=model
+            )
+            async with self.state_context():
+                self._state.status = models.DownloadTaskStatus.Executed
+        
+        if self._state.status == models.DownloadTaskStatus.Success:
+            waiter = await self.contracts.node_contract.report_model_downloaded(self._state.model_id)
+            await waiter.wait()
+            async with self.state_context():
+                self._state.status = models.DownloadTaskStatus.Success
+

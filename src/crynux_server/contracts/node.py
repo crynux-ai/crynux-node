@@ -75,6 +75,17 @@ class NodeContract(ContractWrapper):
     ) -> TxWaiter:
         return await self._transaction_call("resume", option=option, w3=w3)
 
+    async def report_model_downloaded(
+        self,
+        model_id: str,
+        *,
+        option: "Optional[TxOption]" = None,
+        w3: Optional[AsyncWeb3] = None,
+    ) -> TxWaiter:
+        return await self._transaction_call(
+            "reportModelDownloaded", modelID=model_id, option=option, w3=w3
+        )
+
     async def update_task_contract_address(
         self,
         address: str,

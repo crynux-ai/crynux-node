@@ -143,7 +143,7 @@ class WorkerManager(object):
             worker_id == self._current_worker_id
         ), f"Worker {worker_id} is disconnected"
         task_input, task_future = await self._exchange.get_task()
-        task_id_commitment = task_input.task.task_id_commitment
+        task_id_commitment = task_input.task.task_id
         self._task_futures[task_id_commitment] = task_future
 
         def done_callback(_):
