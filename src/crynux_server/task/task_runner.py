@@ -17,6 +17,8 @@ from crynux_server import models
 from crynux_server.config import Config, get_config
 from crynux_server.contracts import (Contracts, TxRevertedError, TxWaiter,
                                      get_contracts)
+from crynux_server.download_model_cache import (DownloadModelCache,
+                                                get_download_model_cache)
 from crynux_server.relay import Relay, get_relay
 from crynux_server.worker_manager import TaskInvalid
 
@@ -452,14 +454,18 @@ class DownloadTaskRunner(object):
         state: models.DownloadTaskState,
         state_cache: Optional[DownloadTaskStateCache] = None,
         contracts: Optional[Contracts] = None,
+        download_model_cache: Optional[DownloadModelCache] = None,
     ):
         self.task_id = task_id
         if state_cache is None:
             state_cache = get_download_task_state_cache()
-        self.cache = state_cache
+        self.state_cache = state_cache
         if contracts is None:
             contracts = get_contracts()
         self.contracts = contracts
+        if download_model_cache is None:
+            download_model_cache = get_download_model_cache()
+        self.download_model_cache = download_model_cache
 
         self._state: models.DownloadTaskState = state
 
@@ -469,30 +475,33 @@ class DownloadTaskRunner(object):
             yield
         finally:
             with fail_after(10, shield=True):
-                await self.cache.dump(task_state=self._state)
+                await self.state_cache.dump(task_state=self._state)
 
     async def run(self):
-        if await self.cache.has(self.task_id):
-            self._state = await self.cache.load(self.task_id)
+        if await self.state_cache.has(self.task_id):
+            self._state = await self.state_cache.load(self.task_id)
         else:
-            await self.cache.dump(self._state)
-        
+            await self.state_cache.dump(self._state)
+
         if self._state.status == models.DownloadTaskStatus.Success:
             return
-        
+
+        model = models.ModelConfig.from_model_id(self._state.model_id)
         if self._state.status == models.DownloadTaskStatus.Started:
-            model = models.ModelConfig.from_model_id(self._state.model_id)
             await run_download_task(
-                task_id=self.task_id,
-                task_type=self._state.task_type,
-                model=model
+                task_id=self.task_id, task_type=self._state.task_type, model=model
             )
             async with self.state_context():
                 self._state.status = models.DownloadTaskStatus.Executed
-        
+
         if self._state.status == models.DownloadTaskStatus.Success:
-            waiter = await self.contracts.node_contract.report_model_downloaded(self._state.model_id)
+            waiter = await self.contracts.node_contract.report_model_downloaded(
+                self._state.model_id
+            )
             await waiter.wait()
             async with self.state_context():
                 self._state.status = models.DownloadTaskStatus.Success
 
+            await self.download_model_cache.save(
+                models.DownloadModel(task_type=self._state.task_type, model=model)
+            )

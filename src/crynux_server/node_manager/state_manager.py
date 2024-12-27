@@ -7,6 +7,7 @@ from web3 import Web3
 
 from crynux_server import models
 from crynux_server.contracts import Contracts, TxOption, TxRevertedError
+from crynux_server.download_model_cache import DownloadModelCache
 
 from .state_cache import ManagerStateCache
 
@@ -17,9 +18,11 @@ class NodeStateManager(object):
     def __init__(
         self,
         state_cache: ManagerStateCache,
+        download_model_cache: DownloadModelCache,
         contracts: Contracts,
     ):
         self.state_cache = state_cache
+        self.download_model_cache = download_model_cache
         self.contracts = contracts
         self._cancel_scope: Optional[CancelScope] = None
 
@@ -138,11 +141,14 @@ class NodeStateManager(object):
                 )
                 if balance < node_amount:
                     raise ValueError("Node token balance is not enough to join")
+                download_models = await self.download_model_cache.load_all()
+                model_ids = [model.model.to_model_id() for model in download_models]
                 waiter = await self.contracts.node_contract.join(
                     gpu_name=gpu_name,
                     gpu_vram=gpu_vram,
                     public_key=self.contracts.public_key.to_bytes(),
                     version=version,
+                    model_ids=model_ids,
                     option=option,
                     stake_amount=node_amount
                 )
@@ -202,10 +208,13 @@ class NodeStateManager(object):
             if balance < node_amount:
                 raise ValueError("Node token balance is not enough to join.")
 
+            download_models = await self.download_model_cache.load_all()
+            model_ids = [model.model.to_model_id() for model in download_models]
             waiter = await self.contracts.node_contract.join(
                 gpu_name=gpu_name,
                 gpu_vram=gpu_vram,
                 public_key=self.contracts.public_key.to_bytes(),
+                model_ids=model_ids,
                 version=version,
                 option=option,
                 stake_amount=node_amount

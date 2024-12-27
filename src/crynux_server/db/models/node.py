@@ -7,7 +7,7 @@ from .base import Base, BaseMixin
 
 
 class NodeState(Base, BaseMixin):
-    __tablename__ = "node_state"
+    __tablename__ = "node_states"
 
     status: Mapped[NodeStatus] = mapped_column(
         sa.Enum(NodeStatus), index=True, nullable=False

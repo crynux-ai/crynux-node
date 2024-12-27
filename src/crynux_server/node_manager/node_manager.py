@@ -28,6 +28,7 @@ from crynux_server.watcher import EventWatcher, set_watcher
 from crynux_server.worker_manager import (TaskCancelled, TaskDownloadError,
                                           TaskError, WorkerManager,
                                           get_worker_manager)
+from crynux_server.download_model_cache import DownloadModelCache, DbDownloadModelCache, set_download_model_cache
 
 from .state_cache import (DbNodeStateCache, DbTxStateCache, ManagerStateCache,
                           StateCache, set_manager_state_cache)
@@ -96,10 +97,12 @@ def _make_task_system(
 
 def _make_node_state_manager(
     state_cache: ManagerStateCache,
+    download_model_cache: DownloadModelCache,
     contracts: Contracts,
 ):
     state_manager = NodeStateManager(
         state_cache=state_cache,
+        download_model_cache=download_model_cache,
         contracts=contracts,
     )
     set_node_state_manager(state_manager)
@@ -116,6 +119,7 @@ class NodeManager(object):
         download_state_cache_cls: Type[DownloadTaskStateCache] = DbDownloadTaskStateCache,
         node_state_cache_cls: Type[StateCache[models.NodeState]] = DbNodeStateCache,
         tx_state_cache_cls: Type[StateCache[models.TxState]] = DbTxStateCache,
+        download_model_cache_cls: Type[DownloadModelCache] = DbDownloadModelCache,
         manager_state_cache: Optional[ManagerStateCache] = None,
         privkey: Optional[str] = None,
         contracts: Optional[Contracts] = None,
@@ -133,6 +137,9 @@ class NodeManager(object):
 
         self.inference_state_cache_cls = inference_state_cache_cls
         self.download_state_cache_cls = download_state_cache_cls
+
+        self.download_model_cache = download_model_cache_cls()
+        set_download_model_cache(self.download_model_cache)
         if manager_state_cache is None:
             manager_state_cache = ManagerStateCache(
                 node_state_cache_cls=node_state_cache_cls,
@@ -196,6 +203,7 @@ class NodeManager(object):
         if self._node_state_manager is None:
             self._node_state_manager = _make_node_state_manager(
                 state_cache=self.state_cache,
+                download_model_cache=self.download_model_cache,
                 contracts=self._contracts,
             )
 
@@ -268,6 +276,12 @@ class NodeManager(object):
                 msg = f"Downloading models............ ({i+1}/{len(task_inputs)})"
                 await self.state_cache.set_node_state(
                     status=models.NodeStatus.Init, init_message=msg
+                )
+                await self.download_model_cache.save(
+                    models.DownloadModel(
+                        task_type=task_input.task.task_type,
+                        model=task_input.task.model
+                    )
                 )
             except TaskCancelled:
                 raise ValueError(

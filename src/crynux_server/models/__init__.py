@@ -1,3 +1,4 @@
+from .download_model import DownloadModel, ModelConfig
 from .event import (TaskEndAborted, TaskEndGroupRefund, TaskEndGroupSuccess,
                     TaskEndInvalidated, TaskEndSuccess, TaskErrorReported,
                     TaskEvent, TaskKind, TaskParametersUploaded, TaskQueued,
@@ -10,7 +11,7 @@ from .task import (ChainTask, DownloadTaskState, DownloadTaskStatus,
                    TaskAbortReason, TaskError, TaskType)
 from .tx import TxState, TxStatus
 from .worker import (DownloadTaskInput, ErrorResult, InferenceTaskInput,
-                     ModelConfig, SuccessResult, TaskInput, TaskResult)
+                     SuccessResult, TaskInput, TaskResult)
 
 __all__ = [
     "TaskKind",
@@ -53,4 +54,5 @@ __all__ = [
     "SuccessResult",
     "ErrorResult",
     "TaskResult",
+    "DownloadModel",
 ]

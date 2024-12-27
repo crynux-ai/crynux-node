@@ -44,7 +44,7 @@ class InferenceTaskState(Base, BaseMixin):
 class DownloadTaskState(Base, BaseMixin):
     __tablename__ = "download_task_states"
 
-    task_id: Mapped[str] = mapped_column(sa.String, nullable=False, index=True)
+    task_id: Mapped[str] = mapped_column(sa.String(255), nullable=False, index=True)
     task_type: Mapped[TaskType] = mapped_column(
         sa.Enum(TaskType), nullable=False, index=True
     )
@@ -52,14 +52,3 @@ class DownloadTaskState(Base, BaseMixin):
     status: Mapped[DownloadTaskStatus] = mapped_column(
         sa.Enum(DownloadTaskStatus), nullable=False, index=True
     )
-
-
-class TaskEvent(Base, BaseMixin):
-    __tablename__ = "task_events"
-
-    kind: Mapped[TaskKind] = mapped_column(
-        sa.Enum(*get_args(TaskKind)),
-        nullable=False,
-    )
-
-    event: Mapped[str] = mapped_column(sa.Text(), nullable=False)
