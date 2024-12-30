@@ -85,6 +85,7 @@ class TaskEndAborted(TaskEvent):
 class DownloadModel(BaseModel):
     node_address: str
     model_id: str
+    task_type: TaskType
 
 
 def load_event_from_json(kind: TaskKind, event_json: str) -> TaskEvent:

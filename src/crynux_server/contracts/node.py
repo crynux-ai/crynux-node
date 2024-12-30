@@ -28,7 +28,7 @@ class NodeContract(ContractWrapper):
         self,
         gpu_name: str,
         gpu_vram: int,
-        version: str,
+        version: List[int],
         public_key: bytes,
         model_ids: List[str],
         *,
@@ -50,7 +50,7 @@ class NodeContract(ContractWrapper):
 
     async def update_version(
         self,
-        version: str,
+        version: List[int],
         *,
         option: "Optional[TxOption]" = None,
         w3: Optional[AsyncWeb3] = None,
@@ -99,6 +99,12 @@ class NodeContract(ContractWrapper):
             "updateTaskContractAddress", option=option, taskContract=address, w3=w3
         )
 
+    async def node_contains_model_id(
+        self, address: str, model_id: str, *, w3: Optional[AsyncWeb3] = None
+    ) -> bool:
+        res = await self._function_call("nodeContainsModelID", nodeAddress=address, modelID=model_id, w3=w3)
+        return res
+
     async def get_node_status(
         self, address: str, *, w3: Optional[AsyncWeb3] = None
     ) -> ChainNodeStatus:
@@ -116,7 +122,8 @@ class NodeContract(ContractWrapper):
             score=res[3],
             version=res[4],
             public_key=res[5],
-            last_model_id=res[6],
+            last_model_ids=res[6],
+            local_model_ids=res[7],
         )
         return info
 

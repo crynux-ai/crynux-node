@@ -61,7 +61,7 @@ class ChainTask(BaseModel):
     min_vram: int
     required_gpu: str
     required_gpu_vram: int
-    task_version: str
+    task_version: List[int]
     abort_reason: TaskAbortReason
     error: TaskError
     payment_addresses: List[str]

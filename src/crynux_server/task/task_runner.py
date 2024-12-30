@@ -34,7 +34,7 @@ OkCallback = Callable[[bool], Awaitable[None]]
 ErrCallback = Callable[[Exception], Awaitable[None]]
 
 
-class TaskRunner(ABC):
+class InferenceTaskRunnerBase(ABC):
     @abstractmethod
     def __init__(
         self,
@@ -173,7 +173,7 @@ class TaskRunner(ABC):
                     await self.cleanup()
 
 
-class InferenceTaskRunner(TaskRunner):
+class InferenceTaskRunner(InferenceTaskRunnerBase):
     def __init__(
         self,
         task_id_commitment: bytes,
@@ -388,7 +388,7 @@ class InferenceTaskRunner(TaskRunner):
             self._cleaned = True
 
 
-class MockTaskRunner(TaskRunner):
+class MockInferenceTaskRunner(InferenceTaskRunnerBase):
     def __init__(
         self,
         task_id_commitment: bytes,
@@ -422,7 +422,7 @@ class MockTaskRunner(TaskRunner):
             min_vram=0,
             required_gpu="",
             required_gpu_vram=0,
-            task_version="2.0.0",
+            task_version=[2,0,0],
             abort_reason=models.TaskAbortReason.IncorrectResult,
             error=models.TaskError.ParametersValidationFailed,
             payment_addresses=[],

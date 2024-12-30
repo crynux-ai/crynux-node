@@ -55,10 +55,12 @@ async def control_node(
         async with worker_manager.wait_connected():
             version = worker_manager.version
             assert version is not None
+            version_list = [int(v) for v in version.split(".")]
+            assert len(version_list) == 3
             wait = await state_manager.start(
                 gpu_name=gpu_info.model,
                 gpu_vram=math.ceil(gpu_info.vram_total_mb / 1024),
-                version=version
+                version=version_list
             )
     elif input.action == "pause":
         wait = await state_manager.pause()

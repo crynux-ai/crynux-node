@@ -6,7 +6,7 @@ from .state_cache import (DbDownloadTaskStateCache, DbInferenceTaskStateCache,
                           get_inference_task_state_cache,
                           set_download_task_state_cache,
                           set_inference_task_state_cache)
-from .task_runner import InferenceTaskRunner, MockTaskRunner, TaskRunner
+from .task_runner import InferenceTaskRunner, MockInferenceTaskRunner, InferenceTaskRunnerBase
 from .task_system import TaskSystem, get_task_system, set_task_system
 
 __all__ = [
@@ -23,7 +23,7 @@ __all__ = [
     "get_inference_task_state_cache",
     "set_download_task_state_cache",
     "get_download_task_state_cache",
-    "TaskRunner",
+    "InferenceTaskRunnerBase",
     "InferenceTaskRunner",
-    "MockTaskRunner",
+    "MockInferenceTaskRunner",
 ]

@@ -532,7 +532,9 @@ class NodeManager(object):
                 async with self._worker_manager.wait_connection_changed():
                     version = self._worker_manager.version
                     if version is not None and version != current_version:
-                        await self._contracts.node_contract.update_version(version)
+                        version_list = [int(v) for v in version.split(".")]
+                        assert len(version_list) == 3
+                        await self._contracts.node_contract.update_version(version_list)
                     current_version = version
 
         async for attemp in AsyncRetrying(
@@ -622,10 +624,12 @@ class NodeManager(object):
                                 async with self._worker_manager.wait_connected():
                                     version = self._worker_manager.version
                                     assert version is not None
+                                    version_list = [int(v) for v in version.split(".")]
+                                    assert len(version_list) == 3
                                     await self._node_state_manager.try_start(
                                         gpu_name=self.gpu_name,
                                         gpu_vram=self.gpu_vram,
-                                        version=version,
+                                        version=version_list,
                                     )
                             except Exception as e:
                                 _logger.warning(e)

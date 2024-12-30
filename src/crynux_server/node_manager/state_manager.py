@@ -1,6 +1,6 @@
 import logging
 from contextlib import asynccontextmanager
-from typing import Optional
+from typing import Optional, List
 
 from anyio import CancelScope, fail_after, get_cancelled_exc_class, sleep
 from web3 import Web3
@@ -112,7 +112,7 @@ class NodeStateManager(object):
             raise
 
     async def try_start(
-        self, gpu_name: str, gpu_vram: int, version: str, interval: float = 5, *, option: "Optional[TxOption]" = None
+        self, gpu_name: str, gpu_vram: int, version: List[int], interval: float = 5, *, option: "Optional[TxOption]" = None
     ):
         _logger.info("Trying to join the network automatically...")
         while True:
@@ -187,7 +187,7 @@ class NodeStateManager(object):
         self,
         gpu_name: str,
         gpu_vram: int,
-        version: str,
+        version: List[int],
         *,
         option: "Optional[TxOption]" = None,
     ):

@@ -1,3 +1,4 @@
+from typing import List
 from enum import Enum, IntEnum
 
 from pydantic import BaseModel
@@ -22,9 +23,10 @@ class ChainNodeInfo(BaseModel):
     gpu_id: bytes
     gpu: GpuInfo
     score: int
-    version: str
+    version: List[int]
     public_key: bytes
-    last_model_id: str
+    last_model_ids: List[str]
+    local_model_ids: List[str]
 
 
 class ChainNetworkNodeInfo(BaseModel):
