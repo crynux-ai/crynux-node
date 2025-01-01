@@ -1,4 +1,4 @@
-from typing import Literal, Optional
+from typing import Literal, Optional, get_args
 
 import sqlalchemy as sa
 from sqlalchemy.orm import Mapped, mapped_column
@@ -22,7 +22,7 @@ class DownloadModel(Base, BaseMixin):
     )
     model_name: Mapped[str] = mapped_column(sa.Text, nullable=False, index=False)
     model_type: Mapped[ModelType] = mapped_column(
-        sa.Enum(ModelType), nullable=False, index=False
+        sa.Enum(*get_args(ModelType), ), nullable=False, index=False
     )
     variant: Mapped[Optional[str]] = mapped_column(
         sa.String(10), nullable=True, index=False, default=None

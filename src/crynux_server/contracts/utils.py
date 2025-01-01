@@ -1,4 +1,5 @@
 import json
+import logging
 from contextlib import asynccontextmanager
 from typing import (TYPE_CHECKING, Any, Callable, Dict, List, Optional,
                     TypeVar, cast)
@@ -23,6 +24,8 @@ from .w3_pool import W3Pool
 if TYPE_CHECKING:
     from crynux_server.config import TxOption
 
+
+_logger = logging.getLogger(__name__)
 
 def read_abi(name: str):
     file = impresources.files("crynux_server.contracts.abi") / f"{name}.json"
@@ -114,6 +117,7 @@ class ContractWrapper(object):
         contract_name: str,
         contract_address: Optional[ChecksumAddress] = None,
     ):
+        self.contract_name = contract_name
         self.w3_pool = w3_pool
 
         abi, bytecode = read_abi(contract_name)
@@ -142,6 +146,7 @@ class ContractWrapper(object):
                         account=self.w3_pool.account, block_identifier="pending"
                     )
                     opt["nonce"] = nonce
+                    _logger.debug(f"nonce: {nonce}")
                 if "from" not in opt:
                     opt["from"] = self.w3_pool.account
 
@@ -158,6 +163,7 @@ class ContractWrapper(object):
             self._address = address
             return waiter
 
+        _logger.debug(f"deploy contract {self.contract_name}")
         if w3 is None:
             async with await self.w3_pool.get() as w3:
                 return await _deploy(w3)
@@ -198,11 +204,13 @@ class ContractWrapper(object):
                     account=self.w3_pool.account, block_identifier="pending"
                 )
                 opt["nonce"] = nonce
+                _logger.debug(f"nonce: {nonce}")
                 tx_func: AsyncContractFunction = getattr(contract.functions, method)
                 async with catch_tx_revert_error(method):
                     tx_hash: HexBytes = await tx_func(**kwargs).transact(opt)
             return tx_hash
 
+        _logger.debug(f"call method {self.contract_name}.{method}")
         if w3 is None:
             async with await self.w3_pool.get() as w3:
                 tx_hash = await _send_tx(w3)

@@ -274,6 +274,7 @@ class NodeManager(object):
             try:
                 await task_fut.get()
                 msg = f"Downloading models............ ({i+1}/{len(task_inputs)})"
+                _logger.info(msg)
                 await self.state_cache.set_node_state(
                     status=models.NodeStatus.Init, init_message=msg
                 )
@@ -345,7 +346,6 @@ class NodeManager(object):
             raise ValueError(msg) from e
         except TaskError as e:
             raise ValueError("The initial validation task failed") from e
-        _logger.info("Finish initial validation task")
 
     async def _init(self):
         _logger.info("Initialize node manager")
