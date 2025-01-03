@@ -488,17 +488,20 @@ class DownloadTaskRunner(object):
 
         model = models.ModelConfig.from_model_id(self._state.model_id)
         if self._state.status == models.DownloadTaskStatus.Started:
+            _logger.info(f"start downloading model {self._state.model_id}")
             await run_download_task(
                 task_id=self.task_id, task_type=self._state.task_type, model=model
             )
             async with self.state_context():
                 self._state.status = models.DownloadTaskStatus.Executed
+            _logger.info(f"Download model {self._state.model_id} successfully")
 
-        if self._state.status == models.DownloadTaskStatus.Success:
+        if self._state.status == models.DownloadTaskStatus.Executed:
             waiter = await self.contracts.node_contract.report_model_downloaded(
                 self._state.model_id
             )
             await waiter.wait()
+            _logger.info(f"report model {self._state.model_id} is downloaded")
             async with self.state_context():
                 self._state.status = models.DownloadTaskStatus.Success
 
