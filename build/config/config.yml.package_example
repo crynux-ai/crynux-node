@@ -8,7 +8,7 @@ log:
 ethereum:
   # The JSON RPC endpoint of the Blockchain node
   # Here we use the private chain for the Hydrogen Network
-  provider: "https://crynux-testnet.public.blastapi.io"
+  provider: "https://json-rpc.testnet.crynux.ai"
 
   # The Blockchain params
   # Leave it as is for the private chain used in the Hydrogen Network
@@ -17,11 +17,11 @@ ethereum:
 
   # The deployed addresses of the smart contracts
   contract:
-    node: "0x662d296cae3f1Be2ed5803227dAd6435f1ffC438"
-    task: "0x07E149A0e372C2F54Df6358d021d700703D222D1"
-    qos: "0x95E7e7Ed5463Ff482f61585605a0ff278e0E1FFb"
-    task_queue: "0xeD4cbf24978AD18d73ee6190e361E71095E857A7"
-    netstats: "0xC2c060f8C46640394E0937D75Ea977207E6df130"
+    node: "0x768a636763448B13B3cF46EAd6A345Ae7a637a05"
+    task: "0xb19a4b6C04BEabCEDDBE4A5d2f03FB7761CEd427"
+    qos: "0x800cBf25ECe22302075639de6C30382cfE8C4398"
+    task_queue: "0xDB7Dcf242f9106D112C5150b798447b9730A8B79"
+    netstats: "0xc857a5edc9F3ea63E29b12C2151BDD2Ff112C02C"
 
 # The database used to store the local state data
 # The data will not be large. A sqlite file is more than enough
@@ -33,7 +33,7 @@ db:
   filename: db/server.db
 
 # The URL of the Relay
-relay_url: "https://dy.relay.crynux.ai"
+relay_url: "https://vss.relay.crynux.ai"
 
 # The directory that stores the distribution files of the WebUI
 web_dist: webui/dist
