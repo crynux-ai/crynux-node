@@ -209,7 +209,7 @@ class PreloadedModelsConfig(BaseModel):
     sd_base: Optional[List[ModelConfig]] = None
     gpt_base: Optional[List[ModelConfig]] = None
     controlnet: Optional[List[ModelConfig]] = None
-    vae: Optional[List[ModelConfig]] = None
+    lora: Optional[List[ModelConfig]] = None
 
 
 class ProxyConfig(BaseModel):

@@ -3,6 +3,7 @@ from enum import IntEnum
 from typing import Any, Dict, Optional
 
 from anyio import Condition
+from eth_keys.datatypes import PrivateKey, PublicKey
 from eth_typing import ChecksumAddress
 from hexbytes import HexBytes
 from web3.logs import WARN
@@ -44,10 +45,9 @@ class Contracts(object):
 
     def __init__(
         self,
+        privkey: str,
         provider: Optional[AsyncBaseProvider] = None,
         provider_path: Optional[str] = None,
-        privkey: str = "",
-        default_account_index: Optional[int] = None,
         pool_size: int = 5,
         timeout: int = 10,
     ):
@@ -55,10 +55,9 @@ class Contracts(object):
             pool_size = 1
 
         self._w3_pool = W3Pool(
+            privkey=privkey,
             provider=provider,
             provider_path=provider_path,
-            privkey=privkey,
-            default_account_index=default_account_index,
             pool_size=pool_size,
             timeout=timeout,
         )
@@ -89,7 +88,8 @@ class Contracts(object):
                 elif task_contract_address is None:
                     # task contract has not been deployed, need deploy qos contract
                     self.qos_contract = qos.QOSContract(self._w3_pool)
-                    await self.qos_contract.deploy(option=option, w3=w3)
+                    waiter = await self.qos_contract.deploy(option=option, w3=w3)
+                    await waiter.wait()
                     qos_contract_address = self.qos_contract.address
 
                 if task_queue_contract_address is not None:
@@ -102,7 +102,8 @@ class Contracts(object):
                     self.task_queue_contract = task_queue.TaskQueueContract(
                         self._w3_pool
                     )
-                    await self.task_queue_contract.deploy(option=option, w3=w3)
+                    waiter = await self.task_queue_contract.deploy(option=option, w3=w3)
+                    await waiter.wait()
                     task_queue_contract_address = self.task_queue_contract.address
 
                 if netstats_contract_address is not None:
@@ -114,7 +115,8 @@ class Contracts(object):
                     self.netstats_contract = network_stats.NetworkStatsContract(
                         self._w3_pool
                     )
-                    await self.netstats_contract.deploy(option=option, w3=w3)
+                    waiter = await self.netstats_contract.deploy(option=option, w3=w3)
+                    await waiter.wait()
                     netstats_contract_address = self.netstats_contract.address
 
                 if node_contract_address is not None:
@@ -129,19 +131,24 @@ class Contracts(object):
                         netstats_contract_address is not None
                     ), "NetworkStats contract address is None"
                     self.node_contract = node.NodeContract(self._w3_pool)
-                    await self.node_contract.deploy(
+                    waiter = await self.node_contract.deploy(
                         qos_contract_address,
                         netstats_contract_address,
                         option=option,
                         w3=w3,
                     )
+                    await waiter.wait()
+
                     node_contract_address = self.node_contract.address
-                    await self.qos_contract.update_node_contract_address(
+                    waiter = await self.qos_contract.update_node_contract_address(
                         node_contract_address, option=option, w3=w3
                     )
-                    await self.netstats_contract.update_node_contract_address(
+                    await waiter.wait()
+
+                    waiter = await self.netstats_contract.update_node_contract_address(
                         node_contract_address, option=option, w3=w3
                     )
+                    await waiter.wait()
 
                 if task_contract_address is not None:
                     self.task_contract = task.TaskContract(
@@ -159,7 +166,7 @@ class Contracts(object):
                     ), "NetworkStats contract address is None"
 
                     self.task_contract = task.TaskContract(self._w3_pool)
-                    await self.task_contract.deploy(
+                    waiter = await self.task_contract.deploy(
                         node_contract_address,
                         qos_contract_address,
                         task_queue_contract_address,
@@ -167,20 +174,25 @@ class Contracts(object):
                         option=option,
                         w3=w3,
                     )
+                    await waiter.wait()
                     task_contract_address = self.task_contract.address
 
-                    await self.node_contract.update_task_contract_address(
+                    waiter = await self.node_contract.update_task_contract_address(
                         task_contract_address, option=option, w3=w3
                     )
-                    await self.qos_contract.update_task_contract_address(
+                    await waiter.wait()
+                    waiter = await self.qos_contract.update_task_contract_address(
                         task_contract_address, option=option, w3=w3
                     )
-                    await self.task_queue_contract.update_task_contract_address(
+                    await waiter.wait()
+                    waiter = await self.task_queue_contract.update_task_contract_address(
                         task_contract_address, option=option, w3=w3
                     )
-                    await self.netstats_contract.update_task_contract_address(
+                    await waiter.wait()
+                    waiter = await self.netstats_contract.update_task_contract_address(
                         task_contract_address, option=option, w3=w3
                     )
+                    await waiter.wait()
 
                 self._initialized = True
 
@@ -245,6 +257,14 @@ class Contracts(object):
     @property
     def account(self) -> ChecksumAddress:
         return self._w3_pool.account
+    
+    @property
+    def public_key(self) -> PublicKey:
+        return self._w3_pool.public_key
+    
+    @property
+    def private_key(self) -> PrivateKey:
+        return self._w3_pool._privkey
 
     async def get_current_block_number(self) -> int:
         async with await self._w3_pool.get() as w3:

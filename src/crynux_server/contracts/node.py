@@ -28,6 +28,9 @@ class NodeContract(ContractWrapper):
         self,
         gpu_name: str,
         gpu_vram: int,
+        version: List[int],
+        public_key: bytes,
+        model_ids: List[str],
         *,
         stake_amount: int = _default_stake_amount,
         option: "Optional[TxOption]" = None,
@@ -37,7 +40,24 @@ class NodeContract(ContractWrapper):
             "join",
             gpuName=gpu_name,
             gpuVram=gpu_vram,
+            version=version,
+            publicKey=public_key,
+            modelIDs=model_ids,
             value=stake_amount,
+            option=option,
+            w3=w3,
+        )
+
+    async def update_version(
+        self,
+        version: List[int],
+        *,
+        option: "Optional[TxOption]" = None,
+        w3: Optional[AsyncWeb3] = None,
+    ):
+        return await self._transaction_call(
+            "updateVersion",
+            version=version,
             option=option,
             w3=w3,
         )
@@ -57,6 +77,17 @@ class NodeContract(ContractWrapper):
     ) -> TxWaiter:
         return await self._transaction_call("resume", option=option, w3=w3)
 
+    async def report_model_downloaded(
+        self,
+        model_id: str,
+        *,
+        option: "Optional[TxOption]" = None,
+        w3: Optional[AsyncWeb3] = None,
+    ) -> TxWaiter:
+        return await self._transaction_call(
+            "reportModelDownloaded", modelID=model_id, option=option, w3=w3
+        )
+
     async def update_task_contract_address(
         self,
         address: str,
@@ -67,6 +98,12 @@ class NodeContract(ContractWrapper):
         return await self._transaction_call(
             "updateTaskContractAddress", option=option, taskContract=address, w3=w3
         )
+
+    async def node_contains_model_id(
+        self, address: str, model_id: str, *, w3: Optional[AsyncWeb3] = None
+    ) -> bool:
+        res = await self._function_call("nodeContainsModelID", nodeAddress=address, modelID=model_id, w3=w3)
+        return res
 
     async def get_node_status(
         self, address: str, *, w3: Optional[AsyncWeb3] = None
@@ -82,6 +119,11 @@ class NodeContract(ContractWrapper):
             status=ChainNodeStatus(res[0]),
             gpu_id=res[1],
             gpu=GpuInfo(name=res[2][0], vram=res[2][1]),
+            score=res[3],
+            version=res[4],
+            public_key=res[5],
+            last_model_ids=res[6],
+            local_model_ids=res[7],
         )
         return info
 

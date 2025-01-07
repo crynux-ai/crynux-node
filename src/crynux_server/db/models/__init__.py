@@ -1,15 +1,15 @@
 from .base import Base, BaseMixin
-from .block import BlockNumber
-from .task import TaskEvent, TaskState
+from .download_model import DownloadModel
 from .node import NodeState
+from .task import DownloadTaskState, InferenceTaskState
 from .tx import TxState
 
 __all__ = [
     "Base",
     "BaseMixin",
-    "TaskState",
-    "TaskEvent",
-    "BlockNumber",
+    "InferenceTaskState",
+    "DownloadTaskState",
     "NodeState",
     "TxState",
+    "DownloadModel",
 ]

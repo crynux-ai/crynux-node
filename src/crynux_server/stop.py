@@ -12,6 +12,7 @@ from crynux_server.node_manager.state_cache import (
     DbTxStateCache,
     StateCache,
 )
+from crynux_server.download_model_cache import DownloadModelCache, DbDownloadModelCache
 
 _logger = logging.getLogger(__name__)
 
@@ -22,6 +23,7 @@ async def _stop(
     state_cache: Optional[ManagerStateCache] = None,
     node_state_cache_cls: Type[StateCache[models.NodeState]] = DbNodeStateCache,
     tx_state_cache_cls: Type[StateCache[models.TxState]] = DbTxStateCache,
+    download_model_cache_cls: Type[DownloadModelCache] = DbDownloadModelCache,
     option: Optional[TxOption] = None,
 ):
     config = get_config()
@@ -51,7 +53,8 @@ async def _stop(
                 node_state_cache_cls=node_state_cache_cls,
                 tx_state_cache_cls=tx_state_cache_cls,
             )
-        state_manager = NodeStateManager(state_cache=state_cache, contracts=contracts)
+        download_model_cache = download_model_cache_cls()
+        state_manager = NodeStateManager(state_cache=state_cache, download_model_cache=download_model_cache, contracts=contracts)
 
     try:
         waiter = await state_manager.stop(option=option)

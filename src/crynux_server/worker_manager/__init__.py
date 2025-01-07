@@ -1,19 +1,17 @@
-from .error import (PrefetchError, TaskCancelled, TaskError,
+from .error import (TaskDownloadError, TaskCancelled, TaskError,
                     TaskExecutionError, TaskInvalid, is_task_invalid)
 from .manager import WorkerManager, get_worker_manager, set_worker_manager
-from .task import TaskInput, TaskResult, TaskStreamResult
+from .task import TaskFuture
 
 __all__ = [
     "WorkerManager",
     "get_worker_manager",
     "set_worker_manager",
-    "TaskInput",
-    "TaskResult",
-    "TaskStreamResult",
+    "TaskFuture",
     "TaskCancelled",
     "TaskInvalid",
     "TaskExecutionError",
-    "PrefetchError",
+    "TaskDownloadError",
     "TaskError",
     "is_task_invalid",
 ]

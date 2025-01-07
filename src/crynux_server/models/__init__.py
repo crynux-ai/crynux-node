@@ -1,19 +1,32 @@
-from .event import (TaskAborted, TaskStarted, TaskEvent, TaskKind,
-                    TaskResultCommitmentsReady, TaskResultReady, TaskSuccess,
+from .download_model import DownloadModel, ModelConfig
+from .event import (TaskEndAborted, TaskEndGroupRefund, TaskEndGroupSuccess,
+                    TaskEndInvalidated, TaskEndSuccess, TaskErrorReported,
+                    TaskEvent, TaskKind, TaskParametersUploaded, TaskQueued,
+                    TaskScoreReady, TaskStarted, TaskValidated,
                     load_event_from_contracts, load_event_from_json)
-from .node import (ChainNodeInfo, ChainNodeStatus, GpuInfo, NodeState,
-                   NodeStatus, convert_node_status, ChainNetworkNodeInfo)
-from .task import ChainTask, TaskType, RelayTask, TaskState, TaskStatus
+from .node import (ChainNetworkNodeInfo, ChainNodeInfo, ChainNodeStatus,
+                   GpuInfo, NodeState, NodeStatus, convert_node_status)
+from .task import (ChainTask, DownloadTaskState, DownloadTaskStatus,
+                   InferenceTaskState, InferenceTaskStatus, RelayTask,
+                   TaskAbortReason, TaskError, TaskType)
 from .tx import TxState, TxStatus
+from .worker import (DownloadTaskInput, ErrorResult, InferenceTaskInput,
+                     SuccessResult, TaskInput, TaskResult)
 
 __all__ = [
     "TaskKind",
     "TaskEvent",
+    "TaskQueued",
     "TaskStarted",
-    "TaskResultCommitmentsReady",
-    "TaskResultReady",
-    "TaskSuccess",
-    "TaskAborted",
+    "TaskParametersUploaded",
+    "TaskErrorReported",
+    "TaskScoreReady",
+    "TaskValidated",
+    "TaskEndSuccess",
+    "TaskEndInvalidated",
+    "TaskEndAborted",
+    "TaskEndGroupSuccess",
+    "TaskEndGroupRefund",
     "load_event_from_json",
     "load_event_from_contracts",
     "ChainTask",
@@ -26,8 +39,20 @@ __all__ = [
     "convert_node_status",
     "NodeState",
     "TaskType",
-    "TaskStatus",
-    "TaskState",
+    "InferenceTaskStatus",
+    "InferenceTaskState",
+    "DownloadTaskStatus",
+    "DownloadTaskState",
     "TxStatus",
     "TxState",
+    "TaskError",
+    "TaskAbortReason",
+    "DownloadTaskInput",
+    "InferenceTaskInput",
+    "ModelConfig",
+    "TaskInput",
+    "SuccessResult",
+    "ErrorResult",
+    "TaskResult",
+    "DownloadModel",
 ]

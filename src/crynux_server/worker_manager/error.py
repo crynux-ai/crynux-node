@@ -23,8 +23,8 @@ class TaskExecutionError(TaskError):
     error_type = "TaskExecutionError"
 
 
-class PrefetchError(TaskError):
-    error_type = "PrefetchError"
+class TaskDownloadError(TaskError):
+    error_type = "TaskDownloadError"
 
 
 def is_task_invalid(stdout: str) -> bool:

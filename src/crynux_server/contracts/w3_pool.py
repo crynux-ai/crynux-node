@@ -10,6 +10,9 @@ from typing import Awaitable, Callable, Optional, Dict, cast
 import certifi
 from aiohttp import ClientSession, ClientTimeout, TCPConnector
 from anyio import Condition, Lock, move_on_after
+from eth_account import Account
+from eth_keys import keys
+from eth_keys.datatypes import PrivateKey, PublicKey
 from eth_account.signers.local import LocalAccount
 from eth_typing import ChecksumAddress
 from web3 import AsyncHTTPProvider, AsyncWeb3, WebsocketProviderV2
@@ -122,18 +125,22 @@ class OtherW3Guard(W3Guard):
 class W3Pool(object):
     def __init__(
         self,
+        privkey: str,
         provider: Optional[AsyncBaseProvider] = None,
         provider_path: Optional[str] = None,
-        privkey: str = "",
-        default_account_index: Optional[int] = None,
         pool_size: int = 1,
         timeout: int = 10,
     ) -> None:
-        self._privkey = privkey
+        if privkey.startswith("0x"):
+            privkey = privkey[2:]
+        privkey_bytes = bytes.fromhex(privkey)
+        self._privkey: PrivateKey = keys.PrivateKey(privkey_bytes)
+        self._pubkey: PublicKey = self._privkey.public_key
+        self._account: ChecksumAddress = self._privkey.public_key.to_checksum_address()
+
         self._pool_size = pool_size
         self._provider_path = provider_path
         self._timeout = timeout
-        self._default_account_index = default_account_index
         self._provider = None
 
         if provider is None:
@@ -162,8 +169,6 @@ class W3Pool(object):
 
         self._closed = False
 
-        self._account = None
-
     async def on_guard_idle(self, id: int):
         async with self._condition:
             if id in self._guards:
@@ -181,8 +186,15 @@ class W3Pool(object):
 
     @property
     def account(self) -> ChecksumAddress:
-        assert self._account, "Cannot get account before w3 pool generate first w3 instance"
         return self._account
+
+    @property
+    def public_key(self) -> PublicKey:
+        return self._pubkey
+    
+    @property
+    def private_key(self) -> PrivateKey:
+        return self._privkey
 
     async def _new_w3(self) -> W3Guard:
         if self.provider_type == ProviderType.HTTP:
@@ -232,20 +244,9 @@ class W3Pool(object):
                 on_close=self.on_guard_close,
             )
 
-        if self._privkey != "":
-            account: LocalAccount = w3.eth.account.from_key(self._privkey)
-            middleware = await async_construct_sign_and_send_raw_middleware(account)
-            w3.middleware_onion.add(middleware)
-            w3.eth.default_account = cast(ChecksumAddress, account.address)
-        elif self._default_account_index is not None:
-            w3.eth.default_account = (await w3.eth.accounts)[
-                self._default_account_index
-            ]
-
-        if self._account is None:
-            self._account = w3.eth.default_account
-        else:
-            assert self._account == w3.eth.default_account, "account address changed when new w3"
+        middleware = await async_construct_sign_and_send_raw_middleware(self._privkey)
+        w3.middleware_onion.add(middleware)
+        w3.eth.default_account = self._account
 
         self._next_id += 1
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 from datetime import datetime
 from typing import Optional, Type
@@ -15,15 +16,19 @@ from web3.types import EventData
 from crynux_server import models
 from crynux_server.config import Config, wait_privkey
 from crynux_server.contracts import Contracts, set_contracts
-from crynux_server.event_queue import DbEventQueue, EventQueue, set_event_queue
 from crynux_server.relay import Relay, WebRelay, set_relay
-from crynux_server.task import (DbTaskStateCache, InferenceTaskRunner,
-                                TaskStateCache, TaskSystem,
-                                set_task_state_cache, set_task_system)
+from crynux_server.task import (DbDownloadTaskStateCache,
+                                DbInferenceTaskStateCache,
+                                DownloadTaskStateCache, InferenceTaskRunner,
+                                InferenceTaskStateCache, TaskSystem,
+                                set_download_task_state_cache,
+                                set_inference_task_state_cache,
+                                set_task_system)
 from crynux_server.watcher import EventWatcher, set_watcher
-from crynux_server.worker_manager import (PrefetchError, TaskCancelled,
+from crynux_server.worker_manager import (TaskCancelled, TaskDownloadError,
                                           TaskError, WorkerManager,
                                           get_worker_manager)
+from crynux_server.download_model_cache import DownloadModelCache, DbDownloadModelCache, set_download_model_cache
 
 from .state_cache import (DbNodeStateCache, DbTxStateCache, ManagerStateCache,
                           StateCache, set_manager_state_cache)
@@ -59,12 +64,6 @@ def _make_relay(privkey: str, relay_url: str) -> Relay:
     return relay
 
 
-def _make_event_queue(queue_cls: Type[EventQueue]) -> EventQueue:
-    queue = queue_cls()
-    set_event_queue(queue)
-    return queue
-
-
 def _make_watcher(
     contracts: Contracts,
 ):
@@ -75,15 +74,22 @@ def _make_watcher(
 
 
 def _make_task_system(
-    queue: EventQueue,
     retry: bool,
-    task_state_cache_cls: Type[TaskStateCache],
+    contracts: Contracts,
+    inference_state_cache_cls: Type[InferenceTaskStateCache],
+    download_state_cache_cls: Type[DownloadTaskStateCache],
 ) -> TaskSystem:
-    cache = task_state_cache_cls()
-    set_task_state_cache(cache)
+    inference_state_cache = inference_state_cache_cls()
+    set_inference_task_state_cache(inference_state_cache)
+    download_state_cache = download_state_cache_cls()
+    set_download_task_state_cache(download_state_cache)
 
-    system = TaskSystem(state_cache=cache, queue=queue, retry=retry)
-    system.set_runner_cls(runner_cls=InferenceTaskRunner)
+    system = TaskSystem(
+        inference_state_cache=inference_state_cache,
+        download_state_cache=download_state_cache,
+        contracts=contracts,
+        retry=retry,
+    )
 
     set_task_system(system)
     return system
@@ -91,10 +97,12 @@ def _make_task_system(
 
 def _make_node_state_manager(
     state_cache: ManagerStateCache,
+    download_model_cache: DownloadModelCache,
     contracts: Contracts,
 ):
     state_manager = NodeStateManager(
         state_cache=state_cache,
+        download_model_cache=download_model_cache,
         contracts=contracts,
     )
     set_node_state_manager(state_manager)
@@ -107,13 +115,13 @@ class NodeManager(object):
         config: Config,
         gpu_name: str,
         gpu_vram: int,
-        event_queue_cls: Type[EventQueue] = DbEventQueue,
-        task_state_cache_cls: Type[TaskStateCache] = DbTaskStateCache,
+        inference_state_cache_cls: Type[InferenceTaskStateCache] = DbInferenceTaskStateCache,
+        download_state_cache_cls: Type[DownloadTaskStateCache] = DbDownloadTaskStateCache,
         node_state_cache_cls: Type[StateCache[models.NodeState]] = DbNodeStateCache,
         tx_state_cache_cls: Type[StateCache[models.TxState]] = DbTxStateCache,
+        download_model_cache_cls: Type[DownloadModelCache] = DbDownloadModelCache,
         manager_state_cache: Optional[ManagerStateCache] = None,
         privkey: Optional[str] = None,
-        event_queue: Optional[EventQueue] = None,
         contracts: Optional[Contracts] = None,
         relay: Optional[Relay] = None,
         node_state_manager: Optional[NodeStateManager] = None,
@@ -127,8 +135,11 @@ class NodeManager(object):
         self.gpu_name = gpu_name
         self.gpu_vram = gpu_vram
 
-        self.event_queue_cls = event_queue_cls
-        self.task_state_cache_cls = task_state_cache_cls
+        self.inference_state_cache_cls = inference_state_cache_cls
+        self.download_state_cache_cls = download_state_cache_cls
+
+        self.download_model_cache = download_model_cache_cls()
+        set_download_model_cache(self.download_model_cache)
         if manager_state_cache is None:
             manager_state_cache = ManagerStateCache(
                 node_state_cache_cls=node_state_cache_cls,
@@ -138,7 +149,6 @@ class NodeManager(object):
         self.state_cache = manager_state_cache
 
         self._privkey = privkey
-        self._event_queue = event_queue
         self._contracts = contracts
         self._relay = relay
         self._node_state_manager = node_state_manager
@@ -165,16 +175,6 @@ class NodeManager(object):
     async def _init_components(self):
         _logger.info("Initializing node manager components.")
 
-        if self._event_queue is None:
-            self._event_queue = _make_event_queue(self.event_queue_cls)
-
-        if self._task_system is None:
-            self._task_system = _make_task_system(
-                queue=self._event_queue,
-                retry=self._retry,
-                task_state_cache_cls=self.task_state_cache_cls,
-            )
-
         if self._contracts is None or self._relay is None:
             if self._privkey is None:
                 self._privkey = await wait_privkey()
@@ -192,18 +192,160 @@ class NodeManager(object):
             if self._relay is None:
                 self._relay = _make_relay(self._privkey, self.config.relay_url)
 
+        if self._task_system is None:
+            self._task_system = _make_task_system(
+                retry=self._retry,
+                contracts=self._contracts,
+                inference_state_cache_cls=self.inference_state_cache_cls,
+                download_state_cache_cls=self.download_state_cache_cls
+            )
+
         if self._node_state_manager is None:
             self._node_state_manager = _make_node_state_manager(
                 state_cache=self.state_cache,
+                download_model_cache=self.download_model_cache,
                 contracts=self._contracts,
             )
 
         if self._watcher is None:
-            if self._watcher is None:
-                self._watcher = _make_watcher(
-                    contracts=self._contracts,
-                )
+            self._watcher = _make_watcher(contracts=self._contracts)
+
         _logger.info("Node manager components initializing complete.")
+
+    async def _prefetch_models(self):
+        preload_models = self.config.task_config.preloaded_models
+        task_inputs = []
+        if preload_models is not None:
+            if preload_models.sd_base is not None:
+                for model in preload_models.sd_base:
+                    task_input = models.TaskInput(
+                        task=models.DownloadTaskInput(
+                            task_name="download",
+                            task_type=models.TaskType.SD,
+                            task_id=f"preload_models_{len(task_inputs)}",
+                            model=models.ModelConfig(
+                                id=model.id, type="base", variant=model.variant
+                            ),
+                        )
+                    )
+                    task_inputs.append(task_input)
+            if preload_models.gpt_base is not None:
+                for model in preload_models.gpt_base:
+                    task_input = models.TaskInput(
+                        task=models.DownloadTaskInput(
+                            task_name="download",
+                            task_type=models.TaskType.LLM,
+                            task_id=f"preload_models_{len(task_inputs)}",
+                            model=models.ModelConfig(
+                                id=model.id, type="base", variant=model.variant
+                            ),
+                        )
+                    )
+                    task_inputs.append(task_input)
+            if preload_models.controlnet is not None:
+                for model in preload_models.controlnet:
+                    task_input = models.TaskInput(
+                        task=models.DownloadTaskInput(
+                            task_name="download",
+                            task_type=models.TaskType.SD,
+                            task_id=f"preload_models_{len(task_inputs)}",
+                            model=models.ModelConfig(
+                                id=model.id, type="controlnet", variant=model.variant
+                            ),
+                        )
+                    )
+                    task_inputs.append(task_input)
+            if preload_models.lora is not None:
+                for model in preload_models.lora:
+                    task_input = models.TaskInput(
+                        task=models.DownloadTaskInput(
+                            task_name="download",
+                            task_type=models.TaskType.SD,
+                            task_id=f"preload_models_{len(task_inputs)}",
+                            model=models.ModelConfig(
+                                id=model.id, type="lora", variant=model.variant
+                            ),
+                        )
+                    )
+                    task_inputs.append(task_input)
+
+        for i, task_input in enumerate(task_inputs):
+            task_fut = await self._worker_manager.send_task(task_input)
+            try:
+                await task_fut.get()
+                msg = f"Downloading models............ ({i+1}/{len(task_inputs)})"
+                _logger.info(msg)
+                await self.state_cache.set_node_state(
+                    status=models.NodeStatus.Init, init_message=msg
+                )
+                await self.download_model_cache.save(
+                    models.DownloadModel(
+                        task_type=task_input.task.task_type,
+                        model=task_input.task.model
+                    )
+                )
+            except TaskCancelled:
+                raise ValueError(
+                    "Failed to download models due to worker internal error"
+                )
+            except TaskDownloadError as e:
+                raise ValueError(
+                    "Failed to download models due to network issue"
+                ) from e
+            except Exception as e:
+                raise ValueError("Failed to download models") from e
+
+    async def _run_initial_inference_task(self):
+        prompt = (
+            "a realistic photo of an old man sitting on a brown chair, "
+            "on the seaside, with blue sky and white clouds, a dog is lying "
+            "under his legs, masterpiece, high resolution"
+        )
+        task_args = {
+            "version": "3.0.0",
+            "base_model": {
+                "name": "crynux-ai/stable-diffusion-v1-5",
+                "variant": "fp16",
+            },
+            "prompt": prompt,
+            "negative_prompt": "",
+            "task_config": {
+                "num_images": 1,
+                "safety_checker": False,
+                "cfg": 7,
+                "seed": 99975892,
+                "steps": 40,
+            },
+        }
+
+        task_input = models.TaskInput(
+            task=models.InferenceTaskInput(
+                task_name="inference",
+                task_type=models.TaskType.SD,
+                task_id="initial_inference_task",
+                models=[
+                    models.ModelConfig(
+                        id="crynux-ai/stable-diffusion-v1-5",
+                        type="base",
+                        variant="fp16",
+                    )
+                ],
+                task_args=json.dumps(task_args),
+                output_dir=self.config.task_config.output_dir,
+            )
+        )
+        try:
+            with fail_after(300):
+                task_fut = await self._worker_manager.send_task(task_input)
+                await task_fut.get()
+        except TimeoutError as e:
+            msg = (
+                "The initial inference task exceeded the timeout limit(5 min). Maybe your device does not meet "
+                "the lowest hardware requirements"
+            )
+            raise ValueError(msg) from e
+        except TaskError as e:
+            raise ValueError("The initial validation task failed") from e
 
     async def _init(self):
         _logger.info("Initialize node manager")
@@ -215,116 +357,16 @@ class NodeManager(object):
             reraise=True,
         ):
             with attemp:
-                try:
-                    async for (
-                        progress
-                    ) in self._worker_manager.get_prefetch_task_progress():
-                        await self.state_cache.set_node_state(
-                            status=models.NodeStatus.Init, init_message=progress
-                        )
-                except TaskCancelled:
-                    self._worker_manager.reset_prefetch_task()
-                    raise ValueError(
-                        "Failed to download models due to worker internal error"
-                    )
-                except PrefetchError as e:
-                    self._worker_manager.reset_prefetch_task()
-                    raise ValueError(
-                        "Failed to download models due to network issue"
-                    ) from e
-                except Exception as e:
-                    self._worker_manager.reset_prefetch_task()
-                    raise ValueError("Failed to download models") from e
+                await self._prefetch_models()
         _logger.info("Finish downloading models")
 
         await self.state_cache.set_node_state(
             status=models.NodeStatus.Init, init_message="Running local evaluation task"
         )
-        try:
-            with fail_after(300):
-                await self._worker_manager.get_init_inference_task_result()
-        except TimeoutError as e:
-            msg = (
-                "The initial inference task exceeded the timeout limit(5 min). Maybe your device does not meet "
-                "the lowest hardware requirements"
-            )
-            raise ValueError(msg) from e
-        except TaskError as e:
-            raise ValueError("The initial validation task failed") from e
+        await self._run_initial_inference_task()
         _logger.info("Finish initial validation task")
 
         _logger.info("Node manager initializing complete.")
-
-    async def _recover(self):
-        assert self._contracts is not None
-        assert self._task_system is not None
-        assert self._watcher is not None
-
-        async for attemp in AsyncRetrying(
-            stop=stop_never if self._retry else stop_after_attempt(1),
-            wait=wait_fixed(self._retry_delay),
-            reraise=True,
-        ):
-            with attemp:
-                task_id = await self._contracts.task_contract.get_node_task(
-                    self._contracts.account
-                )
-                if task_id == 0:
-                    return
-
-                task = await self._contracts.task_contract.get_task(task_id=task_id)
-
-        round = task.selected_nodes.index(self._contracts.account)
-        state = models.TaskState(
-            task_id=task_id,
-            round=round,
-            timeout=task.timeout,
-            status=models.TaskStatus.Pending,
-        )
-
-        events = []
-        # task created
-        event = models.TaskStarted(
-            task_id=task_id,
-            task_type=task.task_type,
-            creator=Web3.to_checksum_address(task.creator),
-            selected_node=self._contracts.account,
-            task_hash=Web3.to_hex(task.task_hash),
-            data_hash=Web3.to_hex(task.data_hash),
-            round=round,
-        )
-        events.append(event)
-
-        # has submitted result commitment
-        if round < len(task.commitments) and task.commitments[round] != bytes([0] * 32):
-            # has reported error, skip the task
-            err_commitment = bytes([0] * 31 + [1])
-            if task.commitments[round] == err_commitment:
-                return
-
-            state.result = bytes([0] * 31 + [2])
-            event = models.TaskResultCommitmentsReady(task_id=task_id)
-            events.append(event)
-
-        # has disclosed
-        if round < len(task.results) and task.results[round] != b"":
-            state.disclosed = True
-            # task is success
-            if task.result_node != "0x" + bytes([0] * 20).hex():
-                result = task.results[round]
-                event = models.TaskSuccess(
-                    task_id=task_id,
-                    result=Web3.to_hex(result),
-                    result_node=Web3.to_checksum_address(task.result_node),
-                )
-                state.result = result
-                events.append(event)
-
-        for event in events:
-            await self._task_system.event_queue.put(event=event)
-            _logger.debug(f"Recover event from chain {event}")
-        await self._task_system.state_cache.dump(state)
-        _logger.debug(f"Recover task state {state}")
 
     async def _sync_state(self):
         assert self._node_state_manager is not None
@@ -351,22 +393,9 @@ class NodeManager(object):
         self, *, task_status: TaskStatus[None] = TASK_STATUS_IGNORED
     ):
         assert self._watcher is not None
-        assert self._event_queue is not None
         assert self._contracts is not None
 
-        queue = self._event_queue
         account = self._contracts.account
-
-        async def _push_event(event_data: EventData):
-            event = models.load_event_from_contracts(event_data)
-            await queue.put(event)
-
-        self._watcher.watch_event(
-            "task",
-            "TaskStarted",
-            callback=_push_event,
-            filter_args={"selectedNode": account},
-        )
 
         async def _node_kicked_out(event_data: EventData):
             address = event_data["args"]["nodeAddress"]
@@ -387,6 +416,27 @@ class NodeManager(object):
                 )
 
         self._watcher.watch_event("node", "NodeSlashed", callback=_node_slashed)
+
+        async def _inference_task_started(event_data: EventData):
+            assert self._task_system is not None
+            task_id_commitment = event_data["args"]["taskIDCommitment"]
+            selected_node = event_data["args"]["selectedNode"]
+            if selected_node == account:
+                await self._task_system.create_inference_task(task_id_commitment)
+
+        self._watcher.watch_event("task", "TaskStarted", callback=_inference_task_started)
+
+        async def _download_task_started(event_data: EventData):
+            assert self._task_system is not None
+            address = event_data["args"]["nodeAddress"]
+            model_id = event_data["args"]["modelID"]
+            task_type = models.TaskType(event_data["args"]["taskType"])
+            blocknum = event_data["blockNumber"]
+            if address == account:
+                task_id = f"{blocknum}_{address}_{model_id}"
+                await self._task_system.create_download_task(task_id, task_type, model_id)
+
+        self._watcher.watch_event("task", "DownloadModel", _download_task_started)
 
         # call task_status.started() only once
         task_status_set = False
@@ -417,6 +467,7 @@ class NodeManager(object):
 
     async def _check_time(self):
         assert self._relay is not None
+        remote_now = 0
         async for attemp in AsyncRetrying(
             stop=stop_after_attempt(3),
             wait=wait_fixed(self._retry_delay),
@@ -472,6 +523,38 @@ class NodeManager(object):
                     raise
         return False
 
+    async def _update_version(self):
+
+        async def _update():
+            assert self._contracts is not None
+            current_version = self._worker_manager.version
+            while True:
+                async with self._worker_manager.wait_connection_changed():
+                    version = self._worker_manager.version
+                    if version is not None and version != current_version:
+                        version_list = [int(v) for v in version.split(".")]
+                        assert len(version_list) == 3
+                        await self._contracts.node_contract.update_version(version_list)
+                    current_version = version
+
+        async for attemp in AsyncRetrying(
+            stop=stop_never if self._retry else stop_after_attempt(1),
+            wait=wait_fixed(self._retry_delay),
+            reraise=True,
+        ):
+            with attemp:
+                try:
+                    await _update()
+                except Exception as e:
+                    _logger.exception(e)
+                    _logger.error(f"Cannot get update node version, retrying")
+                    with fail_after(5, shield=True):
+                        await self.state_cache.set_node_state(
+                            status=models.NodeStatus.Error,
+                            message="Node manager running error: cannot get update node version, retrying...",
+                        )
+                    raise
+
     async def _run(self, prefetch: bool = True):
         assert self._tg is None, "Node manager is running."
 
@@ -511,7 +594,6 @@ class NodeManager(object):
                     models.NodeStatus.Init,
                     init_message="Synchronizing node status from the blockchain",
                 )
-                await self._recover()
 
                 assert self._task_system is not None
                 tg.start_soon(self._task_system.start)
@@ -523,9 +605,6 @@ class NodeManager(object):
                     )
                     await sleep(5)
 
-                # wait the event watcher to start first and then join the network sequentially
-                # because the node may be selected to execute one task in the same tx of join,
-                # start watcher after the joining operation will cause missing the TaskStarted event.
                 await tg.start(self._watch_events)
 
                 assert self._node_state_manager is not None
@@ -542,9 +621,16 @@ class NodeManager(object):
                     ):
                         with attemp:
                             try:
-                                await self._node_state_manager.try_start(
-                                    self.gpu_name, self.gpu_vram
-                                )
+                                async with self._worker_manager.wait_connected():
+                                    version = self._worker_manager.version
+                                    assert version is not None
+                                    version_list = [int(v) for v in version.split(".")]
+                                    assert len(version_list) == 3
+                                    await self._node_state_manager.try_start(
+                                        gpu_name=self.gpu_name,
+                                        gpu_vram=self.gpu_vram,
+                                        version=version_list,
+                                    )
                             except Exception as e:
                                 _logger.warning(e)
                                 _logger.info("Cannot auto join the network")
@@ -555,6 +641,7 @@ class NodeManager(object):
                         await self.state_cache.set_tx_state(models.TxStatus.Success)
 
                 tg.start_soon(self._sync_state)
+                tg.start_soon(self._update_version)
 
         finally:
             self._tg = None
@@ -580,9 +667,6 @@ class NodeManager(object):
     async def stop(self):
         if not self._stoped:
             try:
-                if self._watcher is not None:
-                    self._watcher.stop()
-                    self._watcher = None
                 if self._task_system is not None:
                     self._task_system.stop()
                     self._task_system = None

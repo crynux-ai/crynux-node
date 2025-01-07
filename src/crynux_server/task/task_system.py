@@ -1,126 +1,196 @@
 import logging
-from typing import Dict, Optional, Type, TypeVar
+import asyncio
+from typing import Dict, Optional
 
-from anyio import create_task_group, get_cancelled_exc_class
+from anyio import create_task_group, get_cancelled_exc_class, sleep
 from anyio.abc import TaskGroup
-from tenacity import (AsyncRetrying, stop_after_attempt, stop_never,
-                      wait_fixed)
+from tenacity import retry, stop_after_attempt, stop_never, wait_fixed
 
-from crynux_server.event_queue import EventQueue
-from crynux_server.models import TaskStatus
+from crynux_server.contracts import Contracts
+from crynux_server.models import InferenceTaskStatus, DownloadTaskStatus, TaskType, DownloadTaskState
 
-from .state_cache import TaskStateCache
-from .task_runner import InferenceTaskRunner, TaskRunner
+from .state_cache import InferenceTaskStateCache, DownloadTaskStateCache
+from .task_runner import InferenceTaskRunner, DownloadTaskRunner
 
 _logger = logging.getLogger(__name__)
 
 
-T = TypeVar("T", bound=TaskRunner)
+
+def _is_task_id_commitment_empty(task_id_commitment: bytes):
+    return all(v == 0 for v in task_id_commitment)
 
 
 class TaskSystem(object):
     def __init__(
         self,
-        state_cache: TaskStateCache,
-        queue: EventQueue,
+        inference_state_cache: InferenceTaskStateCache,
+        download_state_cache: DownloadTaskStateCache,
+        contracts: Contracts,
         retry: bool = True,
-        task_name: str = "inference",
     ) -> None:
-        self._state_cache = state_cache
-        self._queue = queue
+        self._inference_state_cache = inference_state_cache
+        self._download_state_cache = download_state_cache
+        self._contracts = contracts
         self._retry = retry
-        self._task_name = task_name
 
         self._tg: Optional[TaskGroup] = None
 
-        self._runners: Dict[int, TaskRunner] = {}
+        self._inference_runners: Dict[bytes, InferenceTaskRunner] = {}
+        self._download_runners: Dict[str, DownloadTaskRunner] = {}
 
-        self._runner_cls: Type[TaskRunner] = InferenceTaskRunner
+        self._task_queue = asyncio.Queue()
 
-    def set_runner_cls(self, runner_cls: Type[TaskRunner]):
-        self._runner_cls = runner_cls
-
-    @property
-    def state_cache(self) -> TaskStateCache:
-        return self._state_cache
-
-    @property
-    def event_queue(self) -> EventQueue:
-        return self._queue
-
-    async def _run_task(self, task_id: int):
+    async def _run_inference_task(self, task_id_commitment: bytes):
         try:
-            runner = self._runners[task_id]
+            runner = self._inference_runners[task_id_commitment]
 
-            async for attemp in AsyncRetrying(
+            @retry(
                 stop=stop_never if self._retry else stop_after_attempt(1),
                 wait=wait_fixed(30),
                 reraise=True,
-            ):
-                with attemp:
-                    try:
-                        await runner.run()
-                    except get_cancelled_exc_class():
-                        raise
-                    except Exception as e:
-                        _logger.exception(e)
-                        _logger.error(f"Task {task_id} error: {str(e)}")
-                        raise
-        finally:
-            del self._runners[task_id]
+            )
+            async def _run_task_with_retry():
+                try:
+                    await runner.run()
+                except get_cancelled_exc_class():
+                    raise
+                except Exception as e:
+                    _logger.exception(e)
+                    _logger.error(f"Inference task {task_id_commitment.hex()} error: {str(e)}")
+                    raise
 
-    async def _recover(self, tg: TaskGroup):
+            await _run_task_with_retry()
+
+        finally:
+            del self._inference_runners[task_id_commitment]
+
+    async def _run_download_task(self, task_id: str):
+        try:
+            runner = self._download_runners[task_id]
+
+            @retry(
+                stop=stop_never if self._retry else stop_after_attempt(1),
+                wait=wait_fixed(30),
+                reraise=True,
+            )
+            async def _run_task_with_retry():
+                try:
+                    await runner.run()
+                except get_cancelled_exc_class():
+                    raise
+                except Exception as e:
+                    _logger.exception(e)
+                    _logger.error(f"Download task {task_id} error: {str(e)}")
+                    raise
+
+            await _run_task_with_retry()
+
+        finally:
+            del self._download_runners[task_id]
+
+
+    async def _get_node_task(self):
+        return await self._contracts.task_contract.get_node_task(
+            self._contracts.account
+        )
+
+    async def _recover_inference_task(self, tg: TaskGroup):
         running_status = [
-            TaskStatus.Pending,
-            TaskStatus.Executing,
-            TaskStatus.ResultUploaded,
-            TaskStatus.Disclosed,
-            TaskStatus.ResultFileUploaded,
+            InferenceTaskStatus.Queued,
+            InferenceTaskStatus.Started,
+            InferenceTaskStatus.ParametersUploaded,
+            InferenceTaskStatus.ScoreReady,
+            InferenceTaskStatus.Validated,
+            InferenceTaskStatus.GroupValidated,
         ]
-        running_states = await self.state_cache.find(status=running_status)
+        running_states = await self._inference_state_cache.find(status=running_status)
         for state in running_states:
-            runner = self._runner_cls(
-                task_id=state.task_id,
-                state_cache=self._state_cache,
-                queue=self._queue,
-                task_name=self._task_name,
+            runner = InferenceTaskRunner(
+                task_id_commitment=state.task_id_commitment,
+                state_cache=self._inference_state_cache,
+                contracts=self._contracts,
             )
             runner.state = state
-            self._runners[state.task_id] = runner
-            tg.start_soon(self._run_task, state.task_id)
-            _logger.debug(f"Recreate task runner for {state.task_id}")
+            self._inference_runners[state.task_id_commitment] = runner
+            tg.start_soon(self._run_inference_task, state.task_id_commitment)
+            _logger.debug(f"Rerun inference task {state.task_id_commitment.hex()}")
+
+    async def _recover_download_task(self, tg: TaskGroup):
+        running_status = [
+            DownloadTaskStatus.Started, DownloadTaskStatus.Executed
+        ]
+        running_states = await self._download_state_cache.find(status=running_status)
+        for state in running_states:
+            runner = DownloadTaskRunner(
+                task_id=state.task_id,
+                state=state,
+                state_cache=self._download_state_cache,
+                contracts=self._contracts
+            )
+            self._download_runners[state.task_id] = runner
+            tg.start_soon(self._run_download_task, state.task_id)
+            _logger.debug(f"Rerun download task {state.task_id}")
+
+    async def create_inference_task(self, task_id_commitment: bytes):
+        if not _is_task_id_commitment_empty(task_id_commitment) and task_id_commitment not in self._inference_runners:
+            runner = InferenceTaskRunner(
+                task_id_commitment=task_id_commitment,
+                state_cache=self._inference_state_cache,
+                contracts=self._contracts
+            )
+            self._inference_runners[task_id_commitment] = runner
+            await self._task_queue.put(("inference", task_id_commitment))
+
+    async def create_download_task(self, task_id: str, task_type: TaskType, model_id: str):
+        if task_id not in self._download_runners:
+            state = DownloadTaskState(
+                task_id=task_id,
+                task_type=task_type,
+                model_id=model_id,
+                status=DownloadTaskStatus.Started
+            )
+            runner = DownloadTaskRunner(
+                task_id=task_id,
+                state=state,
+                state_cache=self._download_state_cache,
+                contracts=self._contracts
+            )
+            self._download_runners[task_id] = runner
+            await self._task_queue.put(("download", task_id))
 
     async def start(self):
-        assert self._tg is None, "The TaskSystem has already been started."
+        @retry(
+            stop=stop_never if self._retry else stop_after_attempt(1),
+            wait=wait_fixed(30),
+            reraise=True,
+        )
+        async def _start():
+            assert self._tg is None, "The TaskSystem has already been started."
 
-        try:
-            async with create_task_group() as tg:
-                self._tg = tg
-                await self._recover(tg)
-                while True:
-                    ack_id, event = await self.event_queue.get()
-                    task_id = event.task_id
-                    if task_id in self._runners:
-                        runner = self._runners[task_id]
-                    else:
-                        runner = self._runner_cls(
-                            task_id=task_id,
-                            state_cache=self._state_cache,
-                            queue=self._queue,
-                            task_name=self._task_name,
-                        )
-                        self._runners[task_id] = runner
-                        tg.start_soon(self._run_task, task_id)
+            try:
+                async with create_task_group() as tg:
+                    self._tg = tg
+                    await self._recover_inference_task(tg)
+                    await self._recover_download_task(tg)
+                    while True:
+                        task_name, task_id = await self._task_queue.get()
+                        if task_name == "inference":
+                            assert isinstance(task_id, bytes)
+                            tg.start_soon(self._run_inference_task, task_id)
+                        elif task_name == "download":
+                            assert isinstance(task_id, str)
+                            tg.start_soon(self._run_download_task, task_id)
 
-                    await runner.send(ack_id, event)
+            except get_cancelled_exc_class():
+                raise
+            except Exception as e:
+                _logger.error(f"Some error occurs when running task system, retrying")
+                _logger.exception(e)
+                raise
+            finally:
+                self._tg = None
 
-        except get_cancelled_exc_class():
-            raise
-        except Exception as e:
-            _logger.exception(e)
-            raise
-        finally:
-            self._tg = None
+        await _start()
 
     def stop(self):
         if self._tg is not None and not self._tg.cancel_scope.cancel_called:

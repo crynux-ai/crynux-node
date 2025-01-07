@@ -1,18 +1,19 @@
-import os
 import json
 import logging
+import os
 import subprocess
-from contextlib import contextmanager
+from contextlib import asynccontextmanager, contextmanager
 from typing import AsyncGenerator, Dict, Optional, Union
 
 import psutil
-from anyio import sleep
+from anyio import Condition, sleep
 
 from crynux_server.config import Config, get_config
+from crynux_server.models import TaskInput
 
-from .error import PrefetchError, TaskError
+from .error import TaskDownloadError, TaskError
 from .exchange import TaskExchange
-from .task import TaskInput, TaskResult, TaskStreamResult
+from .task import TaskFuture
 from .utils import get_exe_head
 
 _logger = logging.getLogger(__name__)
@@ -27,20 +28,18 @@ class WorkerManager(object):
         self._exchange = TaskExchange()
 
         self._next_worker_id = 1
-        # store worker current TaskResult, when it is None means worker is idle
-        # when current worker id equals 0, means the worker has disconnected
-        self._current_task: Union[TaskResult, TaskStreamResult, None] = None
+        self._task_futures: Dict[str, TaskFuture] = {}
         self._current_worker_id = 0
-
-        self._prefetch_task_result = TaskStreamResult()
-        self._init_inference_task_result = TaskResult()
-
-        self._prefetch_worker_id: Optional[int] = None
-        self._init_inference_worker_id: Optional[int] = None
 
         self._worker_process: Optional[subprocess.Popen] = None
 
         self._version: Optional[str] = None
+
+        self._connect_condition = Condition()
+
+    @property
+    def version(self):
+        return self._version
 
     @contextmanager
     def start(self):
@@ -59,12 +58,14 @@ class WorkerManager(object):
 
         args = get_exe_head(script_dir)
         envs = os.environ.copy()
-        envs.update({
-            "CRYNUX_WORKER_PATCH_URL": patch_url,
-            "cw_data_dir__models__huggingface": hf_cache_dir,
-            "cw_data_dir__models__external": external_cache_dir,
-            "cw_output_dir": output_dir,
-        })
+        envs.update(
+            {
+                "CRYNUX_WORKER_PATCH_URL": patch_url,
+                "cw_data_dir__models__huggingface": hf_cache_dir,
+                "cw_data_dir__models__external": external_cache_dir,
+                "cw_output_dir": output_dir,
+            }
+        )
         if (
             self.config.task_config is not None
             and self.config.task_config.preloaded_models is not None
@@ -93,23 +94,45 @@ class WorkerManager(object):
                 proc.kill()
             process.kill()
 
-    def connect(self, version: str) -> int:
+    async def connect(self, version: str) -> int:
         worker_id = self._next_worker_id
         self._next_worker_id += 1
-        self._current_worker_id = worker_id
-        self._version = version
+        async with self._connect_condition:
+            self._current_worker_id = worker_id
+            self._version = version
+            self._connect_condition.notify_all()
         return worker_id
 
-    def disconnect(self, worker_id: int):
+    async def disconnect(self, worker_id: int):
         assert (
             worker_id == self._current_worker_id
         ), f"Worker {worker_id} is disconnected"
         # cancel the worker's running task
-        if self._current_task is not None and not self._current_task.done():
-            self._current_task.cancel()
-            self._current_task = None
+        for task_result in self._task_futures.values():
+            if not task_result.done():
+                task_result.cancel()
+        self._task_futures.clear()
 
-        self._current_worker_id = 0
+        async with self._connect_condition:
+            self._current_worker_id = 0
+            self._version = None
+            self._connect_condition.notify_all()
+
+    async def is_connected(self) -> bool:
+        return self._current_worker_id > 0
+
+    @asynccontextmanager
+    async def wait_connected(self):
+        async with self._connect_condition:
+            while self._current_worker_id == 0:
+                await self._connect_condition.wait()
+            yield
+
+    @asynccontextmanager
+    async def wait_connection_changed(self):
+        async with self._connect_condition:
+            await self._connect_condition.wait()
+            yield
 
     async def send_task(self, input: TaskInput):
         return await self._exchange.send_task(input)
@@ -119,122 +142,23 @@ class WorkerManager(object):
         assert (
             worker_id == self._current_worker_id
         ), f"Worker {worker_id} is disconnected"
-        assert self._current_task is None, f"Worker {worker_id} is busy now"
-        task_input, task_result = await self._exchange.get_task()
+        task_input, task_future = await self._exchange.get_task()
+        task_id_commitment = task_input.task.task_id
+        self._task_futures[task_id_commitment] = task_future
 
         def done_callback(_):
-            # mark worker status idle when worker is connected
             if worker_id == self._current_worker_id:
-                self._current_task = None
+                del self._task_futures[task_id_commitment]
 
-        task_result.add_done_callback(done_callback)
+        task_future.add_done_callback(done_callback)
 
-        self._current_task = task_result
-        return task_input, task_result
+        return task_input, task_future
 
-    async def start_prefetch_task(self, worker_id: int):
-        await sleep(0)
+    def get_task_future(self, worker_id: int, task_id_commitment: str) -> TaskFuture:
         assert (
             worker_id == self._current_worker_id
         ), f"Worker {worker_id} is disconnected"
-        assert self._current_task is None, f"Worker {worker_id} is busy now"
-
-        if self._prefetch_worker_id is None and not self._prefetch_task_result.done():
-            self._current_task = self._prefetch_task_result
-            self._prefetch_worker_id = worker_id
-
-            def done_callback(_):
-                # mark worker status idle when worker is connected
-                if worker_id == self._current_worker_id:
-                    self._current_task = None
-                self._prefetch_worker_id = None
-                _logger.info("finish prefetch task")
-
-            self._prefetch_task_result.add_done_callback(done_callback)
-
-    async def push_prefetch_task_progress(self, worker_id: int, progress: str):
-        if (
-            self._prefetch_worker_id == worker_id
-            and not self._prefetch_task_result.done()
-        ):
-            await self._prefetch_task_result.push_result(progress)
-
-    def prefetch_task_error(self, worker_id: int, err_msg: str):
-        if (
-            self._prefetch_worker_id == worker_id
-            and not self._prefetch_task_result.done()
-        ):
-            self._prefetch_task_result.set_error(PrefetchError(err_msg))
-
-    def finish_prefetch_task(self, worker_id: int):
-        if (
-            self._prefetch_worker_id == worker_id
-            and not self._prefetch_task_result.done()
-        ):
-            self._prefetch_task_result.close()
-
-    def cancel_prefetch_task(self, worker_id: int):
-        if (
-            self._prefetch_worker_id == worker_id
-            and not self._prefetch_task_result.done()
-        ):
-            self._prefetch_task_result.cancel()
-
-    def reset_prefetch_task(self):
-        self._prefetch_task_result = TaskStreamResult()
-
-    async def get_prefetch_task_progress(self) -> AsyncGenerator[str, None]:
-        if not self._prefetch_task_result.done():
-            async for progress in self._prefetch_task_result.get():
-                yield progress
-
-    async def start_init_inference_task(self, worker_id: int):
-        await sleep(0)
-        assert (
-            worker_id == self._current_worker_id
-        ), f"Worker {worker_id} is disconnected"
-        assert self._current_task is None, f"Worker {worker_id} is busy now"
-
-        if not self._init_inference_task_result.done():
-            self._current_task = self._init_inference_task_result
-            self._init_inference_worker_id = worker_id
-
-            def done_callback(_):
-                # mark worker status idle when worker is connected
-                if worker_id == self._current_worker_id:
-                    self._current_task = None
-                self._init_inference_worker_id = None
-                _logger.info("finish init inference task")
-
-            self._init_inference_task_result.add_done_callback(done_callback)
-
-    def init_inference_task_success(self, worker_id: int):
-        if (
-            self._init_inference_worker_id == worker_id
-            and not self._init_inference_task_result.done()
-        ):
-            self._init_inference_task_result.set_result(None)
-
-    def init_inference_task_error(self, worker_id: int, err_msg: str):
-        if (
-            self._init_inference_worker_id == worker_id
-            and not self._init_inference_task_result.done()
-        ):
-            self._init_inference_task_result.set_error(TaskError(err_msg))
-
-    async def get_init_inference_task_result(self):
-        if not self._init_inference_task_result.done():
-            await self._init_inference_task_result.get()
-
-    def cancel_init_inference_task(self, worker_id: int):
-        if (
-            self._init_inference_worker_id == worker_id
-            and not self._init_inference_task_result.done()
-        ):
-            self._init_inference_task_result.cancel()
-
-    def reset_init_inference_task(self):
-        self._init_inference_task_result = TaskResult()
+        return self._task_futures[task_id_commitment]
 
 
 _default_worker_manager: Optional[WorkerManager] = None

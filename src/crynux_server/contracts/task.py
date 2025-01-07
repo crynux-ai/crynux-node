@@ -1,10 +1,16 @@
-from typing import TYPE_CHECKING, Optional, Union
+from typing import TYPE_CHECKING, Optional, List
 
 from eth_typing import ChecksumAddress
 from web3 import AsyncWeb3
 from web3.contract.async_contract import AsyncContractEvent
 
-from crynux_server.models import ChainTask, TaskType
+from crynux_server.models import (
+    ChainTask,
+    TaskType,
+    TaskError,
+    TaskAbortReason,
+    InferenceTaskStatus,
+)
 
 from .utils import ContractWrapper, TxWaiter
 from .w3_pool import W3Pool
@@ -20,123 +26,18 @@ class TaskContract(ContractWrapper):
     def __init__(
         self, w3_pool: W3Pool, contract_address: Optional[ChecksumAddress] = None
     ):
-        super().__init__(w3_pool, "Task", contract_address)
+        super().__init__(w3_pool, "VSSTask", contract_address)
 
-    async def create_task(
+    # interfaces for owner
+    async def set_relay_address(
         self,
-        task_type: TaskType,
-        task_hash: Union[str, bytes],
-        data_hash: Union[str, bytes],
-        vram_limit: int,
-        task_fee: int,
-        cap: int,
-        gpu_name: str,
-        gpu_vram: int,
-        *,
-        option: "Optional[TxOption]" = None,
-        w3: Optional[AsyncWeb3] = None
-    ) -> TxWaiter:
-        return await self._transaction_call(
-            "createTask",
-            option=option,
-            taskType=task_type,
-            taskHash=task_hash,
-            dataHash=data_hash,
-            vramLimit=vram_limit,
-            cap=cap,
-            gpuName=gpu_name,
-            gpuVram=gpu_vram,
-            value=task_fee,
-            w3=w3,
-        )
-
-    async def get_selected_node(
-        self,
-        task_hash: Union[str, bytes],
-        data_hash: Union[str, bytes],
-        round: int,
-        *,
-        w3: Optional[AsyncWeb3] = None,
-    ) -> str:
-        return await self._function_call(
-            "getSelectedNode",
-            taskHash=task_hash,
-            dataHash=data_hash,
-            round=round,
-            w3=w3,
-        )
-
-    async def submit_task_result_commitment(
-        self,
-        task_id: int,
-        round: int,
-        commitment: bytes,
-        nonce: bytes,
+        address: str,
         *,
         option: "Optional[TxOption]" = None,
         w3: Optional[AsyncWeb3] = None,
-    ) -> TxWaiter:
+    ):
         return await self._transaction_call(
-            "submitTaskResultCommitment",
-            option=option,
-            taskId=task_id,
-            round=round,
-            commitment=commitment,
-            nonce=nonce,
-            w3=w3,
-        )
-
-    async def disclose_task_result(
-        self,
-        task_id: int,
-        round: int,
-        result: Union[str, bytes],
-        *,
-        option: "Optional[TxOption]" = None,
-        w3: Optional[AsyncWeb3] = None,
-    ) -> TxWaiter:
-        return await self._transaction_call(
-            "discloseTaskResult",
-            option=option,
-            taskId=task_id,
-            round=round,
-            result=result,
-            w3=w3,
-        )
-
-    async def report_results_uploaded(
-        self,
-        task_id: int,
-        round: int,
-        *,
-        option: "Optional[TxOption]" = None,
-        w3: Optional[AsyncWeb3] = None,
-    ) -> TxWaiter:
-        return await self._transaction_call(
-            "reportResultsUploaded", option=option, taskId=task_id, round=round, w3=w3
-        )
-
-    async def report_task_error(
-        self,
-        task_id: int,
-        round: int,
-        *,
-        option: "Optional[TxOption]" = None,
-        w3: Optional[AsyncWeb3] = None,
-    ) -> TxWaiter:
-        return await self._transaction_call(
-            "reportTaskError", option=option, taskId=task_id, round=round, w3=w3
-        )
-
-    async def cancel_task(
-        self,
-        task_id: int,
-        *,
-        option: "Optional[TxOption]" = None,
-        w3: Optional[AsyncWeb3] = None,
-    ) -> TxWaiter:
-        return await self._transaction_call(
-            "cancelTask", option=option, taskId=task_id, w3=w3
+            "setRelayAddress", addr=address, option=option, w3=w3
         )
 
     async def update_distance_threshold(
@@ -145,9 +46,9 @@ class TaskContract(ContractWrapper):
         *,
         option: "Optional[TxOption]" = None,
         w3: Optional[AsyncWeb3] = None,
-    ) -> TxWaiter:
+    ):
         return await self._transaction_call(
-            "updateDistanceThreshold", option=option, threshold=threshold, w3=w3
+            "updateDistanceThreshold", threshold=threshold, option=option, w3=w3
         )
 
     async def update_timeout(
@@ -156,35 +57,203 @@ class TaskContract(ContractWrapper):
         *,
         option: "Optional[TxOption]" = None,
         w3: Optional[AsyncWeb3] = None,
-    ) -> TxWaiter:
+    ):
         return await self._transaction_call(
-            "updateTimeout", option=option, t=timeout, w3=w3
+            "updateTimeout", t=timeout, option=option, w3=w3
+        )
+
+    # Interfaces for applications
+    async def create_task(
+        self,
+        task_fee: int,
+        task_type: TaskType,
+        task_id_commitment: bytes,
+        nonce: bytes,
+        model_ids: List[str],
+        min_vram: int,
+        required_gpu: str,
+        required_gpu_vram: int,
+        task_version: List[int],
+        task_size: int,
+        *,
+        option: "Optional[TxOption]" = None,
+        w3: Optional[AsyncWeb3] = None,
+    ):
+        return await self._transaction_call(
+            "createTask",
+            taskType=task_type,
+            taskIDCommitment=task_id_commitment,
+            nonce=nonce,
+            modelIDs=model_ids,
+            minimumVRAM=min_vram,
+            requiredGPU=required_gpu,
+            requiredGPUVRAM=required_gpu_vram,
+            taskVersion=task_version,
+            taskSize=task_size,
+            value=task_fee,
+            option=option,
+            w3=w3,
+        )
+
+    async def validate_single_task(
+        self,
+        task_id_commitment: bytes,
+        vrf_proof: bytes,
+        public_key: bytes,
+        *,
+        option: "Optional[TxOption]" = None,
+        w3: Optional[AsyncWeb3] = None,
+    ):
+        return await self._transaction_call(
+            "validateSingleTask",
+            taskIDCommitment=task_id_commitment,
+            vrfProof=vrf_proof,
+            publicKey=public_key,
+            option=option,
+            w3=w3,
+        )
+
+    async def validate_task_group(
+        self,
+        task_id_commitment1: bytes,
+        task_id_commitment2: bytes,
+        task_id_commitment3: bytes,
+        task_id: bytes,
+        vrf_proof: bytes,
+        public_key: bytes,
+        *,
+        option: "Optional[TxOption]" = None,
+        w3: Optional[AsyncWeb3] = None,
+    ):
+        return await self._transaction_call(
+            "validateTaskGroup",
+            taskIDCommitment1=task_id_commitment1,
+            taskIDCommitment2=task_id_commitment2,
+            taskIDCommitment3=task_id_commitment3,
+            taskGUID=task_id,
+            vrfProof=vrf_proof,
+            publicKey=public_key,
+            option=option,
+            w3=w3,
+        )
+
+    # Interfaces for nodes
+    async def report_task_error(
+        self,
+        task_id_commitment: bytes,
+        error: TaskError,
+        *,
+        option: "Optional[TxOption]" = None,
+        w3: Optional[AsyncWeb3] = None,
+    ):
+        return await self._transaction_call(
+            "reportTaskError",
+            taskIDCommitment=task_id_commitment,
+            error=error,
+            option=option,
+            w3=w3,
+        )
+
+    async def submit_task_score(
+        self,
+        task_id_commitment: bytes,
+        score: bytes,
+        *,
+        option: "Optional[TxOption]" = None,
+        w3: Optional[AsyncWeb3] = None,
+    ):
+        return await self._transaction_call(
+            "submitTaskScore",
+            taskIDCommitment=task_id_commitment,
+            taskScore=score,
+            option=option,
+            w3=w3,
+        )
+
+    # Interfaces for both applications and nodes
+    async def abort_task(
+        self,
+        task_id_commitment: bytes,
+        abort_reason: TaskAbortReason,
+        *,
+        option: "Optional[TxOption]" = None,
+        w3: Optional[AsyncWeb3] = None,
+    ):
+        return await self._transaction_call(
+            "abortTask",
+            taskIDCommitment=task_id_commitment,
+            abortReason=abort_reason,
+            option=option,
+            w3=w3,
         )
 
     async def get_task(
-        self, task_id: int, *, w3: Optional[AsyncWeb3] = None
-    ) -> ChainTask:
-        res = await self._function_call("getTask", taskId=task_id, w3=w3)
-        return ChainTask(
-            id=res[0],
-            task_type=res[1],
-            creator=res[2],
-            task_hash=res[3],
-            data_hash=res[4],
-            vram_limit=res[5],
-            is_success=res[6],
-            selected_nodes=res[7],
-            commitments=res[8],
-            nonces=res[9],
-            commitment_submit_rounds=res[10],
-            results=res[11],
-            result_disclosed_rounds=res[12],
-            result_node=res[13],
-            aborted=res[14],
-            timeout=res[15],
+        self, task_id_commitment: bytes, *, w3: Optional[AsyncWeb3] = None
+    ):
+        res = await self._function_call(
+            "getTask",
+            taskIDCommitment=task_id_commitment,
+            w3=w3,
         )
+        task = ChainTask(
+            task_type=TaskType(res[0]),
+            creator=res[1],
+            task_id_commitment=res[2],
+            sampling_seed=res[3],
+            nonce=res[4],
+            sequence=res[5],
+            status=InferenceTaskStatus(res[6]),
+            selected_node=res[7],
+            timeout=res[8],
+            score=res[9],
+            task_fee=res[10],
+            task_size=res[11],
+            task_model_ids=res[12],
+            min_vram=res[13],
+            required_gpu=res[14],
+            required_gpu_vram=res[15],
+            task_version=res[16],
+            abort_reason=TaskAbortReason(res[17]),
+            error=TaskError(res[18]),
+            payment_addresses=res[19],
+            payments=res[20],
+            create_timestamp=res[21],
+            start_timestamp=res[22],
+            score_ready_timestamp=res[23],
+        )
+        return task
 
     async def get_node_task(
         self, address: str, *, w3: Optional[AsyncWeb3] = None
-    ) -> int:
-        return await self._function_call("getNodeTask", nodeAddress=address, w3=w3)
+    ) -> bytes:
+        res = await self._function_call("getNodeTask", nodeAddress=address, w3=w3)
+        return res
+
+    # Interfaces for Relay
+    async def report_task_parameters_uploaded(
+        self,
+        task_id_commitment: bytes,
+        *,
+        option: "Optional[TxOption]" = None,
+        w3: Optional[AsyncWeb3] = None,
+    ):
+        return await self._transaction_call(
+            "reportTaskParametersUploaded",
+            taskIDCommitment=task_id_commitment,
+            option=option,
+            w3=w3,
+        )
+
+    async def report_task_result_uploaded(
+        self,
+        task_id_commitment: bytes,
+        *,
+        option: "Optional[TxOption]" = None,
+        w3: Optional[AsyncWeb3] = None,
+    ):
+        return await self._transaction_call(
+            "reportTaskResultUploaded",
+            taskIDCommitment=task_id_commitment,
+            option=option,
+            w3=w3,
+        )
