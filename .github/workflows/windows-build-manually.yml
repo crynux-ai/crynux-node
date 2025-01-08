@@ -1,0 +1,68 @@
+# Build the binary release version for Mac
+
+name: Release Crynux Node manually
+
+# Controls when the action will run. Workflow runs when manually triggered using the UI
+# or API.
+on:
+  workflow_dispatch:
+    inputs:
+      name:
+        description: 'build manually trigger'
+        required: true
+        default: 'triggered by developer'
+      home:
+        description: 'location'
+        required: false
+        default: 'The developer team'
+
+env:
+  RELEASE_VERSION: 2.5.0
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+# A workflow run is made up of one or more jobs that can run sequentially or in parallel
+jobs:
+  build-the-windows-binary:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      
+      - name:
+        id: vars
+        shell: bash
+        run: |
+          echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Setup Go 1.21.x
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21.x'
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18.x'
+
+      - name: Run the build script
+        run: ./build/windows/build.ps1
+
+      - id: gdrive
+        name: Upload to gdrive
+        uses: hoatruongdev09/google-drive-file-upload-github-action@v1.1
+        with:
+          service-account-json: ${{ secrets.GOOGLE_DRIVE_GSA_CREDENTIALS_BASE64 }}
+          file-path: "build/crynux_node/dist/crynux-node-helium-v${{ env.RELEASE_VERSION }}-windows-x64.zip"
+          upload-name: "crynux-node-helium-${{ steps.vars.outputs.sha_short }}-windows-x64.zip"
+          upload-to-folder-id: ${{ secrets.GOOGLE_DRIVE_FOLDER_ID }}
+    outputs:
+      google-drive-link-content: ${{ steps.gdrive.outputs.web-content-link }}
+      google-drive-link-view: ${{ steps.gdrive.outputs.web-view-link }}
