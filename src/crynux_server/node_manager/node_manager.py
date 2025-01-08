@@ -302,7 +302,7 @@ class NodeManager(object):
             "under his legs, masterpiece, high resolution"
         )
         task_args = {
-            "version": "3.0.0",
+            "version": "2.5.0",
             "base_model": {
                 "name": "crynux-ai/stable-diffusion-v1-5",
                 "variant": "fp16",
