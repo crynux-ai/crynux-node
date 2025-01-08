@@ -1,6 +1,6 @@
 # Build the binary release version for Mac
 
-name: Release Crynux Node manually
+name: Build Crynux Node windows app manually
 
 # Controls when the action will run. Workflow runs when manually triggered using the UI
 # or API.
