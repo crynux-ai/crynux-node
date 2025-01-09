@@ -114,6 +114,17 @@ class TaskSystem(object):
             self._inference_runners[state.task_id_commitment] = runner
             tg.start_soon(self._run_inference_task, state.task_id_commitment)
             _logger.debug(f"Rerun inference task {state.task_id_commitment.hex()}")
+        
+        task_id_commitment = await self._get_node_task()
+        if task_id_commitment not in self._inference_runners:
+            runner = InferenceTaskRunner(
+                task_id_commitment=task_id_commitment,
+                state_cache=self._inference_state_cache,
+                contracts=self._contracts
+            )
+            self._inference_runners[task_id_commitment] = runner
+            tg.start_soon(self._run_inference_task, task_id_commitment)
+            _logger.debug(f"Rerun inference task {task_id_commitment.hex()}")
 
     async def _recover_download_task(self, tg: TaskGroup):
         running_status = [

@@ -75,7 +75,7 @@ class InferenceTaskRunnerBase(ABC):
             with fail_after(10, shield=True):
                 await self.cache.dump(task_state=self.state)
 
-    async def sync_status(self):
+    async def sync_state(self):
         need_dump = False
         try:
             if self._state is None:
@@ -93,8 +93,12 @@ class InferenceTaskRunnerBase(ABC):
                     need_dump = True
 
             task = await self.get_task()
-            if self.state.timeout != task.timeout:
-                self.state.timeout = task.timeout
+            start_timestamp = task.start_timestamp
+            if start_timestamp == 0:
+                start_timestamp = int(time.time())
+            timeout = start_timestamp + task.timeout
+            if self.state.timeout != timeout:
+                self.state.timeout = timeout
                 need_dump = True
             if self.state.status != task.status:
                 self.state.status = task.status
@@ -133,9 +137,6 @@ class InferenceTaskRunnerBase(ABC):
 
     async def change_task_status(self, status: models.InferenceTaskStatus):
         _logger.info(f"task {self.task_id_commitment.hex()} status: {status.name}")
-        async with self.state_context():
-            self.state.status = status
-
         if status == models.InferenceTaskStatus.ParametersUploaded:
             await self.execute_task()
         elif (
@@ -146,7 +147,7 @@ class InferenceTaskRunnerBase(ABC):
 
     async def run(self, interval: float = 1):
         try:
-            await self.sync_status()
+            await self.sync_state()
             if self.should_stop():
                 return
             delay = self.state.timeout - time.time()
@@ -156,9 +157,10 @@ class InferenceTaskRunnerBase(ABC):
             with fail_after(delay, shield=False):
                 await self.change_task_status(self.state.status)
                 while not self.should_stop():
-                    task = await self.get_task()
-                    if task.status != self.state.status:
-                        await self.change_task_status(task.status)
+                    last_status = self.state.status
+                    await self.sync_state()
+                    if last_status != self.state.status:
+                        await self.change_task_status(self.state.status)
                     else:
                         await sleep(interval)
         except TimeoutError:
