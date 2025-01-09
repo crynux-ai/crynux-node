@@ -24,7 +24,7 @@ class Server(object):
             base_model_dir=base_model_dir,
             lora_model_dir=lora_model_dir,
             log_dir=log_dir,
-            system_info_update_interval=10,
+            system_info_update_interval=60,
         )
         self._app = FastAPI(lifespan=lifespan.run)
         self._app.include_router(v1_router, prefix="/manager")
