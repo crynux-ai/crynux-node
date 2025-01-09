@@ -116,7 +116,7 @@ class TaskSystem(object):
             _logger.debug(f"Rerun inference task {state.task_id_commitment.hex()}")
         
         task_id_commitment = await self._get_node_task()
-        if task_id_commitment not in self._inference_runners:
+        if any(v > 0 for v in task_id_commitment) and task_id_commitment not in self._inference_runners:
             runner = InferenceTaskRunner(
                 task_id_commitment=task_id_commitment,
                 state_cache=self._inference_state_cache,
