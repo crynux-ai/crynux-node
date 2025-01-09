@@ -36,5 +36,5 @@ class TaskQueueContract(ContractWrapper):
     async def get_size_limit(self, *, w3: Optional[AsyncWeb3] = None) -> int:
         return await self._function_call("getSizeLimit", w3=w3)
 
-    async def include(self, task_id: int, *, w3: Optional[AsyncWeb3] = None) -> bool:
-        return await self._function_call("include", taskId=task_id, w3=w3)
+    async def include(self, task_id_commitment: bytes, *, w3: Optional[AsyncWeb3] = None) -> bool:
+        return await self._function_call("include", taskIDCommitment=task_id_commitment, w3=w3)
