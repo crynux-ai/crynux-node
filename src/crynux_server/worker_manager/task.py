@@ -28,3 +28,6 @@ class TaskFuture(object):
 
     def done(self):
         return self._future.done()
+    
+    def cancelled(self):
+        return self._future.cancelled()

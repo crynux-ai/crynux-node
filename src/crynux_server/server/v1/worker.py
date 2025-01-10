@@ -37,20 +37,25 @@ async def result_consumer(
     while True:
         raw_result = await websocket.receive_json()
         result = TaskResult.model_validate(raw_result)
-        fut = worker_manager.get_task_future(worker_id, result.task_id_commitment)
-        if result.result.status == "success":
-            fut.set_result(None)
-        elif result.result.status == "error":
-            err_msg = result.result.traceback
-            if result.task_name == "inference":
-                if is_task_invalid(err_msg):
-                    exc = TaskInvalid(err_msg)
-                else:
-                    exc = TaskExecutionError(err_msg)
-                fut.set_error(exc)
-            elif result.task_name == "download":
-                exc = TaskDownloadError(err_msg)
-                fut.set_error(exc)
+        with worker_manager.task_future(worker_id, result.task_id_commitment) as fut:
+            if fut.cancelled():
+                _logger.info(f"Task {result.task_id_commitment} has been cancelled before")
+            elif fut.done():
+                _logger.info(f"Task {result.task_id_commitment} has been done before")
+            else:
+                if result.result.status == "success":
+                    fut.set_result(None)
+                elif result.result.status == "error":
+                    err_msg = result.result.traceback
+                    if result.task_name == "inference":
+                        if is_task_invalid(err_msg):
+                            exc = TaskInvalid(err_msg)
+                        else:
+                            exc = TaskExecutionError(err_msg)
+                        fut.set_error(exc)
+                    elif result.task_name == "download":
+                        exc = TaskDownloadError(err_msg)
+                        fut.set_error(exc)
 
 
 @router.websocket("/")
