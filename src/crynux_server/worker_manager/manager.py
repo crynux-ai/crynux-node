@@ -3,7 +3,7 @@ import logging
 import os
 import subprocess
 from contextlib import asynccontextmanager, contextmanager
-from typing import AsyncGenerator, Dict, Optional, Union
+from typing import Dict, Optional
 
 import psutil
 from anyio import Condition, sleep
@@ -146,20 +146,21 @@ class WorkerManager(object):
         task_id_commitment = task_input.task.task_id
         self._task_futures[task_id_commitment] = task_future
 
-        def done_callback(_):
-            if worker_id == self._current_worker_id:
-                del self._task_futures[task_id_commitment]
-
-        task_future.add_done_callback(done_callback)
-
         return task_input, task_future
 
-    def get_task_future(self, worker_id: int, task_id_commitment: str) -> TaskFuture:
+    @contextmanager
+    def task_future(self, worker_id: int, task_id_commitment: str):
         assert (
             worker_id == self._current_worker_id
         ), f"Worker {worker_id} is disconnected"
-        return self._task_futures[task_id_commitment]
+        assert task_id_commitment in self._task_futures, f"No such task future {task_id_commitment}"
 
+        fut = self._task_futures[task_id_commitment]
+        try:
+            yield fut
+        finally:
+            if fut.done():
+                del self._task_futures[task_id_commitment]
 
 _default_worker_manager: Optional[WorkerManager] = None
 
