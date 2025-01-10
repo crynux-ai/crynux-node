@@ -48,7 +48,7 @@ task_config:
   preloaded_models:
     sd_base:
       - id: "crynux-ai/stable-diffusion-v1-5"
-      - id: "crynux-ai/stable-diffusion-xl-base-1.0"
+      - id: "crynux-ai/sdxl-turbo"
     gpt_base:
       - id: "gpt2"
     controlnet: []
