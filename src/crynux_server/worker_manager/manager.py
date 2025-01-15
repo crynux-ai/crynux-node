@@ -11,7 +11,6 @@ from anyio import Condition, sleep
 from crynux_server.config import Config, get_config
 from crynux_server.models import TaskInput
 
-from .error import TaskDownloadError, TaskError
 from .exchange import TaskExchange
 from .task import TaskFuture
 from .utils import get_exe_head
@@ -49,12 +48,14 @@ class WorkerManager(object):
             hf_cache_dir = self.config.task_config.hf_cache_dir
             external_cache_dir = self.config.task_config.external_cache_dir
             output_dir = self.config.task_config.output_dir
+            worker_pid_file = self.config.task_config.worker_pid_file
         else:
             script_dir = ""
             patch_url = ""
             hf_cache_dir = ""
             external_cache_dir = ""
             output_dir = ""
+            worker_pid_file = "crynux_worker.pid"
 
         args = get_exe_head(script_dir)
         envs = os.environ.copy()
@@ -64,6 +65,7 @@ class WorkerManager(object):
                 "cw_data_dir__models__huggingface": hf_cache_dir,
                 "cw_data_dir__models__external": external_cache_dir,
                 "cw_output_dir": output_dir,
+                "cw_pid_file": worker_pid_file
             }
         )
         if (
@@ -84,6 +86,16 @@ class WorkerManager(object):
 
         log_config = {"dir": self.config.log.dir, "level": self.config.log.level}
         envs["cw_log"] = json.dumps(log_config)
+
+        # kill the old worker process if it is still alive
+        if os.path.exists(worker_pid_file):
+            with open(worker_pid_file, mode="r", encoding="utf-8") as f:
+                pid = int(f.read().strip())
+            if psutil.pid_exists(pid):
+                process = psutil.Process(pid)
+                for proc in process.children(recursive=True):
+                    proc.kill()
+                process.kill()
 
         p = subprocess.Popen(args=args, env=envs)
         try:
