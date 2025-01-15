@@ -172,6 +172,7 @@ class TaskConfig(BaseModel):
     _external_cache_dir: str = "tmp/external"
     _script_dir: str = "worker"
     _output_dir: str = "tmp/results"
+    _worker_pid_file: str = "tmp/crynux_worker.pid"
 
     worker_patch_url: str
 
@@ -198,6 +199,11 @@ class TaskConfig(BaseModel):
     @property
     def output_dir(self) -> str:
         return os.path.abspath(os.path.join(_data_dir, self._output_dir))
+
+    @computed_field
+    @property
+    def worker_pid_file(self) -> str:
+        return os.path.abspath(os.path.join(_data_dir, self._worker_pid_file))
 
 
 class ModelConfig(BaseModel):
