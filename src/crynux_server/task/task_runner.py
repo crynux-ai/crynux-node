@@ -137,7 +137,7 @@ class InferenceTaskRunnerBase(ABC):
 
     async def change_task_status(self, status: models.InferenceTaskStatus):
         _logger.info(f"task {self.task_id_commitment.hex()} status: {status.name}")
-        if status == models.InferenceTaskStatus.ParametersUploaded:
+        if status == models.InferenceTaskStatus.Started or status == models.InferenceTaskStatus.ParametersUploaded:
             await self.execute_task()
         elif (
             status == models.InferenceTaskStatus.Validated
