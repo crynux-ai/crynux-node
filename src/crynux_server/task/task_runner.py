@@ -11,7 +11,7 @@ from typing import Awaitable, Callable, List, Optional
 from anyio import (fail_after, get_cancelled_exc_class, move_on_after, sleep,
                    to_thread)
 from hexbytes import HexBytes
-from tenacity import retry, stop_after_attempt, wait_chain, wait_fixed
+from tenacity import retry, stop_after_delay, wait_chain, wait_fixed
 
 from crynux_server import models
 from crynux_server.config import Config, get_config
@@ -284,7 +284,7 @@ class InferenceTaskRunner(InferenceTaskRunnerBase):
 
     async def execute_task(self):
         @retry(
-            stop=stop_after_attempt(10),
+            stop=stop_after_delay(180),
             wait=wait_chain(*[wait_fixed(1) for _ in range(5)] + [wait_fixed(5)]),
             reraise=True,
         )
@@ -294,7 +294,7 @@ class InferenceTaskRunner(InferenceTaskRunnerBase):
             return task
 
         @retry(
-            stop=stop_after_attempt(10),
+            stop=stop_after_delay(180),
             wait=wait_chain(*[wait_fixed(1) for _ in range(5)] + [wait_fixed(5)]),
             reraise=True,
         )
@@ -360,11 +360,12 @@ class InferenceTaskRunner(InferenceTaskRunnerBase):
         ):
             await execute_task_in_worker()
 
-        await self._call_task_contract_method(
-            "submitTaskScore",
-            task_id_commitment=self.task_id_commitment,
-            score=self.state.score,
-        )
+        if self.state.status == models.InferenceTaskStatus.ParametersUploaded:
+            await self._call_task_contract_method(
+                "submitTaskScore",
+                task_id_commitment=self.task_id_commitment,
+                score=self.state.score,
+            )
         _logger.info("Submiting task score success")
 
     async def upload_result(self):
