@@ -1,47 +1,25 @@
 import logging
 from typing import Dict, Literal
 
-from anyio import create_task_group, get_cancelled_exc_class, to_thread
+from anyio import get_cancelled_exc_class, to_thread
 from eth_account import Account
 from fastapi import APIRouter, Body, HTTPException
 from pydantic import BaseModel, Field, Json, SecretStr
 from typing_extensions import Annotated
 
-from crynux_server.config import get_privkey, set_privkey
-from crynux_server.contracts import wait_contracts
+from crynux_server.config import set_privkey
 
 from .utils import CommonResponse
+from ..depends import AccountInfoDep
+from ..account import AccountInfo
 
-_logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/account")
 
 
-class AccountInfo(BaseModel):
-    address: str
-    balance: int
-
-
 @router.get("", response_model=AccountInfo)
-async def get_account_info():
-    privkey = get_privkey()
-    if privkey == "":
-        return AccountInfo(
-            address="",
-            balance=0,
-        )
-    else:
-        contracts = await wait_contracts()
-        res = AccountInfo(address=contracts.account, balance=0)
-
-        try:
-            res.balance = await contracts.get_balance(contracts.account)
-        except Exception as e:
-            _logger.exception(e)
-            _logger.error("get account balance error")
-            raise HTTPException(status_code=500, detail=f"ContractError: {type(e).__name__} {str(e)}")
-
-        return res
+async def get_account_info(*, account_info: AccountInfoDep):
+    return account_info
 
 
 PrivkeyType = Literal["private_key", "keystore"]

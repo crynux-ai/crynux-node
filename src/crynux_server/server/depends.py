@@ -15,6 +15,7 @@ from crynux_server.task import InferenceTaskStateCache, get_inference_task_state
 from crynux_server.worker_manager import WorkerManager, get_worker_manager
 
 from .system import get_system_info, SystemInfo
+from .account import get_account_info, AccountInfo
 
 __all__ = [
     "ConfigDep",
@@ -69,6 +70,10 @@ async def _get_system_info():
     return get_system_info()
 
 
+async def _get_account_info():
+    return get_account_info()
+
+
 ConfigDep = Annotated[Config, Depends(_get_config)]
 ManagerStateCacheDep = Annotated[ManagerStateCache, Depends(_get_manager_state_cache)]
 NodeStateManagerDep = Annotated[
@@ -80,3 +85,4 @@ TaskStateCacheDep = Annotated[
 ContractsDep = Annotated[Optional[Contracts], Depends(_get_contracts)]
 WorkerManagerDep = Annotated[WorkerManager, Depends(_get_worker_manager)]
 SystemInfoDep = Annotated[SystemInfo, Depends(_get_system_info)]
+AccountInfoDep = Annotated[AccountInfo, Depends(_get_account_info)]
