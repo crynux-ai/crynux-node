@@ -2,6 +2,7 @@ import json
 import logging
 import os.path
 import random
+import re
 import shutil
 import time
 from abc import ABC, abstractmethod
@@ -11,7 +12,8 @@ from typing import Awaitable, Callable, List, Optional
 from anyio import (fail_after, get_cancelled_exc_class, move_on_after, sleep,
                    to_thread)
 from hexbytes import HexBytes
-from tenacity import retry, stop_after_delay, wait_chain, wait_fixed
+from tenacity import (retry, retry_if_exception, stop_after_delay, wait_chain,
+                      wait_fixed)
 
 from crynux_server import models
 from crynux_server.config import Config, get_config
@@ -137,7 +139,10 @@ class InferenceTaskRunnerBase(ABC):
 
     async def change_task_status(self, status: models.InferenceTaskStatus):
         _logger.info(f"task {self.task_id_commitment.hex()} status: {status.name}")
-        if status == models.InferenceTaskStatus.Started or status == models.InferenceTaskStatus.ParametersUploaded:
+        if (
+            status == models.InferenceTaskStatus.Started
+            or status == models.InferenceTaskStatus.ParametersUploaded
+        ):
             await self.execute_task()
         elif (
             status == models.InferenceTaskStatus.Validated
@@ -285,7 +290,7 @@ class InferenceTaskRunner(InferenceTaskRunnerBase):
     async def execute_task(self):
         @retry(
             stop=stop_after_delay(180),
-            wait=wait_chain(*[wait_fixed(1) for _ in range(5)] + [wait_fixed(5)]),
+            wait=wait_chain(*[wait_fixed(1) for _ in range(10)] + [wait_fixed(5)]),
             reraise=True,
         )
         async def get_task():
@@ -295,7 +300,7 @@ class InferenceTaskRunner(InferenceTaskRunnerBase):
 
         @retry(
             stop=stop_after_delay(180),
-            wait=wait_chain(*[wait_fixed(1) for _ in range(5)] + [wait_fixed(5)]),
+            wait=wait_chain(*[wait_fixed(1) for _ in range(10)] + [wait_fixed(5)]),
             reraise=True,
         )
         async def get_checkpoint(checkpoint_dir: str):
@@ -351,22 +356,29 @@ class InferenceTaskRunner(InferenceTaskRunnerBase):
                 with fail_after(delay=60, shield=True):
                     await self._report_error()
 
-        _logger.debug(f"task {self.task_id_commitment} state: {self.state}")
+        def _illegal_task_state(exc: BaseException):
+            return re.search(r"Illegal previous task state", str(exc)) is not None
 
-        if (
-            len(self.state.files) == 0
-            or len(self.state.score) == 0
-            or self.state.checkpoint is None
-        ):
-            await execute_task_in_worker()
-
-        if self.state.status == models.InferenceTaskStatus.ParametersUploaded:
+        @retry(
+            stop=stop_after_delay(180),
+            wait=wait_chain(*[wait_fixed(1) for _ in range(10)] + [wait_fixed(5)]),
+            retry=retry_if_exception(_illegal_task_state),
+            reraise=True,
+        )
+        async def submit_task_score():
             await self._call_task_contract_method(
                 "submitTaskScore",
                 task_id_commitment=self.task_id_commitment,
                 score=self.state.score,
             )
-        _logger.info("Submiting task score success")
+            _logger.info("Submiting task score success")
+
+        _logger.debug(f"task {self.task_id_commitment} state: {self.state}")
+
+        if len(self.state.files) == 0:
+            await execute_task_in_worker()
+
+        await submit_task_score()
 
     async def upload_result(self):
         _logger.info(f"Task {self.task_id_commitment.hex()} start uploading results")
@@ -425,7 +437,7 @@ class MockInferenceTaskRunner(InferenceTaskRunnerBase):
             min_vram=0,
             required_gpu="",
             required_gpu_vram=0,
-            task_version=[2,0,0],
+            task_version=[2, 0, 0],
             abort_reason=models.TaskAbortReason.IncorrectResult,
             error=models.TaskError.ParametersValidationFailed,
             payment_addresses=[],
