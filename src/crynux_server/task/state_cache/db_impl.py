@@ -22,7 +22,7 @@ class DbInferenceTaskStateCache(InferenceTaskStateCache):
             if state is not None:
                 files = state.files.split(",")
                 return InferenceTaskState(
-                    task_id_commitment=bytes.fromhex(state.task_id_commitment),
+                    task_id_commitment=task_id_commitment,
                     timeout=state.timeout,
                     status=state.status,
                     task_type=state.task_type,
