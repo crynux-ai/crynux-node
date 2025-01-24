@@ -14,8 +14,7 @@ from anyio import (create_memory_object_stream, create_task_group, fail_after,
 from anyio.streams.memory import (MemoryObjectReceiveStream,
                                   MemoryObjectSendStream)
 from hexbytes import HexBytes
-from tenacity import (retry, retry_if_exception, stop_after_delay, wait_chain,
-                      wait_fixed)
+from tenacity import retry, stop_after_delay, wait_chain, wait_fixed
 
 from crynux_server import models
 from crynux_server.config import Config, get_config
@@ -103,11 +102,12 @@ class InferenceTaskRunnerBase(ABC):
             timeout = start_timestamp + task.timeout
             if self.state.timeout != timeout:
                 self.state.timeout = timeout
-                _logger.info(f"task {self.task_id_commitment} timeout: {self.state.timeout}")
+                _logger.info(
+                    f"task {self.task_id_commitment.hex()} timeout: {self.state.timeout}"
+                )
                 need_dump = True
             if self.state.status != task.status:
                 self.state.status = task.status
-                _logger.info(f"task {self.task_id_commitment} status: {self.state.status}")
                 need_dump = True
             if self.state.task_type != task.task_type:
                 self.state.task_type = task.task_type
@@ -144,6 +144,7 @@ class InferenceTaskRunnerBase(ABC):
     async def task_status_consumer(
         self, status_receiver: MemoryObjectReceiveStream[models.InferenceTaskStatus]
     ):
+        executed = False
         async with status_receiver:
             async for status in status_receiver:
                 _logger.info(
@@ -152,8 +153,9 @@ class InferenceTaskRunnerBase(ABC):
                 if (
                     status == models.InferenceTaskStatus.Started
                     or status == models.InferenceTaskStatus.ParametersUploaded
-                ):
+                ) and not executed:
                     await self.execute_task()
+                    executed = True
                 elif (
                     status == models.InferenceTaskStatus.Validated
                     or status == models.InferenceTaskStatus.GroupValidated
@@ -381,19 +383,27 @@ class InferenceTaskRunner(InferenceTaskRunnerBase):
         def _illegal_task_state(exc: BaseException):
             return re.search(r"Illegal previous task state", str(exc)) is not None
 
-        @retry(
-            stop=stop_after_delay(180),
-            wait=wait_chain(*[wait_fixed(1) for _ in range(10)] + [wait_fixed(5)]),
-            retry=retry_if_exception(_illegal_task_state),
-            reraise=True,
-        )
         async def submit_task_score():
-            await self._call_task_contract_method(
-                "submitTaskScore",
-                task_id_commitment=self.task_id_commitment,
-                score=self.state.score,
-            )
-            _logger.info("Submiting task score success")
+            for _ in range(4):
+                try:
+                    await self._call_task_contract_method(
+                        "submitTaskScore",
+                        task_id_commitment=self.task_id_commitment,
+                        score=self.state.score,
+                    )
+                    _logger.info("Submiting task score success")
+                    return
+                except Exception as e:
+                    if _illegal_task_state(e):
+                        if self.state.status == models.InferenceTaskStatus.Started:
+                            await sleep(2)
+                            continue
+                        elif (
+                            self.state.status
+                            == models.InferenceTaskStatus.ParametersUploaded
+                        ):
+                            continue
+                    raise e
 
         _logger.debug(f"task {self.task_id_commitment} state: {self.state}")
 
@@ -402,7 +412,7 @@ class InferenceTaskRunner(InferenceTaskRunnerBase):
 
         await submit_task_score()
 
-    async def upload_result(self):
+    async def upload_result(self) -> None:
         _logger.info(f"Task {self.task_id_commitment.hex()} start uploading results")
         await self.relay.upload_task_result(
             self.task_id_commitment, self.state.files, self.state.checkpoint
