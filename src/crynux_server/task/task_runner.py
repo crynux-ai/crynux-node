@@ -103,9 +103,11 @@ class InferenceTaskRunnerBase(ABC):
             timeout = start_timestamp + task.timeout
             if self.state.timeout != timeout:
                 self.state.timeout = timeout
+                _logger.info(f"task {self.task_id_commitment} timeout: {self.state.timeout}")
                 need_dump = True
             if self.state.status != task.status:
                 self.state.status = task.status
+                _logger.info(f"task {self.task_id_commitment} status: {self.state.status}")
                 need_dump = True
             if self.state.task_type != task.task_type:
                 self.state.task_type = task.task_type
