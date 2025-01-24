@@ -9,8 +9,10 @@ from abc import ABC, abstractmethod
 from contextlib import asynccontextmanager
 from typing import Awaitable, Callable, List, Optional
 
-from anyio import (fail_after, get_cancelled_exc_class, move_on_after, sleep,
-                   to_thread)
+from anyio import (create_memory_object_stream, create_task_group, fail_after,
+                   get_cancelled_exc_class, move_on_after, sleep, to_thread)
+from anyio.streams.memory import (MemoryObjectReceiveStream,
+                                  MemoryObjectSendStream)
 from hexbytes import HexBytes
 from tenacity import (retry, retry_if_exception, stop_after_delay, wait_chain,
                       wait_fixed)
@@ -101,9 +103,11 @@ class InferenceTaskRunnerBase(ABC):
             timeout = start_timestamp + task.timeout
             if self.state.timeout != timeout:
                 self.state.timeout = timeout
+                _logger.info(f"task {self.task_id_commitment} timeout: {self.state.timeout}")
                 need_dump = True
             if self.state.status != task.status:
                 self.state.status = task.status
+                _logger.info(f"task {self.task_id_commitment} status: {self.state.status}")
                 need_dump = True
             if self.state.task_type != task.task_type:
                 self.state.task_type = task.task_type
@@ -137,18 +141,38 @@ class InferenceTaskRunnerBase(ABC):
             models.InferenceTaskStatus.ErrorReported,
         ]
 
-    async def change_task_status(self, status: models.InferenceTaskStatus):
-        _logger.info(f"task {self.task_id_commitment.hex()} status: {status.name}")
-        if (
-            status == models.InferenceTaskStatus.Started
-            or status == models.InferenceTaskStatus.ParametersUploaded
-        ):
-            await self.execute_task()
-        elif (
-            status == models.InferenceTaskStatus.Validated
-            or status == models.InferenceTaskStatus.GroupValidated
-        ):
-            await self.upload_result()
+    async def task_status_consumer(
+        self, status_receiver: MemoryObjectReceiveStream[models.InferenceTaskStatus]
+    ):
+        async with status_receiver:
+            async for status in status_receiver:
+                _logger.info(
+                    f"task {self.task_id_commitment.hex()} status: {status.name}"
+                )
+                if (
+                    status == models.InferenceTaskStatus.Started
+                    or status == models.InferenceTaskStatus.ParametersUploaded
+                ):
+                    await self.execute_task()
+                elif (
+                    status == models.InferenceTaskStatus.Validated
+                    or status == models.InferenceTaskStatus.GroupValidated
+                ):
+                    await self.upload_result()
+
+    async def task_status_producer(
+        self,
+        status_sender: MemoryObjectSendStream[models.InferenceTaskStatus],
+        interval: float,
+    ):
+        async with status_sender:
+            await status_sender.send(self.state.status)
+            while not self.should_stop():
+                last_status = self.state.status
+                await self.sync_state()
+                if last_status != self.state.status:
+                    await status_sender.send(self.state.status)
+                await sleep(interval)
 
     async def run(self, interval: float = 1):
         try:
@@ -159,15 +183,13 @@ class InferenceTaskRunnerBase(ABC):
             if delay <= 0:
                 raise TimeoutError
 
+            status_sender, status_receiver = create_memory_object_stream(
+                10, item_type=models.InferenceTaskStatus
+            )
             with fail_after(delay, shield=False):
-                await self.change_task_status(self.state.status)
-                while not self.should_stop():
-                    last_status = self.state.status
-                    await self.sync_state()
-                    if last_status != self.state.status:
-                        await self.change_task_status(self.state.status)
-                    else:
-                        await sleep(interval)
+                async with create_task_group() as tg:
+                    tg.start_soon(self.task_status_consumer, status_receiver)
+                    tg.start_soon(self.task_status_producer, status_sender, interval)
         except TimeoutError:
             # cancel task
             if not self.should_stop():
@@ -276,7 +298,7 @@ class InferenceTaskRunner(InferenceTaskRunnerBase):
                 f"Task {self.task_id_commitment.hex()} timeout. Cancel the task."
             )
         except TxRevertedError as e:
-            if "Task not exist" not in e.reason:
+            if "Task not found" not in e.reason and "Illegal node status" in e.reason:
                 _logger.error(
                     f"Cancel task {self.task_id_commitment.hex()} failed due to {e.reason}"
                 )
