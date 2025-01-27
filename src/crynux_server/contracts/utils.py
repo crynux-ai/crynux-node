@@ -80,6 +80,13 @@ class TxWaiter(object):
             if not receipt["status"]:
                 async with catch_tx_revert_error(self.method):
                     tx = await w3.eth.get_transaction(self.tx_hash)
+                    assert "to" in tx
+                    assert "from" in tx
+                    assert "value" in tx
+                    assert "chainId" in tx
+                    assert "gas" in tx
+                    assert "gasPrice" in tx
+                    assert "blockNumber" in tx
                     tx_params: TxParams = {
                         "to": tx["to"],
                         "from": tx["from"],
@@ -140,11 +147,8 @@ class ContractWrapper(object):
                 opt.update(**get_default_tx_option())
 
             _contract_builder = w3.eth.contract(abi=self.abi, bytecode=self.bytecode)
-            async with self.w3_pool.with_nonce_lock():
+            async with self.w3_pool.with_nonce(w3) as nonce:
                 if "nonce" not in opt:
-                    nonce = await w3.eth.get_transaction_count(
-                        account=self.w3_pool.account, block_identifier="pending"
-                    )
                     opt["nonce"] = nonce
                     _logger.debug(f"nonce: {nonce}")
                 if "from" not in opt:
@@ -198,11 +202,8 @@ class ContractWrapper(object):
                 opt["value"] = w3.to_wei(value, "wei")
 
             contract = w3.eth.contract(address=self._address, abi=self.abi)
-            async with self.w3_pool.with_nonce_lock():
+            async with self.w3_pool.with_nonce(w3) as nonce:
                 opt["from"] = self.w3_pool.account
-                nonce = await w3.eth.get_transaction_count(
-                    account=self.w3_pool.account, block_identifier="pending"
-                )
                 opt["nonce"] = nonce
                 _logger.debug(f"nonce: {nonce}")
                 tx_func: AsyncContractFunction = getattr(contract.functions, method)

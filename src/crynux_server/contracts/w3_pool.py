@@ -1,4 +1,5 @@
 import logging
+import re
 import ssl
 import warnings
 from abc import ABC, abstractmethod
@@ -18,6 +19,7 @@ from eth_typing import ChecksumAddress
 from web3 import AsyncHTTPProvider, AsyncWeb3, WebsocketProviderV2
 from web3.middleware.signing import async_construct_sign_and_send_raw_middleware
 from web3.providers.async_base import AsyncBaseProvider
+from web3.types import Nonce
 from websockets import ConnectionClosed
 
 _logger = logging.getLogger(__name__)
@@ -30,6 +32,8 @@ class ProviderType(IntEnum):
 
 
 _W3PoolCallback = Callable[[int], Awaitable[None]]
+
+_invalid_nonce_pattern = re.compile(r"invalid nonce; got (\d+), expected (\d+)")
 
 
 class W3Guard(ABC):
@@ -163,6 +167,7 @@ class W3Pool(object):
 
         self._condition = Condition()
         self._nonce_lock = Lock()
+        self._nonce: Optional[Nonce] = None
 
         self._next_id = 1
         self._guards: Dict[int, W3Guard] = {}
@@ -273,11 +278,22 @@ class W3Pool(object):
             return guard
 
     @asynccontextmanager
-    async def with_nonce_lock(self):
+    async def with_nonce(self, w3: AsyncWeb3):
         assert not self._closed, "w3 pool is closed"
 
         async with self._nonce_lock:
-            yield
+            if self._nonce is None:
+                self._nonce = await w3.eth.get_transaction_count(self.account, "pending")
+            try:
+                yield self._nonce
+            except Exception as e:
+                m = _invalid_nonce_pattern.search(str(e))
+                if m is not None:
+                    remote_nonce = int(m.group(2))
+                    self._nonce = Nonce(remote_nonce)
+                raise e
+            else:
+                self._nonce = Nonce(self._nonce + 1)
 
     async def close(self):
         if not self._closed:
