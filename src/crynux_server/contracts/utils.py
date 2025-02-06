@@ -42,7 +42,7 @@ P = ParamSpec("P")
 
 
 @asynccontextmanager
-async def catch_tx_revert_error(method: str):
+async def catch_tx_revert_error(method: str, tx_hash: str):
     try:
         yield
     except ContractLogicError as e:
@@ -53,8 +53,10 @@ async def catch_tx_revert_error(method: str):
             if e.data.startswith("08c379a0"):
                 reason_hex = e.data[8:]
                 reason: str = decode(["string"], bytes.fromhex(reason_hex))[0]
+            else:
+                reason = e.data
 
-        raise TxRevertedError(method=method, reason=reason) from e
+        raise TxRevertedError(method=method, tx_hash=tx_hash, reason=reason) from e
 
 
 class TxWaiter(object):
@@ -72,42 +74,54 @@ class TxWaiter(object):
         self.timeout = timeout
         self.interval = interval
 
+    async def _static_call(self, w3: AsyncWeb3):
+        async with catch_tx_revert_error(self.method, self.tx_hash.hex()):
+            tx = await w3.eth.get_transaction(self.tx_hash)
+            assert "to" in tx
+            assert "from" in tx
+            assert "value" in tx
+            assert "gas" in tx
+            assert "gasPrice" in tx
+            assert "blockNumber" in tx
+            tx_params: TxParams = {
+                "to": tx["to"],
+                "from": tx["from"],
+                "value": tx["value"],
+                "gas": tx["gas"],
+                "gasPrice": tx["gasPrice"],
+            }
+            if "chainId" in tx:
+                tx_params["chainId"] = tx["chainId"]
+            if "input" in tx:
+                tx_params["data"] = tx["input"]
+            elif "data" in tx:
+                tx_params["data"] = tx["data"]
+            blocknum = tx["blockNumber"] - 1
+            await w3.eth.call(
+                tx_params,
+                blocknum,
+            )
+
     async def wait(self, w3: Optional[AsyncWeb3] = None) -> TxReceipt:
         async def _wait_receipt(w3: AsyncWeb3):
             receipt = await w3.eth.wait_for_transaction_receipt(
                 self.tx_hash, self.timeout, self.interval
             )
             if not receipt["status"]:
-                async with catch_tx_revert_error(self.method):
-                    tx = await w3.eth.get_transaction(self.tx_hash)
-                    assert "to" in tx
-                    assert "from" in tx
-                    assert "value" in tx
-                    assert "chainId" in tx
-                    assert "gas" in tx
-                    assert "gasPrice" in tx
-                    assert "blockNumber" in tx
-                    tx_params: TxParams = {
-                        "to": tx["to"],
-                        "from": tx["from"],
-                        "value": tx["value"],
-                        "chainId": tx["chainId"],
-                        "gas": tx["gas"],
-                        "gasPrice": tx["gasPrice"],
-                    }
-                    if "input" in tx:
-                        tx_params["data"] = tx["input"]
-                    elif "data" in tx:
-                        tx_params["data"] = tx["data"]
-                    blocknum = tx["blockNumber"] - 1
-                    await w3.eth.call(
-                        tx_params,
-                        blocknum,
-                    )
+                try:
+                    await self._static_call(w3)
+                except TxRevertedError as e:
+                    raise e
+                except Exception as e:
+                    _logger.error(f"static_call error when getting revert reason of tx {self.tx_hash.hex()}")
+                    _logger.exception(e)
                     raise TxRevertedError(
                         method=self.method,
-                        reason=f"Unknown error: {tx_params} on block {blocknum}",
-                    )
+                        tx_hash=self.tx_hash.hex(),
+                        reason=f"Unknown revert reason of tx {self.tx_hash.hex()}"
+                    ) from e
+
+
             return receipt
 
         if w3 is None:
@@ -154,12 +168,11 @@ class ContractWrapper(object):
                 if "from" not in opt:
                     opt["from"] = self.w3_pool.account
 
-                async with catch_tx_revert_error("deploy"):
-                    tx_hash = await _contract_builder.constructor(
-                        *args, **kwargs
-                    ).transact(  # type: ignore
-                        opt
-                    )
+                tx_hash = await _contract_builder.constructor(
+                    *args, **kwargs
+                ).transact(  # type: ignore
+                    opt
+                )
             waiter = TxWaiter(self.w3_pool, "deploy", tx_hash=tx_hash)
             receipt = await waiter.wait(w3=w3)
             address = receipt["contractAddress"]
@@ -207,8 +220,7 @@ class ContractWrapper(object):
                 opt["nonce"] = nonce
                 _logger.debug(f"nonce: {nonce}")
                 tx_func: AsyncContractFunction = getattr(contract.functions, method)
-                async with catch_tx_revert_error(method):
-                    tx_hash: HexBytes = await tx_func(**kwargs).transact(opt)
+                tx_hash: HexBytes = await tx_func(**kwargs).transact(opt)
             return tx_hash
 
         _logger.debug(f"call method {self.contract_name}.{method}")

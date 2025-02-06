@@ -6,21 +6,24 @@ from abc import ABC, abstractmethod
 from collections import deque
 from contextlib import asynccontextmanager
 from enum import IntEnum
-from typing import Awaitable, Callable, Optional, Dict, cast
+from typing import Awaitable, Callable, Dict, Optional, cast
 
 import certifi
 from aiohttp import ClientSession, ClientTimeout, TCPConnector
 from anyio import Condition, Lock, move_on_after
 from eth_account import Account
+from eth_account.signers.local import LocalAccount
 from eth_keys import keys
 from eth_keys.datatypes import PrivateKey, PublicKey
-from eth_account.signers.local import LocalAccount
 from eth_typing import ChecksumAddress
 from web3 import AsyncHTTPProvider, AsyncWeb3, WebsocketProviderV2
-from web3.middleware.signing import async_construct_sign_and_send_raw_middleware
+from web3.middleware.signing import \
+    async_construct_sign_and_send_raw_middleware
 from web3.providers.async_base import AsyncBaseProvider
 from web3.types import Nonce
 from websockets import ConnectionClosed
+
+from .middleware import async_construct_rate_limit_middleware
 
 _logger = logging.getLogger(__name__)
 
@@ -33,7 +36,7 @@ class ProviderType(IntEnum):
 
 _W3PoolCallback = Callable[[int], Awaitable[None]]
 
-_invalid_nonce_pattern = re.compile(r"invalid nonce; got (\d+), expected (\d+)")
+_invalid_nonce_pattern = re.compile(r"[Nn]once")
 
 
 class W3Guard(ABC):
@@ -134,6 +137,7 @@ class W3Pool(object):
         provider_path: Optional[str] = None,
         pool_size: int = 1,
         timeout: int = 10,
+        rps: int = 10,
     ) -> None:
         if privkey.startswith("0x"):
             privkey = privkey[2:]
@@ -145,6 +149,7 @@ class W3Pool(object):
         self._pool_size = pool_size
         self._provider_path = provider_path
         self._timeout = timeout
+        self._rps = rps
         self._provider = None
 
         if provider is None:
@@ -196,7 +201,7 @@ class W3Pool(object):
     @property
     def public_key(self) -> PublicKey:
         return self._pubkey
-    
+
     @property
     def private_key(self) -> PrivateKey:
         return self._privkey
@@ -249,8 +254,13 @@ class W3Pool(object):
                 on_close=self.on_guard_close,
             )
 
-        middleware = await async_construct_sign_and_send_raw_middleware(self._privkey)
-        w3.middleware_onion.add(middleware)
+        sign_middleware = await async_construct_sign_and_send_raw_middleware(
+            self._privkey
+        )
+        w3.middleware_onion.add(sign_middleware)
+        rate_limit_middleware = await async_construct_rate_limit_middleware(self._rps)
+        w3.middleware_onion.add(rate_limit_middleware)
+
         w3.eth.default_account = self._account
 
         self._next_id += 1
@@ -283,17 +293,17 @@ class W3Pool(object):
 
         async with self._nonce_lock:
             if self._nonce is None:
-                self._nonce = await w3.eth.get_transaction_count(self.account, "pending")
+                self._nonce = await w3.eth.get_transaction_count(
+                    self.account, "pending"
+                )
             try:
                 yield self._nonce
+                self._nonce = Nonce(self._nonce + 1)
             except Exception as e:
                 m = _invalid_nonce_pattern.search(str(e))
                 if m is not None:
-                    remote_nonce = int(m.group(2))
-                    self._nonce = Nonce(remote_nonce)
+                    self._nonce = None
                 raise e
-            else:
-                self._nonce = Nonce(self._nonce + 1)
 
     async def close(self):
         if not self._closed:
@@ -307,5 +317,5 @@ class W3Pool(object):
             async with self._condition:
                 self._closed = True
                 self._condition.notify_all()
-            
+
             _logger.debug("w3 pool is closed")
