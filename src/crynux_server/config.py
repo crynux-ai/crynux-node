@@ -136,6 +136,8 @@ class Contract(BaseModel):
 
 class Ethereum(BaseModel):
     provider: str
+    rps: int = 10
+    timeout: int = 30
 
     chain_id: Optional[int] = None
     gas: Optional[int] = None

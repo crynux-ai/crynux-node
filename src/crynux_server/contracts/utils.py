@@ -80,7 +80,6 @@ class TxWaiter(object):
             assert "to" in tx
             assert "from" in tx
             assert "value" in tx
-            assert "chainId" in tx
             assert "gas" in tx
             assert "gasPrice" in tx
             assert "blockNumber" in tx
@@ -88,10 +87,11 @@ class TxWaiter(object):
                 "to": tx["to"],
                 "from": tx["from"],
                 "value": tx["value"],
-                "chainId": tx["chainId"],
                 "gas": tx["gas"],
                 "gasPrice": tx["gasPrice"],
             }
+            if "chainId" in tx:
+                tx_params["chainId"] = tx["chainId"]
             if "input" in tx:
                 tx_params["data"] = tx["input"]
             elif "data" in tx:
