@@ -52,12 +52,10 @@ jobs:
         uses: docker/metadata-action@9ec57ed1fcdbf14dcef7dfbe97b2010124a938b7
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }} 
+        tasg: |
+          type=raw,prefix={{branch}}-{{sha}}
+          type=raw,value=${{ env.RELEASE_VERSION }}
 
-      - name:
-        id: vars
-        shell: bash
-        run: |
-          echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
 
       - name: Build and push Docker image
         uses: docker/build-push-action@f2a1d5e99d037542a71f64918e516c093c6f3fc4
@@ -65,7 +63,5 @@ jobs:
           context: .
           push: true
           file: build/Dockerfile
-          tags: |
-            ${{ steps.meta.outputs.tags }}-${{ steps.vars.outputs.sha_short }}
-            ${{ env.RELEASE_VERSION }}
+          tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
