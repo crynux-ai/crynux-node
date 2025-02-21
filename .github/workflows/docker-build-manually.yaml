@@ -13,6 +13,7 @@ on:
         default: 'The developer team'
 
 env:
+  RELEASE_VERSION: 2.5.0+near
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
 
@@ -64,5 +65,7 @@ jobs:
           context: .
           push: true
           file: build/Dockerfile
-          tags: ${{ steps.meta.outputs.tags }}-${{ steps.vars.outputs.sha_short }}
+          tags: |
+            ${{ steps.meta.outputs.tags }}-${{ steps.vars.outputs.sha_short }}
+            ${{ env.RELEASE_VERSION }}
           labels: ${{ steps.meta.outputs.labels }}
