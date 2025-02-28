@@ -18,10 +18,10 @@ ethereum:
   # The deployed addresses of the smart contracts
   contract:
     node: "0xFc317b2e4649D5208c5CE6f2968338ef66841642"
-    task: "0x376fa75Da6Ba2AA553Db0FE3Da3013c936273391"
+    task: "0xd3e246555302CDcCd06D420681aAB4aBA715c05A"
     qos: "0xC3E755AB19183faFD1C55478bCa23d565Ec83eeB"
-    task_queue: "0x3EEe57C60EA7fE2973dd5161cb351668541F9d08"
-    netstats: "0xBC8DA357799e1b2C07715dF3DED16F436CA549C0"
+    task_queue: "0x09219007aA3096029027A07ab04c5A711B8537b0"
+    netstats: "0xCF83DFC25E93687670AB87d31A24B6A892B9C08c"
 
 # The database used to store the local state data
 # The data will not be large. A sqlite file is more than enough
