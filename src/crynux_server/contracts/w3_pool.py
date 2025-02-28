@@ -11,9 +11,7 @@ from typing import Awaitable, Callable, Dict, Optional, cast
 import certifi
 from aiohttp import ClientSession, ClientTimeout, TCPConnector
 from anyio import Condition, Lock, move_on_after
-from eth_account import Account
-from eth_account.signers.local import LocalAccount
-from eth_keys import keys
+from eth_keys.main import KeyAPI
 from eth_keys.datatypes import PrivateKey, PublicKey
 from eth_typing import ChecksumAddress
 from web3 import AsyncHTTPProvider, AsyncWeb3, WebsocketProviderV2
@@ -142,7 +140,7 @@ class W3Pool(object):
         if privkey.startswith("0x"):
             privkey = privkey[2:]
         privkey_bytes = bytes.fromhex(privkey)
-        self._privkey: PrivateKey = keys.PrivateKey(privkey_bytes)
+        self._privkey: PrivateKey = KeyAPI.PrivateKey(privkey_bytes)
         self._pubkey: PublicKey = self._privkey.public_key
         self._account: ChecksumAddress = self._privkey.public_key.to_checksum_address()
 
