@@ -18,9 +18,9 @@ ethereum:
   # The deployed addresses of the smart contracts
   contract:
     node: "0xFc317b2e4649D5208c5CE6f2968338ef66841642"
-    task: "0x44bD7b511c1B9960AB95c8347DE9C3adCC0811B3"
+    task: "0x351006DB916A796768a3dD7cC09a5E4f1466cBC1"
     qos: "0xC3E755AB19183faFD1C55478bCa23d565Ec83eeB"
-    task_queue: "0x6bbd9ed30685A9064C1BEfa344d0D7F912316125"
+    task_queue: "0x3EEe57C60EA7fE2973dd5161cb351668541F9d08"
     netstats: "0x54bE38d014c56B990091b62Bc43380879436DC61"
 
 # The database used to store the local state data
