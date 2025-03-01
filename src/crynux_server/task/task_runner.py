@@ -181,7 +181,7 @@ class InferenceTaskRunnerBase(ABC):
             await self.sync_state()
             if self.should_stop():
                 return
-            delay = self.state.timeout - time.time()
+            delay = self.state.timeout - time.time() + 5
             if delay <= 0:
                 raise TimeoutError
 
@@ -300,7 +300,7 @@ class InferenceTaskRunner(InferenceTaskRunnerBase):
                 f"Task {self.task_id_commitment.hex()} timeout. Cancel the task."
             )
         except TxRevertedError as e:
-            if "Task not found" not in e.reason and "Illegal node status" in e.reason:
+            if "Task not found" not in e.reason and "Illegal node status" not in e.reason:
                 _logger.error(
                     f"Cancel task {self.task_id_commitment.hex()} failed due to {e.reason}"
                 )
