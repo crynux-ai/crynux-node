@@ -13,7 +13,7 @@ ethereum:
   # The Blockchain params
   # Leave it as is for the private chain used in the Hydrogen Network
   gas_price: 10
-  gas: 5000000
+  gas: 8000000
 
   # The deployed addresses of the smart contracts
   contract:
