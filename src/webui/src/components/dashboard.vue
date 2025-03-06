@@ -417,7 +417,7 @@ const copyText = async (text) => {
             ></a-alert>
             <a-alert
                 type="error"
-                message="Not enough tokens in the wallet. At least 400.01 test CNXs are required."
+                message="Not enough tokens in the account. At least 400.01 test CNXs are required."
                 class="top-alert"
                 v-if="
           (nodeStatus.status === nodeAPI.NODE_STATUS_STOPPED || nodeStatus.status === nodeAPI.NODE_STATUS_INITIALIZING) &&
@@ -437,7 +437,7 @@ const copyText = async (text) => {
             </a-alert>
             <a-alert
                 type="error"
-                message="Not enough tokens in the wallet. At least 0.01 test CNXs are required for the gas fee."
+                message="Not enough tokens in the account. At least 0.01 test CNXs are required for the gas fee."
                 class="top-alert"
                 v-if="
           nodeStatus.status !== nodeAPI.NODE_STATUS_STOPPED &&
@@ -598,7 +598,7 @@ const copyText = async (text) => {
             :xl="{ span: 11, order: 2 }"
             :xxl="{ span: 9, order: 2 }"
         >
-            <a-card title="Wallet" :bordered="false" style="height: 100%; opacity: 0.9">
+            <a-card title="Account" :bordered="false" style="height: 100%; opacity: 0.9">
                 <template #extra>
                     <edit-account
                         ref="accountEditor"
@@ -894,7 +894,12 @@ const copyText = async (text) => {
             >Star
             </github-button>
         </a-space>
-        <img class="footer-logo" src="./logo-full-white.png" width="140" alt="Crynux logo" />
+        <div class="footer-logo">
+            <img src="./logo-full-white.png" width="140" alt="Crynux logo" />
+            <div class="network-on">ON</div>
+            <img v-if="config.network === 'dymension'" class="dymension-logo" src="/dymension.png" width="120" alt="Dymension logo" />
+            <img v-if="config.network === 'near'" class="near-logo" src="/near.png" width="120" alt="Near logo" />
+        </div>
     </div>
 </template>
 
@@ -954,6 +959,23 @@ const copyText = async (text) => {
 .footer-logo
     opacity 0.8
     float right
+
+    img
+        display inline-block
+
+    .network-on
+        display inline-block
+        background-color #fff
+        color #000
+        padding 2px 4px
+        border-radius 4px
+        font-size 10px
+        font-weight bold
+        margin-left 4px
+        margin-right 8px
+
+    .dymension-logo
+        margin-top 4px
 
 .xs .top-row
     height 64px

@@ -4,5 +4,6 @@
     "log": {
         "level": "info"
     },
-    "block_explorer": "https://bb.dym.fyi/r/dev-crynux"
+    "block_explorer": "https://bb.dym.fyi/r/dev-crynux",
+    "network": "dymension"
 }
