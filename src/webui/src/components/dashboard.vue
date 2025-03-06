@@ -26,6 +26,8 @@ const systemAPI = new SystemAPI()
 const taskAPI = new TaskAPI()
 
 const accountEditor = ref(null)
+const showTestTokenModal = ref(false)
+const showWithdrawModal = ref(false)
 
 const systemInfo = reactive({
     gpu: {
@@ -163,6 +165,21 @@ const windowResized = () => {
     fixedBottomBar.value = windowHeight > threshold
 }
 
+const accountBalance = computed(() => {
+    if (accountStatus.address === '') {
+        return '0'
+    } else {
+        return toEtherValue(accountStatus.balance)
+    }
+})
+
+const accountStaked = computed(() => {
+    if (accountStatus.address === '') {
+        return '0'
+    } else {
+        return toEtherValue(BigInt(400e18))
+    }
+})
 
 let uiUpdateInterval = null
 let uiUpdateCurrentTicket = null
@@ -607,7 +624,7 @@ const copyText = async (text) => {
                     ></edit-account>
                 </template>
                 <a-row>
-                    <a-col :span="12">
+                    <a-col :span="8">
                         <a-tooltip>
                             <template #title>{{ accountStatus.address }}</template>
                             <a-statistic title="Address" class="wallet-address">
@@ -622,25 +639,38 @@ const copyText = async (text) => {
                             </a-statistic>
                         </a-tooltip>
                     </a-col>
-                    <a-col :span="6">
-                        <a-statistic title="Staked" class="wallet-value">
-                            <template #formatter>
-                                <a-typography-link
-                                    v-if="nodeStatus.status === nodeAPI.NODE_STATUS_RUNNING || nodeStatus.status === nodeAPI.NODE_STATUS_PENDING_PAUSE || nodeStatus.status === nodeAPI.NODE_STATUS_PENDING_STOP"
-                                    :href="config.block_explorer + '/address/' + accountStatus.address"
-                                    target="_blank">{{ toEtherValue(BigInt(400e18)) }}</a-typography-link>
-                                <a-typography-text v-else>0</a-typography-text>
-                            </template>
-                        </a-statistic>
-                    </a-col>
-                    <a-col :span="6">
+                    <a-col :span="8">
                         <a-statistic title="Balance (Test CNX)" class="wallet-value">
                             <template #formatter>
                                 <a-typography-link
                                     v-if="accountStatus.address !== ''"
                                     :href="config.block_explorer + '/address/' + accountStatus.address"
                                     target="_blank">{{ toEtherValue(accountStatus.balance) }}</a-typography-link>
-                                <a-typography-text v-else>0</a-typography-text>
+                                <a-typography-text v-else>{{ accountBalance }} <span v-if="accountStaked !== '0'">({{ accountStaked }} staked)</span></a-typography-text>
+                            </template>
+                        </a-statistic>
+                    </a-col>
+                    <a-col :span="8">
+                        <a-statistic title="Action" class="wallet-value">
+                            <template #formatter>
+                                <a-space>
+                                    <a-button 
+                                        type="default" 
+                                        size="small"
+                                        :disabled="accountStatus.address === ''"
+                                        @click="showTestTokenModal = true"
+                                    >
+                                        Deposit
+                                    </a-button>
+                                    <a-button 
+                                        type="default" 
+                                        size="small"
+                                        :disabled="accountStatus.address === ''"
+                                        @click="showWithdrawModal = true"
+                                    >
+                                        Withdraw
+                                    </a-button>
+                                </a-space>
                             </template>
                         </a-statistic>
                     </a-col>
@@ -901,6 +931,29 @@ const copyText = async (text) => {
             <img v-if="config.network === 'near'" class="near-logo" src="/near.png" width="120" alt="Near logo" />
         </div>
     </div>
+    
+    <a-modal
+        v-model:visible="showTestTokenModal"
+        title="Get Test CNX Tokens"
+        :footer="null"
+        @cancel="showTestTokenModal = false"
+    >
+        <p>Please join Crynux Discord to get test CNX for free:</p>
+        <a-button type="primary" :href="config.discord_link" target="_blank">
+            Join Crynux Discord
+        </a-button>
+    </a-modal>
+
+    <a-modal
+        v-model:visible="showWithdrawModal"
+        title="Withdrawal Not Available"
+        :footer="null"
+        @cancel="showWithdrawModal = false"
+    >
+        <p>Withdrawal is not allowed during the testnet phase.</p>
+        <p>Please wait for the mainnet launch to withdraw your tokens.</p>
+    </a-modal>
+
 </template>
 
 <style lang="stylus">
@@ -909,9 +962,12 @@ const copyText = async (text) => {
     margin-right 0 !important
 </style>
 <style scoped lang="stylus">
+.wallet-address span
+    font-size 16px
+
 .wallet-value a,
     .wallet-value span
-    font-size 24px
+    font-size 16px
     color black
     text-decoration none
 
