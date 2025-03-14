@@ -5,9 +5,10 @@ crynux_node/
 !macos/
 !windows/
 !linux-server/
+!docker/*
 !Dockerfile
 !bump-version.ps1
 !bump-version.sh
 !changelog-template.md
-!start.sh
+!set-config-files.sh
 !*/

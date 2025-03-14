@@ -7,10 +7,10 @@ on:
         description: 'build manually trigger'
         required: true
         default: 'triggered by developer'
-      home:
-        description: 'location'
-        required: false
-        default: 'The developer team'
+      blockchain:
+        description: 'Blockchain'
+        required: true
+        default: 'dymension'
 
 env:
   REGISTRY: ghcr.io
@@ -39,6 +39,11 @@ jobs:
         with:
           submodules: recursive
 
+      - name: Set the config files
+        run: |
+            chmod +x build/set-config-files.sh
+            ./build/set-config-files.sh ${{ inputs.blockchain }}
+
       - name: Log in to the Container registry
         uses: docker/login-action@65b78e6e13532edd9afa3aa52ac7964289d1a9c1
         with:
@@ -50,7 +55,9 @@ jobs:
         id: meta
         uses: docker/metadata-action@9ec57ed1fcdbf14dcef7dfbe97b2010124a938b7
         with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }} 
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          flavor: |
+            suffix=-${{ inputs.blockchain }},latest=false
 
       - name:
         id: vars
@@ -63,6 +70,6 @@ jobs:
         with:
           context: .
           push: true
-          file: build/Dockerfile
+          file: build/docker/Dockerfile
           tags: ${{ steps.meta.outputs.tags }}-${{ steps.vars.outputs.sha_short }}
           labels: ${{ steps.meta.outputs.labels }}

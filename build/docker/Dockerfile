@@ -3,7 +3,6 @@ FROM node:18-buster-slim as web-builder
 WORKDIR /app
 
 COPY src/webui /app/
-RUN mv src/config.example.json src/config.json
 
 RUN yarn && yarn build
 
@@ -70,8 +69,8 @@ COPY crynux-worker/crynux_worker_process.py /app/worker/crynux_worker_process.py
 ENV PATH="/app/venv/bin:${PATH}"
 
 WORKDIR /app
-COPY build/config/config.yml.docker_example config.yml.example
-COPY build/start.sh start.sh
+COPY build/docker/config.yml.example config.yml.example
+COPY build/docker/start.sh start.sh
 COPY --from=web-builder /app/dist/ dist/
 
 ENTRYPOINT ["bash", "start.sh"]
