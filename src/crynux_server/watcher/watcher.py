@@ -1,13 +1,18 @@
+import json
 import logging
 from asyncio import Queue
 from datetime import datetime
+import time
 from typing import (Any, Awaitable, Callable, Dict, Generic, List, Optional,
                     TypeVar)
 
-from anyio import (TASK_STATUS_IGNORED, CancelScope, Condition,
-                   create_task_group, get_cancelled_exc_class, move_on_after,
+from anyio import (TASK_STATUS_IGNORED, CancelScope, Condition, create_memory_object_stream,
+                   create_task_group, fail_after, get_cancelled_exc_class, move_on_after,
                    sleep)
+from anyio.streams.memory import (MemoryObjectReceiveStream,
+                                  MemoryObjectSendStream)
 from anyio.abc import TaskGroup, TaskStatus
+from eth_typing import ChecksumAddress
 from hexbytes import HexBytes
 from tenacity import (retry, retry_if_exception_type, stop_after_attempt,
                       wait_fixed)
@@ -16,14 +21,21 @@ from web3.logs import DISCARD
 from web3.types import BlockData, EventData, TxReceipt
 
 from crynux_server.contracts import Contracts, ContractWrapper
+from crynux_server.relay.abc import Relay
+from crynux_server.relay.exceptions import RelayError
+from crynux_server.models.chain_event import ChainEvent, ChainEventType, show_event_type
 
-EventCallback = Callable[[EventData], Awaitable[None]]
+import httpx
+
+
+
+ChainEventCallback = Callable[[ChainEvent], Awaitable[None]]
 
 _logger = logging.getLogger(__name__)
 
 
-def wrap_callback(callback: EventCallback) -> EventCallback:
-    async def inner(event: EventData):
+def wrap_callback(callback: ChainEventCallback) -> ChainEventCallback:
+    async def inner(event: ChainEvent):
         try:
             return await callback(event)
         except Exception as e:
@@ -32,237 +44,157 @@ def wrap_callback(callback: EventCallback) -> EventCallback:
 
     return inner
 
+def _process_resp(resp: httpx.Response, method: str):
+    try:
+        resp.raise_for_status()
+        return resp
+    except httpx.HTTPStatusError as e:
+        message = str(e)
+        if resp.status_code == 400:
+            try:
+                content = resp.json()
+                if "data" in content:
+                    data = content["data"]
+                    message = json.dumps(data)
+                elif "message" in content:
+                    message = content["message"]
+                else:
+                    message = resp.text
+            except Exception:
+                pass
+        raise RelayError(resp.status_code, method, message) from e
 
-def _filter_event(
-    event: EventData, filter_args: Optional[Dict[str, Any]] = None
-) -> bool:
-    if filter_args is None:
-        return True
-    for key, val in filter_args.items():
-        if key in event["args"]:
-            real_val = event["args"][key]
-            if real_val != val:
-                return False
-    return True
 
-
+# Filter events with a specific event type
+# And process these events with a callback fucntion
 class EventFilter(object):
     def __init__(
         self,
         filter_id: int,
-        contract: ContractWrapper,
-        event_name: str,
-        callback: EventCallback,
-        filter_args: Optional[Dict[str, Any]] = None,
+        event_type: ChainEventType,
+        callback: ChainEventCallback,
     ):
         self.filter_id = filter_id
-        self.contract = contract
-        self.event_name = event_name
+        self.event_type = event_type
         self.callback = callback
-        self.filter_args = filter_args
 
-    async def process_receipt(self, receipt: TxReceipt):
-        events = await self.contract.event_process_receipt(
-            self.event_name, receipt, errors=DISCARD
-        )
-        filtered_events = [
-            event for event in events if _filter_event(event, self.filter_args)
-        ]
-        for event in filtered_events:
+    async def process_event(self, event: ChainEvent):
+        if event.event_type == self.event_type:
             _logger.debug(f"Watcher {self.filter_id}: watch event: {event}")
             await wrap_callback(self.callback)(event)
 
-    async def process_events(self, block_receipts: List[TxReceipt], tg: TaskGroup):
-        if len(block_receipts) == 0:
-            return
-        blocknum = block_receipts[0]["blockNumber"]
-        filtered_events = []
-        for receipt in block_receipts:
-            events = await self.contract.event_process_receipt(
-                self.event_name, receipt, errors=DISCARD
-            )
-            filtered_events.extend(
-                [event for event in events if _filter_event(event, self.filter_args)]
-            )
-        _logger.debug(
-            f"Watcher {self.filter_id}: {len(filtered_events)} events from block {blocknum}"
-        )
-
-        for event in filtered_events:
-            _logger.debug(f"Watcher {self.filter_id}: watch event: {event}")
-            tg.start_soon(wrap_callback(self.callback), event)
-
-
-KT = TypeVar("KT")
-VT = TypeVar("VT")
-
-
-class CondMap(Generic[KT, VT]):
-    def __init__(self) -> None:
-        self._data: Dict[KT, VT] = {}
-        self._cond = Condition()
-
-    async def get(self, key: KT):
-        async with self._cond:
-            while key not in self._data:
-                await self._cond.wait()
-            return self._data[key]
-
-    async def set(self, key: KT, value: VT):
-        async with self._cond:
-            self._data[key] = value
-            self._cond.notify_all()
-
-
+# Watch all events related to node self.relay.node_address
+# And manages all event filters to process these events
 class EventWatcher(object):
-    def __init__(self, contracts: Contracts):
-        self.contracts = contracts
+    def __init__(
+        self,
+        base_url: str,
+        relay: Relay,
+        last_fetch_time: int = 0,
+        fetch_interval: int = 5,
+    ):
+        self._client = httpx.AsyncClient(base_url=base_url, timeout=30)
+        self._relay = relay
+        self._page_size = 20
 
+        self._last_fetch_time = last_fetch_time
+        self._fetch_interval = fetch_interval
+
+        self._next_filter_id = 0
         self._event_filters: Dict[int, EventFilter] = {}
-        self._next_filter_id: int = 0
 
         self._cancel_scope: Optional[CancelScope] = None
 
-        self._blocknum_queue = Queue[int](100)
-        self._tx_hash_queue = Queue[HexBytes](100)
+    async def _fetch_events_once(
+        self, event_sender: MemoryObjectSendStream[ChainEvent]
+    ):
+        start_time = self._last_fetch_time
+        end_time = await self._relay.now()
+        node_address = self._relay.node_address
+        page_size = self._page_size
 
-        self._block_map = CondMap[int, BlockData]()
-        self._tx_receipt_map = CondMap[HexBytes, TxReceipt]()
-
-
-    @classmethod
-    def from_contracts(cls, contracts: Contracts) -> "EventWatcher":
-        assert contracts.initialized, "Contracts has not been initialized!"
-
-        res = cls(contracts)
-        return res
-
-    def watch_event(
-        self,
-        contract_name: str,
-        event_name: str,
-        callback: EventCallback,
-        filter_args: Optional[Dict[str, Any]] = None,
-    ) -> int:
-        contract = self.contracts.get_contract(contract_name)
-
-        filter_id = self._next_filter_id
-        event_filter = EventFilter(
-            filter_id=filter_id,
-            contract=contract,
-            event_name=event_name,
-            callback=callback,
-            filter_args=filter_args,
-        )
-        self._event_filters[filter_id] = event_filter
-        self._next_filter_id += 1
-        _logger.debug(f"Add event watcher {contract_name}.{event_name}, {filter_args}")
-        return filter_id
-
-    def unwatch_event(self, filter_id: int):
-        if filter_id in self._event_filters:
-            event_filter = self._event_filters.pop(filter_id)
-            _logger.debug(f"Remove event watcher {event_filter.event_name}")
-
-    @retry(
-        wait=wait_fixed(3),
-        stop=stop_after_attempt(5),
-        retry=retry_if_exception_type(BlockNotFound),
-        reraise=True,
-    )
-    async def _get_block(self, blocknum: int):
-        block = await self.contracts.get_block(blocknum)
-        assert "transactions" in block
-        with move_on_after(5, shield=True):
-            for tx_hash in block["transactions"]:
-                assert isinstance(tx_hash, bytes)
-                await self._tx_hash_queue.put(tx_hash)
-            await self._block_map.set(blocknum, block)
-        assert "timestamp" in block
-        blocktime = datetime.fromtimestamp(
-            block["timestamp"]
-        ).strftime("%Y-%m-%d %H:%M:%S")
-        tx_count = len(block["transactions"])
-        _logger.debug(
-            f"get block {blocknum} produced at {blocktime}, {tx_count} txs"
-        )
-
-    async def _get_blocks(self):
+        input = {
+            "start_time": start_time,
+            "page": 1,
+            "page_size": page_size,
+            "end_time": end_time,
+            "node_address": node_address,
+        }
         while True:
-            blocknum = await self._blocknum_queue.get()
-            try:
-                await self._get_block(blocknum)
-            except get_cancelled_exc_class():
-                with move_on_after(1, shield=True):
-                    await self._blocknum_queue.put(blocknum)
-                raise
-            except Exception:
-                with move_on_after(1, shield=True):
-                    await self._blocknum_queue.put(blocknum)
-                raise
-            
-            self._blocknum_queue.task_done()
+            resp = await self._client.get("/v1/events", params=input)
+            resp = _process_resp(resp, "getEvent")
+            content = resp.json()
+            data = content["data"]
+            if len(data) == 0:
+                break
+            # Send the fetched events to the event_sender
+            for event in data:
+                chain_event = ChainEvent(
+                    event_type=ChainEventType(event["type"]),
+                    node_address=event["node_address"],
+                    task_id_commitment=event["task_id_commitment"],
+                    args=event["args"]
+                )
+                await event_sender.send(chain_event)
+            input["page"] += 1
 
-    @retry(
-        wait=wait_fixed(3),
-        stop=stop_after_attempt(5),
-        retry=retry_if_exception_type(TransactionNotFound),
-        reraise=True,
-    )
-    async def _get_tx_receipt(self, tx_hash: HexBytes):
-        receipt = await self.contracts.get_tx_receipt(tx_hash)
-        await self._tx_receipt_map.set(tx_hash, receipt)
-        blocknum = receipt["blockNumber"]
-        tx_index = receipt["transactionIndex"]
-        _logger.debug(
-            f"get receipt {tx_index} of block {blocknum}"
+        _logger.info(
+            f"fetched events for node {node_address} from {start_time} to {end_time}"
         )
+        self._last_fetch_time = end_time
+    
+    # Fetch events evrey self._fetch_interval seconds
+    # Send the fetched events to the event_sender
+    # The _event_processor will process these events
+    async def _event_fetcher(
+        self, event_sender: MemoryObjectSendStream[ChainEvent]
+    ):
+        async with event_sender:
+            while True:
+                await self._fetch_events_once(event_sender)
+                await sleep(self._fetch_interval)
 
-    async def _get_tx_receipts(self):
-        while True:
-            tx_hash = await self._tx_hash_queue.get()
-            try:
-                await self._get_tx_receipt(tx_hash)
-            except get_cancelled_exc_class():
-                with move_on_after(1, shield=True):
-                    await self._tx_hash_queue.put(tx_hash)
-                raise
-            except Exception:
-                with move_on_after(1, shield=True):
-                    await self._tx_hash_queue.put(tx_hash)
-                raise
-            
-            self._tx_hash_queue.task_done()
-
-    async def _process_events(self, from_block: int, to_block: int):
-        async with create_task_group() as tg:
-            for blocknum in range(from_block, to_block + 1):
-                block = await self._block_map.get(blocknum)
-                assert "transactions" in block
-
-                for tx_hash in block["transactions"]:
-                    assert isinstance(tx_hash, bytes)
-                    receipt = await self._tx_receipt_map.get(tx_hash)
-
+    # Get events from event_receiver, which are send by the _event_fetcher
+    # Process the events fetched one by one
+    async def _event_processor(
+        self, event_receiver: MemoryObjectReceiveStream[ChainEvent]
+    ):
+        async with event_receiver:
+            async for event in event_receiver:
+                _logger.info(f"Processing event: {event}")
+                async with create_task_group() as tg:
                     event_filters = list(self._event_filters.values())
                     for event_filter in event_filters:
-                        tg.start_soon(event_filter.process_receipt, receipt)
+                        tg.start_soon(event_filter.process_event, event)
 
-    async def start(
+    # Add a filter to process events with a specific event type
+    # The callback function will be called when the event is fetched
+    def add_event_filter(
         self,
-        from_block: int = 0,
-        to_block: int = 0,
-        interval: float = 1,
-        *,
-        task_status: TaskStatus[None] = TASK_STATUS_IGNORED,
+        event_type: ChainEventType,
+        callback: ChainEventCallback,
     ):
-        """
-        watch events from block
+        filter_id = self._next_filter_id
+        self._next_filter_id += 1
+        event_filter = EventFilter(
+            filter_id=filter_id,
+            event_type=event_type,
+            callback=callback,
+        )
+        self._event_filters[filter_id] = event_filter
+        _logger.debug(f"Add event filter for event type {show_event_type(event_type)}, filter id {filter_id}")
+        return filter_id
+    
+    # Remove a filter to stop processing events with a specific event type
+    def remove_event_filter(self, filter_id: int):
+        if filter_id in self._event_filters:
+            event_filter = self._event_filters.pop(filter_id)
+            _logger.debug(f"Remove event filter for event type {show_event_type(event_filter.event_type)}")
+    
 
-        from_block: a block number, zero means start from the latest block
-        to_block: a block number, zero means watch infinitely
-        interval: sleep time, sleep when there is no new block
-        """
+    # Start the watcher
+    # The watcher will fetch events and process these events
+    async def start(self):
         assert (
             self._cancel_scope is None
         ), "The watcher has already started. You should stop the watcher before restart it."
@@ -271,38 +203,19 @@ class EventWatcher(object):
             self._cancel_scope = CancelScope()
 
             with self._cancel_scope:
+                # Prepare task status stream
+                status_sender, status_receiver = create_memory_object_stream(
+                    40, item_type=ChainEvent
+                )
+
                 async with create_task_group() as tg:
-                    for _ in range(4):
-                        tg.start_soon(self._get_blocks)
+                    tg.start_soon(self._event_processor, status_receiver)
+                    tg.start_soon(self._event_fetcher, status_sender)
 
-                    for _ in range(4):
-                        tg.start_soon(self._get_tx_receipts)
-
-                    if from_block == 0:
-                        from_block = await self.contracts.get_current_block_number()
-                    # signal the event watcher is started
-                    task_status.started()
-
-                    while to_block <= 0 or from_block <= to_block:
-                        latest_blocknum = (
-                            await self.contracts.get_current_block_number()
-                        )
-                        if from_block <= latest_blocknum:
-                            tg.start_soon(self._process_events, from_block, latest_blocknum)
-
-                            for blocknum in range(from_block, latest_blocknum + 1):
-                                await self._blocknum_queue.put(blocknum)                            
-                            from_block = latest_blocknum + 1
-
-                        await sleep(interval)
-
-                    await self._blocknum_queue.join()
-                    await self._tx_hash_queue.join()
-
-                    tg.cancel_scope.cancel()
         finally:
             self._cancel_scope = None
 
-    def stop(self):
+    # Stop the watcher
+    async def stop(self):
         if self._cancel_scope is not None and not self._cancel_scope.cancel_called:
             self._cancel_scope.cancel()

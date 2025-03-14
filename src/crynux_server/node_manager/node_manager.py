@@ -16,6 +16,7 @@ from web3.types import EventData
 from crynux_server import models
 from crynux_server.config import Config, wait_privkey
 from crynux_server.contracts import Contracts, set_contracts
+from crynux_server.models.chain_event import ChainEvent, ChainEventType
 from crynux_server.relay import Relay, WebRelay, set_relay
 from crynux_server.task import (DbDownloadTaskStateCache,
                                 DbInferenceTaskStateCache,
@@ -66,10 +67,13 @@ def _make_relay(privkey: str, relay_url: str) -> Relay:
     return relay
 
 
-def _make_watcher(
-    contracts: Contracts,
-):
-    watcher = EventWatcher.from_contracts(contracts)
+async def _make_watcher(
+    base_url: str,
+    relay: Relay,
+    fetch_interval: int = 5,
+) -> EventWatcher:
+    now = await relay.now()
+    watcher = EventWatcher(base_url=base_url, relay=relay, last_fetch_time=now, fetch_interval=fetch_interval)
 
     set_watcher(watcher)
     return watcher
@@ -78,6 +82,7 @@ def _make_watcher(
 def _make_task_system(
     retry: bool,
     contracts: Contracts,
+    relay: Relay,
     inference_state_cache_cls: Type[InferenceTaskStateCache],
     download_state_cache_cls: Type[DownloadTaskStateCache],
 ) -> TaskSystem:
@@ -90,6 +95,7 @@ def _make_task_system(
         inference_state_cache=inference_state_cache,
         download_state_cache=download_state_cache,
         contracts=contracts,
+        relay=relay,
         retry=retry,
     )
 
@@ -101,16 +107,22 @@ def _make_node_state_manager(
     state_cache: ManagerStateCache,
     download_model_cache: DownloadModelCache,
     contracts: Contracts,
+    relay: Relay,
 ):
     state_manager = NodeStateManager(
         state_cache=state_cache,
         download_model_cache=download_model_cache,
         contracts=contracts,
+        relay=relay,
     )
     set_node_state_manager(state_manager)
     return state_manager
 
-
+# Manage node, including:
+# 1. node start up/shut down, joining into the network
+# 2. node status changes/management
+# 3. task generation, distribution and execution
+# 4. event fetching and processing, etc.
 class NodeManager(object):
     def __init__(
         self,
@@ -200,6 +212,7 @@ class NodeManager(object):
             self._task_system = _make_task_system(
                 retry=self._retry,
                 contracts=self._contracts,
+                relay=self._relay,
                 inference_state_cache_cls=self.inference_state_cache_cls,
                 download_state_cache_cls=self.download_state_cache_cls
             )
@@ -209,10 +222,11 @@ class NodeManager(object):
                 state_cache=self.state_cache,
                 download_model_cache=self.download_model_cache,
                 contracts=self._contracts,
+                relay=self._relay,
             )
 
         if self._watcher is None:
-            self._watcher = _make_watcher(contracts=self._contracts)
+            self._watcher = await _make_watcher(base_url=self.config.relay_url, relay=self._relay)
 
         _logger.info("Node manager components initializing complete.")
 
@@ -397,50 +411,51 @@ class NodeManager(object):
         self, *, task_status: TaskStatus[None] = TASK_STATUS_IGNORED
     ):
         assert self._watcher is not None
-        assert self._contracts is not None
+        assert self._relay is not None
 
-        account = self._contracts.account
+        account = self._relay.node_address
 
-        async def _node_kicked_out(event_data: EventData):
-            address = event_data["args"]["nodeAddress"]
+        async def _node_kicked_out(chain_event: ChainEvent):
+            address = chain_event.node_address
             if address == account:
                 _logger.info("Node is kicked out")
                 await self.state_cache.set_node_state(
                     status=models.NodeStatus.Stopped, message="Node is kicked out"
                 )
 
-        self._watcher.watch_event("node", "NodeKickedOut", callback=_node_kicked_out)
+        self._watcher.add_event_filter(ChainEventType.NodeKickedOut, callback=_node_kicked_out)
 
-        async def _node_slashed(event_data: EventData):
-            address = event_data["args"]["nodeAddress"]
+        async def _node_slashed(chain_event: ChainEvent):
+            address = chain_event.node_address
             if address == account:
                 _logger.info("Node is slashed")
                 await self.state_cache.set_node_state(
                     status=models.NodeStatus.Stopped, message="Node is slashed"
                 )
 
-        self._watcher.watch_event("node", "NodeSlashed", callback=_node_slashed)
+        self._watcher.add_event_filter(ChainEventType.NodeSlashed, callback=_node_slashed)
 
-        async def _inference_task_started(event_data: EventData):
+        async def _inference_task_started(chain_event: ChainEvent):
             assert self._task_system is not None
-            task_id_commitment = event_data["args"]["taskIDCommitment"]
-            selected_node = event_data["args"]["selectedNode"]
+            task_id_commitment = chain_event.task_id_commitment
+            selected_node = chain_event.node_address
             if selected_node == account:
                 await self._task_system.create_inference_task(task_id_commitment)
 
-        self._watcher.watch_event("task", "TaskStarted", callback=_inference_task_started)
+        self._watcher.add_event_filter(ChainEventType.TaskStarted, callback=_inference_task_started)
 
-        async def _download_task_started(event_data: EventData):
+        async def _download_task_started(chain_event: ChainEvent):
             assert self._task_system is not None
-            address = event_data["args"]["nodeAddress"]
-            model_id = event_data["args"]["modelID"]
-            task_type = models.TaskType(event_data["args"]["taskType"])
-            blocknum = event_data["blockNumber"]
+            address = chain_event.node_address
+            download_model_event = json.loads(chain_event.args)
+            model_id = download_model_event.model_id
+            task_type = models.TaskType(chain_event.event_type)
+            task_id_commitment = chain_event.task_id_commitment
             if address == account:
-                task_id = f"{blocknum}_{address}_{model_id}"
+                task_id = f"{task_id_commitment}_{address}_{model_id}"
                 await self._task_system.create_download_task(task_id, task_type, model_id)
 
-        self._watcher.watch_event("task", "DownloadModel", _download_task_started)
+        self._watcher.add_event_filter(ChainEventType.DownloadModel, _download_task_started)
 
         # call task_status.started() only once
         task_status_set = False
@@ -494,7 +509,7 @@ class NodeManager(object):
     async def _can_join_network(self) -> bool:
         node_amount = Web3.to_wei("400.01", "ether")
 
-        assert self._contracts is not None
+        assert self._relay is not None
         async for attemp in AsyncRetrying(
             stop=stop_never if self._retry else stop_after_attempt(1),
             wait=wait_fixed(self._retry_delay),
@@ -502,15 +517,13 @@ class NodeManager(object):
         ):
             with attemp:
                 try:
-                    status = await self._contracts.node_contract.get_node_status(
-                        self._contracts.account
-                    )
+                    status = await self._relay.node_get_node_status()
                     if status in [
                         models.ChainNodeStatus.AVAILABLE,
                         models.ChainNodeStatus.BUSY,
                     ]:
                         return True
-                    balance = await self._contracts.get_balance(self._contracts.account)
+                    balance = await self._relay.get_balance()
                     if balance >= node_amount:
                         return True
                 except Exception as e:
@@ -530,15 +543,17 @@ class NodeManager(object):
     async def _update_version(self):
 
         async def _update():
-            assert self._contracts is not None
+            assert self._relay is not None
             current_version = self._worker_manager.version
             while True:
                 async with self._worker_manager.wait_connection_changed():
                     version = self._worker_manager.version
                     if version is not None and version != current_version:
+                        # check version name, should be like "x.y.z"
                         version_list = [int(v) for v in version.split(".")]
                         assert len(version_list) == 3
-                        await self._contracts.node_contract.update_version(version_list)
+                        # update version
+                        await self._relay.node_update_version(version)
                     current_version = version
 
         async for attemp in AsyncRetrying(

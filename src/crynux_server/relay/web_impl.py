@@ -9,12 +9,18 @@ from hexbytes import HexBytes
 import httpx
 from anyio import wrap_file, to_thread, open_file
 
-from crynux_server.models import RelayTask
+from crynux_server.models import ChainTask, TaskError, TaskAbortReason
+from crynux_server.models.node import ChainNodeStatus, NodeInfo
+from crynux_server.models.task import RelayTask
 
 from .abc import Relay
 from .exceptions import RelayError
 from .sign import Signer
 
+from eth_account import Account
+from eth_account.signers.local import LocalAccount
+from eth_typing import ChecksumAddress
+from eth_utils import to_checksum_address
 
 def _process_resp(resp: httpx.Response, method: str):
     try:
@@ -36,12 +42,19 @@ def _process_resp(resp: httpx.Response, method: str):
                 pass
         raise RelayError(resp.status_code, method, message) from e
 
+def _get_address_from_privkey(privkey: str) -> ChecksumAddress:
+    addrLowcase = Account.from_key(privkey).address
+    return to_checksum_address(addrLowcase)
 
 class WebRelay(Relay):
     def __init__(self, base_url: str, privkey: str) -> None:
         super().__init__()
         self.client = httpx.AsyncClient(base_url=base_url, timeout=30)
         self.signer = Signer(privkey=privkey)
+        self.node_address = _get_address_from_privkey(privkey)
+
+
+    """ task related """
 
     async def create_task(self, task_id_commitment: bytes, task_args: str, checkpoint_dir: Optional[str] = None) -> RelayTask:
         task_id_commitment_hex = HexBytes(task_id_commitment).hex()
@@ -101,6 +114,40 @@ class WebRelay(Relay):
         content = resp.json()
         data = content["data"]
         return RelayTask.model_validate(data)
+
+    async def report_task_error(self, task_id_commitment: bytes, task_error: TaskError):
+        task_id_commitment_hex = HexBytes(task_id_commitment).hex()
+        input = {"task_id_commitment": task_id_commitment_hex}
+        timestamp, signature = self.signer.sign(input)
+
+        resp = await self.client.post(
+            f"/v1/inference_tasks/{task_id_commitment_hex}/task_error",
+            params={"task_error": task_error, "timestamp": timestamp, "signature": signature},
+        )
+        resp = _process_resp(resp, "reportTaskError")
+
+    async def submit_task_score(self, task_id_commitment: bytes, score: bytes):
+        task_id_commitment_hex = HexBytes(task_id_commitment).hex()
+        input = {"task_id_commitment": task_id_commitment_hex}
+        timestamp, signature = self.signer.sign(input)
+
+        resp = await self.client.post(
+            f"/v1/inference_tasks/{task_id_commitment_hex}/score",
+            params={"score": score, "timestamp": timestamp, "signature": signature},
+        )
+        resp = _process_resp(resp, "reportTaskError")
+
+    async def abort_task(self, task_id_commitment: bytes, abort_reason: TaskAbortReason):
+        task_id_commitment_hex = HexBytes(task_id_commitment).hex()
+        input = {"task_id_commitment": task_id_commitment_hex}
+        timestamp, signature = self.signer.sign(input)
+
+        resp = await self.client.post(
+            f"/v1/inference_tasks/{task_id_commitment_hex}/abort_reason",
+            params={"abort_reason": abort_reason, "timestamp": timestamp, "signature": signature},
+        )
+        resp = _process_resp(resp, "reportTaskError")
+
 
     async def upload_task_result(self, task_id_commitment: bytes, file_paths: List[str], checkpoint_dir: Optional[str] = None):
         task_id_commitment_hex = HexBytes(task_id_commitment).hex()
@@ -171,6 +218,8 @@ class WebRelay(Relay):
                 shutil.unpack_archive, checkpoint_file, result_checkpoint_dir
             )
 
+    """ auxiliary """
+
     async def now(self) -> int:
         resp = await self.client.get("/v1/now")
         resp = _process_resp(resp, "now")
@@ -181,3 +230,104 @@ class WebRelay(Relay):
 
     async def close(self):
         await self.client.aclose()
+    
+    """ node related """
+
+    async def node_get_node_info(self) -> NodeInfo:
+        resp = await self.client.get(
+            f"/v1/node/{self.node_address}",
+            params={},
+        )
+        resp = _process_resp(resp, "nodeGetNodeInfo")
+        content = resp.json()
+        data = content["data"]
+        return NodeInfo.model_validate(data)
+    
+    async def node_get_node_status(self) -> ChainNodeStatus:
+        node_info = await self.node_get_node_info()
+        return node_info.status
+    
+    async def node_join(self, gpu_name: str, gpu_vram: int, model_ids: List[str], version: str):
+        input = {"gpu_name": gpu_name, "gpu_vram": gpu_vram, "model_ids": model_ids, "version": version}
+        timestamp, signature = self.signer.sign(input)
+        resp = await self.client.post(
+            f"/v1/node/{self.node_address}/join",
+            params={"gpu_name": gpu_name, "gpu_vram": gpu_vram, "model_ids": model_ids, "version": version, "timestamp": timestamp, "signature": signature},
+        )
+        resp = _process_resp(resp, "nodeJoin")
+    
+    async def node_report_model_downloaded(self, model_id: str):
+        input = {"model_id": model_id}
+        timestamp, signature = self.signer.sign(input)
+        resp = await self.client.post(
+            f"/v1/node/{self.node_address}/model",
+            params={"model_id": model_id, "timestamp": timestamp, "signature": signature},
+        )
+        resp = _process_resp(resp, "nodeReportModelDownload")
+    
+    async def node_pause(self):
+        input = {}
+        timestamp, signature = self.signer.sign(input)
+        resp = await self.client.post(
+            f"/v1/node/{self.node_address}/pause",
+            params={"timestamp": timestamp, "signature": signature},
+        )
+        resp = _process_resp(resp, "nodePause")
+    
+    async def node_quit(self):
+        input = {}
+        timestamp, signature = self.signer.sign(input)
+        resp = await self.client.post(
+            f"/v1/node/{self.node_address}/quit",
+            params={"timestamp": timestamp, "signature": signature},
+        )
+        resp = _process_resp(resp, "nodeQuit")
+    
+    async def node_resume(self):
+        input = {}
+        timestamp, signature = self.signer.sign(input)
+        resp = await self.client.post(
+            f"/v1/node/{self.node_address}/resume",
+            params={"timestamp": timestamp, "signature": signature},
+        )
+        resp = _process_resp(resp, "nodeResume")
+    
+    async def node_get_current_task(self) -> str:
+        resp = await self.client.get(
+            f"/v1/node/{self.node_address}/task",
+            params={},
+        )
+        resp = _process_resp(resp, "getCurrentTask")
+        content = resp.json()
+        task_id_commitment = content["data"]
+        return task_id_commitment
+    
+    async def node_update_version(self, version: str):
+        input = {"version": version}
+        timestamp, signature = self.signer.sign(input)
+        resp = await self.client.post(
+            f"/v1/node/{self.node_address}/version",
+            params={"version": version, "timestamp": timestamp, "signature": signature},
+        )
+        resp = _process_resp(resp, "nodeUpdateNodeVersion")
+
+    """ balance related """
+
+    async def get_balance(self) -> int:
+        resp = await self.client.get(
+            f"/v1/balance/{self.node_address}",
+            params={},
+        )
+        resp = _process_resp(resp, "getBalance")
+        content = resp.json()
+        balance = content["data"]
+        return balance
+    
+    async def transfer(self, amount: int, to_addr: str):
+        input = {"value": amount, "to": to_addr}
+        timestamp, signature = self.signer.sign(input)
+        resp = await self.client.post(
+            f"/v1/balance/{self.node_address}/transfer",
+            params={"value": amount, "to": to_addr, "timestamp": timestamp, "signature": signature},
+        )
+        resp = _process_resp(resp, "transfer")

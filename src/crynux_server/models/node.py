@@ -29,6 +29,17 @@ class ChainNodeInfo(BaseModel):
     local_model_ids: List[str]
 
 
+class NodeInfo(BaseModel):
+    address: str
+    gpu_name: str
+    gpu_vram: int
+    in_use_model_ids: List[str]
+    model_ids: List[str]
+    qos_score: int
+    status: ChainNodeStatus
+    version: str
+
+
 class ChainNetworkNodeInfo(BaseModel):
     node_address: str
     gpu_model: str
