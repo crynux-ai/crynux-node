@@ -1,0 +1,64 @@
+name: Release the Docker image for a specific blockchain
+
+on:
+  workflow_call:
+    inputs:
+      blockchain:
+        required: true
+        type: string
+
+jobs:
+  build-the-docker-image:
+    name: Build the release Docker image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+        - name: Free Disk Space (Ubuntu)
+          uses: jlumbroso/free-disk-space@v1.2.0
+          with:
+            tool-cache: false
+            android: true
+            dotnet: true
+            haskell: true
+            large-packages: false
+            swap-storage: true
+
+        - name: Checkout repository
+          uses: actions/checkout@v3
+          with:
+            submodules: 'true'
+
+        - name: Set the config files
+          run: |
+            chmod +x build/set-config-files.sh
+            ./build/set-config-files.sh ${{ inputs.blockchain }}
+
+        - name: Log in to the Container registry
+          uses: docker/login-action@65b78e6e13532edd9afa3aa52ac7964289d1a9c1
+          with:
+            registry: ${{ env.REGISTRY }}
+            username: ${{ github.actor }}
+            password: ${{ secrets.GITHUB_TOKEN }}
+
+        - name: Extract metadata (tags, labels) for Docker
+          id: meta
+          uses: docker/metadata-action@9ec57ed1fcdbf14dcef7dfbe97b2010124a938b7
+          with:
+            images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+            flavor: |
+              suffix=-${{ inputs.blockchain }},latest=false
+            tags: |
+              type=semver,pattern={{version}}
+              type=semver,pattern={{major}}.{{minor}}
+
+        - name: Build and push Docker image
+          uses: docker/build-push-action@f2a1d5e99d037542a71f64918e516c093c6f3fc4
+          with:
+            context: .
+            push: true
+            file: build/docker/Dockerfile
+            tags: ${{ steps.meta.outputs.tags }}
+            labels: ${{ steps.meta.outputs.labels }}

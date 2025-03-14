@@ -1,0 +1,75 @@
+name: Release the Mac DMG for a specific blockchain
+
+on:
+  workflow_call:
+    inputs:
+      blockchain:
+        required: true
+        type: string
+      release_version:
+        required: true
+        type: string
+
+jobs:
+  build-the-mac-dmg:
+    name: Build the release Mac DMG
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Setup Go 1.21.x
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21.x'
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18.x'
+
+      - name: Set the config files
+        run: |
+          chmod +x build/set-config-files.sh
+          ./build/set-config-files.sh ${{ inputs.blockchain }}
+
+      - name: Install the Apple certificate
+        env:
+          BUILD_CERTIFICATE_BASE64: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
+          P12_PASSWORD: ${{ secrets.P12_PASSWORD }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+        run: |
+          # create variables
+          CERTIFICATE_PATH=$RUNNER_TEMP/build_certificate.p12
+          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+
+          # import certificate from secrets
+          echo -n "$BUILD_CERTIFICATE_BASE64" | base64 --decode -o $CERTIFICATE_PATH
+
+          # create temporary keychain
+          security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+          security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+
+          # import certificate to keychain
+          security import $CERTIFICATE_PATH -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k $KEYCHAIN_PATH
+          security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+          security list-keychain -d user -s $KEYCHAIN_PATH
+
+      - name: Build
+        run: ./build/macos/build.sh -s "${{ secrets.APPLE_DEVELOPER_IDENTITY }}" -u "${{ secrets.APPLE_USER }}" -p "${{ secrets.APPLE_PASS }}" -t "${{ secrets.APPLE_TEAM_ID }}"
+
+      - name: Upload the artifact
+        uses: actions/upload-artifact@v4
+        with:
+          if-no-files-found: error
+          name: mac-app-${{ inputs.release_version }}-${{ inputs.blockchain }}
+          path: build/crynux_node/dist/crynux-node-helium-v${{ inputs.release_version }}-${{ inputs.blockchain }}-mac-arm64-signed.dmg

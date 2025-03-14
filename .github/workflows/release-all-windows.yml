@@ -1,0 +1,56 @@
+name: Release the Windows binary for a specific blockchain
+
+on:
+  workflow_call:
+    inputs:
+      blockchain:
+        required: true
+        type: string
+      release_version:
+        required: true
+        type: string
+
+jobs:
+  build-the-windows-binary:
+    name: Build the release Windows binary
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Setup Go 1.21.x
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21.x'
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18.x'
+
+      - name: Set the config files
+        run: |
+          chmod +x build/set-config-files.sh
+          ./build/set-config-files.sh ${{ inputs.blockchain }}
+
+      - name: Run the build script
+        run: ./build/windows/build.ps1
+
+      - id: gdrive
+        name: Upload to gdrive
+        uses: hoatruongdev09/google-drive-file-upload-github-action@v1.1
+        with:
+          service-account-json: ${{ secrets.GOOGLE_DRIVE_GSA_CREDENTIALS_BASE64 }}
+          file-path: "build/crynux_node/dist/crynux-node-helium-v${{ inputs.release_version }}-${{ inputs.blockchain }}-windows-x64.zip"
+          upload-name: "crynux-node-helium-v${{ inputs.release_version }}-${{ inputs.blockchain }}-windows-x64.zip"
+          upload-to-folder-id: ${{ secrets.GOOGLE_DRIVE_FOLDER_ID }}
+    outputs:
+      google-drive-link-content: ${{ steps.gdrive.outputs.web-content-link }}
+      google-drive-link-view: ${{ steps.gdrive.outputs.web-view-link }}
