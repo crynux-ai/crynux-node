@@ -23,6 +23,7 @@ jobs:
           - near
     name: Build the Docker image for ${{ matrix.blockchain }}
     uses: ./.github/workflows/release-all-docker.yml
+    secrets: inherit
     with:
       blockchain: ${{ matrix.blockchain }}
 
@@ -34,6 +35,7 @@ jobs:
           - near
     name: Build the Mac DMG for ${{ matrix.blockchain }}
     uses: ./.github/workflows/release-all-mac.yml
+    secrets: inherit
     with:
       blockchain: ${{ matrix.blockchain }}
       release_version: ${{ env.RELEASE_VERSION }}
@@ -46,6 +48,7 @@ jobs:
           - near
     name: Build the Mac DMG for ${{ matrix.blockchain }}
     uses: ./.github/workflows/release-all-windows.yml
+    secrets: inherit
     with:
       blockchain: ${{ matrix.blockchain }}
       release_version: ${{ env.RELEASE_VERSION }}
