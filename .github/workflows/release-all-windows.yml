@@ -51,6 +51,17 @@ jobs:
           file-path: "build/crynux_node/dist/crynux-node-helium-v${{ inputs.release_version }}-${{ inputs.blockchain }}-windows-x64.zip"
           upload-name: "crynux-node-helium-v${{ inputs.release_version }}-${{ inputs.blockchain }}-windows-x64.zip"
           upload-to-folder-id: ${{ secrets.GOOGLE_DRIVE_FOLDER_ID }}
-    outputs:
-      google-drive-link-content: ${{ steps.gdrive.outputs.web-content-link }}
-      google-drive-link-view: ${{ steps.gdrive.outputs.web-view-link }}
+
+      - name: Write links to file
+        shell: pwsh
+        run: |
+          New-Item -Path "gdrive_links" -ItemType Directory -Force
+          Set-Content -Path "gdrive_links/download_link.txt" -Value "${{ steps.gdrive.outputs.web-content-link }}"
+          Set-Content -Path "gdrive_links/view_link.txt" -Value "${{ steps.gdrive.outputs.web-view-link }}"
+
+      - name: Upload links as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: gdrive-links-${{ inputs.blockchain }}
+          path: gdrive_links/
+          retention-days: 1

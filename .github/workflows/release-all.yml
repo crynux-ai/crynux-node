@@ -46,7 +46,7 @@ jobs:
         blockchain:
           - dymension
           - near
-    name: Build the Mac DMG for ${{ matrix.blockchain }}
+    name: Build the Windows binary for ${{ matrix.blockchain }}
     uses: ./.github/workflows/release-all-windows.yml
     secrets: inherit
     with:
@@ -59,22 +59,40 @@ jobs:
       - build-the-windows-binary
       - build-the-mac-dmgs
       - build-the-docker-images
-    env:
-      WINDOWS_DOWNLOAD_LINK_DYMENSION: ${{ needs.build-the-windows-binary.outputs.google-drive-link-content-dymension }}
-      WINDOWS_PREVIEW_LINK_DYMENSION: ${{ needs.build-the-windows-binary.outputs.google-drive-link-view-dymension }}
-      WINDOWS_DOWNLOAD_LINK_NEAR: ${{ needs.build-the-windows-binary.outputs.google-drive-link-content-near }}
-      WINDOWS_PREVIEW_LINK_NEAR: ${{ needs.build-the-windows-binary.outputs.google-drive-link-view-near }}
-
     permissions:
         contents: write
     steps:
-      - name: Print the Google Drive links
-        run: |
-          echo "windows download link: ${{ env.WINDOWS_DOWNLOAD_LINK }}"
-          echo "windows preview link: ${{ env.WINDOWS_PREVIEW_LINK }}"
-
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Download Google Drive link artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: gdrive-links-*
+
+      - name: Read Google Drive links
+        id: read_links
+        run: |
+          # Read Dymension links
+          WINDOWS_DOWNLOAD_LINK_DYMENSION=$(cat gdrive-links-dymension/download_link.txt)
+          WINDOWS_PREVIEW_LINK_DYMENSION=$(cat gdrive-links-dymension/view_link.txt)
+
+          # Read Near links
+          WINDOWS_DOWNLOAD_LINK_NEAR=$(cat gdrive-links-near/download_link.txt)
+          WINDOWS_PREVIEW_LINK_NEAR=$(cat gdrive-links-near/view_link.txt)
+
+          # Set outputs
+          echo "WINDOWS_DOWNLOAD_LINK_DYMENSION=${WINDOWS_DOWNLOAD_LINK_DYMENSION}" >> $GITHUB_ENV
+          echo "WINDOWS_PREVIEW_LINK_DYMENSION=${WINDOWS_PREVIEW_LINK_DYMENSION}" >> $GITHUB_ENV
+          echo "WINDOWS_DOWNLOAD_LINK_NEAR=${WINDOWS_DOWNLOAD_LINK_NEAR}" >> $GITHUB_ENV
+          echo "WINDOWS_PREVIEW_LINK_NEAR=${WINDOWS_PREVIEW_LINK_NEAR}" >> $GITHUB_ENV
+
+      - name: Print the Google Drive links
+        run: |
+          echo "Windows download link (Dymension): ${{ env.WINDOWS_DOWNLOAD_LINK_DYMENSION }}"
+          echo "Windows preview link (Dymension): ${{ env.WINDOWS_PREVIEW_LINK_DYMENSION }}"
+          echo "Windows download link (Near): ${{ env.WINDOWS_DOWNLOAD_LINK_NEAR }}"
+          echo "Windows preview link (Near): ${{ env.WINDOWS_PREVIEW_LINK_NEAR }}"
 
       - name: Download Mac DMGs
         uses: actions/download-artifact@v4
@@ -87,9 +105,14 @@ jobs:
 
       - name: Generate the changelog
         run: |
-          windows_link_escaped=$(printf '%s\n' "${{ env.WINDOWS_DOWNLOAD_LINK }}" | sed -e 's/[\/&]/\\&/g')
+          # Escape the links for sed
+          windows_dymension_link_escaped=$(printf '%s\n' "${{ env.WINDOWS_DOWNLOAD_LINK_DYMENSION }}" | sed -e 's/[\/&]/\\&/g')
+          windows_ near_link_escaped=$(printf '%s\n' "${{ env.WINDOWS_DOWNLOAD_LINK_NEAR }}" | sed -e 's/[\/&]/\\&/g')
+
+          # Replace placeholders in the changelog template
           sed -i "s/RELEASE_VERSION/${{ env.RELEASE_VERSION }}/g" build/changelog-template.md
-          sed -i "s/WINDOWS_LINK/$windows_link_escaped/g" build/changelog-template.md
+          sed -i "s/WINDOWS_LINK_DYMENSION/$windows_dymension_link_escaped/g" build/changelog-template.md
+          sed -i "s/WINDOWS_LINK_NEAR/$windows_near_link_escaped/g" build/changelog-template.md
 
       - id: release
         name: Release
@@ -101,8 +124,10 @@ jobs:
             crynux-node-helium-v${{ env.RELEASE_VERSION }}-dymension-mac-arm64-signed.dmg
             crynux-node-helium-v${{ env.RELEASE_VERSION }}-near-mac-arm64-signed.dmg
     outputs:
-      windows-download-link: ${{ env.WINDOWS_DOWNLOAD_LINK }}
-      windows-preview-link: ${{ env.WINDOWS_PREVIEW_LINK }}
+      windows-download-link-dymension: ${{ env.WINDOWS_DOWNLOAD_LINK_DYMENSION }}
+      windows-preview-link-dymension: ${{ env.WINDOWS_PREVIEW_LINK_DYMENSION }}
+      windows-download-link-near: ${{ env.WINDOWS_DOWNLOAD_LINK_NEAR }}
+      windows-preview-link-near: ${{ env.WINDOWS_PREVIEW_LINK_NEAR }}
       mac-link-dymension: ${{ fromJSON(steps.release.outputs.assets)[0].browser_download_url }}
       mac-link-near: ${{ fromJSON(steps.release.outputs.assets)[1].browser_download_url }}
 
@@ -110,11 +135,6 @@ jobs:
     runs-on: ubuntu-22.04
     needs:
       - publish-release
-    env:
-      WINDOWS_DOWNLOAD_LINK: ${{ needs.publish-release.outputs.windows-download-link }}
-      WINDOWS_PREVIEW_LINK: ${{ needs.publish-release.outputs.windows-preview-link }}
-      MAC_LINK_DYMENSION: ${{ needs.publish-release.outputs.mac-link-dymension }}
-      MAC_LINK_NEAR: ${{ needs.publish-release.outputs.mac-link-near }}
     steps:
       - name: Dispatch event to the documentation repository
         uses: peter-evans/repository-dispatch@v3
@@ -122,4 +142,13 @@ jobs:
           token: ${{ secrets.PAT }}
           repository: ${{ github.repository_owner }}/documentation
           event-type: node-released
-          client-payload: '{"windows-download-link": "${{ env.WINDOWS_DOWNLOAD_LINK }}", "windows-preview-link": "${{ env.WINDOWS_PREVIEW_LINK }}", "mac-link-dymension": "${{ env.MAC_LINK_DYMENSION }}", "mac-link-near": "${{ env.MAC_LINK_NEAR }}", "release-version": "${{ env.RELEASE_VERSION }}"}'
+          client-payload: |
+            {
+              "windows-download-link-dymension": "${{ needs.publish-release.outputs.windows-download-link-dymension }}",
+              "windows-preview-link-dymension": "${{ needs.publish-release.outputs.windows-preview-link-dymension }}",
+              "windows-download-link-near": "${{ needs.publish-release.outputs.windows-download-link-near }}",
+              "windows-preview-link-near": "${{ needs.publish-release.outputs.windows-preview-link-near }}",
+              "mac-link-dymension": "${{ needs.publish-release.outputs.mac-link-dymension }}",
+              "mac-link-near": "${{ needs.publish-release.outputs.mac-link-near }}",
+              "release-version": "${{ env.RELEASE_VERSION }}"
+            }
