@@ -8,6 +8,7 @@ from tenacity import retry, stop_after_attempt, stop_never, wait_fixed
 
 from crynux_server.contracts import Contracts
 from crynux_server.models import InferenceTaskStatus, DownloadTaskStatus, TaskType, DownloadTaskState
+from crynux_server.relay.abc import Relay
 
 from .state_cache import InferenceTaskStateCache, DownloadTaskStateCache
 from .task_runner import InferenceTaskRunner, DownloadTaskRunner
@@ -19,18 +20,20 @@ _logger = logging.getLogger(__name__)
 def _is_task_id_commitment_empty(task_id_commitment: bytes):
     return all(v == 0 for v in task_id_commitment)
 
-
+# Manage all tasks distributed to the node
 class TaskSystem(object):
     def __init__(
         self,
         inference_state_cache: InferenceTaskStateCache,
         download_state_cache: DownloadTaskStateCache,
         contracts: Contracts,
+        relay: Relay,
         retry: bool = True,
     ) -> None:
         self._inference_state_cache = inference_state_cache
         self._download_state_cache = download_state_cache
         self._contracts = contracts
+        self._relay = relay
         self._retry = retry
 
         self._tg: Optional[TaskGroup] = None
@@ -40,6 +43,7 @@ class TaskSystem(object):
 
         self._task_queue = asyncio.Queue()
 
+    # Run inference task with the given task_id_commitment
     async def _run_inference_task(self, task_id_commitment: bytes):
         try:
             runner = self._inference_runners[task_id_commitment]
@@ -62,8 +66,10 @@ class TaskSystem(object):
             await _run_task_with_retry()
 
         finally:
+            # When task is finished, remove it from the task list
             del self._inference_runners[task_id_commitment]
 
+    # Run download task with the given task_id
     async def _run_download_task(self, task_id: str):
         try:
             runner = self._download_runners[task_id]
@@ -86,13 +92,12 @@ class TaskSystem(object):
             await _run_task_with_retry()
 
         finally:
+            # When task is finished, remove it from the task list
             del self._download_runners[task_id]
 
 
     async def _get_node_task(self):
-        return await self._contracts.task_contract.get_node_task(
-            self._contracts.account
-        )
+        return await self._relay.node_get_current_task()
 
     async def _recover_inference_task(self, tg: TaskGroup):
         running_status = [
@@ -136,12 +141,14 @@ class TaskSystem(object):
                 task_id=state.task_id,
                 state=state,
                 state_cache=self._download_state_cache,
-                contracts=self._contracts
+                contracts=self._contracts,
+                relay=self._relay
             )
             self._download_runners[state.task_id] = runner
             tg.start_soon(self._run_download_task, state.task_id)
             _logger.debug(f"Rerun download task {state.task_id}")
 
+    # Create inference task on node with the given task_id_commitment
     async def create_inference_task(self, task_id_commitment: bytes):
         if not _is_task_id_commitment_empty(task_id_commitment) and task_id_commitment not in self._inference_runners:
             runner = InferenceTaskRunner(
@@ -152,6 +159,7 @@ class TaskSystem(object):
             self._inference_runners[task_id_commitment] = runner
             await self._task_queue.put(("inference", task_id_commitment))
 
+    # Create download task with the given task_id
     async def create_download_task(self, task_id: str, task_type: TaskType, model_id: str):
         if task_id not in self._download_runners:
             state = DownloadTaskState(
@@ -164,7 +172,8 @@ class TaskSystem(object):
                 task_id=task_id,
                 state=state,
                 state_cache=self._download_state_cache,
-                contracts=self._contracts
+                contracts=self._contracts,
+                relay=self._relay
             )
             self._download_runners[task_id] = runner
             await self._task_queue.put(("download", task_id))

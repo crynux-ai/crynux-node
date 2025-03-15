@@ -23,6 +23,7 @@ from crynux_server.contracts import (Contracts, TxRevertedError, TxWaiter,
 from crynux_server.download_model_cache import (DownloadModelCache,
                                                 get_download_model_cache)
 from crynux_server.relay import Relay, get_relay
+from crynux_server.relay.exceptions import RelayError
 from crynux_server.worker_manager import TaskInvalid
 
 from .state_cache import (DownloadTaskStateCache, InferenceTaskStateCache,
@@ -36,7 +37,7 @@ _logger = logging.getLogger(__name__)
 OkCallback = Callable[[bool], Awaitable[None]]
 ErrCallback = Callable[[Exception], Awaitable[None]]
 
-
+# Manage the lifestyle of one task
 class InferenceTaskRunnerBase(ABC):
     @abstractmethod
     def __init__(
@@ -81,6 +82,8 @@ class InferenceTaskRunnerBase(ABC):
     async def sync_state(self):
         need_dump = False
         try:
+            # If task state is not set, load it from cache
+            # If task does not exist in cache, create a new state
             if self._state is None:
                 if await self.cache.has(self.task_id_commitment):
                     state = await self.cache.load(self.task_id_commitment)
@@ -95,6 +98,7 @@ class InferenceTaskRunnerBase(ABC):
                     self.state = state
                     need_dump = True
 
+            # Get task info and update local record
             task = await self.get_task()
             start_timestamp = task.start_timestamp
             if start_timestamp == 0:
@@ -131,6 +135,7 @@ class InferenceTaskRunnerBase(ABC):
     @abstractmethod
     async def upload_result(self): ...
 
+    # Task in these status is already finished, therefore should stop the worker's process
     def should_stop(self):
         return self.state.status in [
             models.InferenceTaskStatus.EndAborted,
@@ -141,6 +146,10 @@ class InferenceTaskRunnerBase(ABC):
             models.InferenceTaskStatus.ErrorReported,
         ]
 
+    # Receive task status from task_status_producer
+    # If task is started and not executed, execute it
+    # If task is validated or group validated, upload result
+    # Ignore task in other status
     async def task_status_consumer(
         self, status_receiver: MemoryObjectReceiveStream[models.InferenceTaskStatus]
     ):
@@ -162,6 +171,8 @@ class InferenceTaskRunnerBase(ABC):
                 ):
                     await self.upload_result()
 
+    # Send task status when it changes
+    # task_status_consumer will receive and handle the status
     async def task_status_producer(
         self,
         status_sender: MemoryObjectSendStream[models.InferenceTaskStatus],
@@ -185,6 +196,7 @@ class InferenceTaskRunnerBase(ABC):
             if delay <= 0:
                 raise TimeoutError
 
+            # Prepare task status stream
             status_sender, status_receiver = create_memory_object_stream(
                 10, item_type=models.InferenceTaskStatus
             )
@@ -228,60 +240,31 @@ class InferenceTaskRunner(InferenceTaskRunnerBase):
 
         self._cleaned = False
 
-    async def _call_task_contract_method(self, method: str, *args, **kwargs):
-        if (
-            len(self.state.waiting_tx_method) == 0
-            and len(self.state.waiting_tx_hash) == 0
-        ):
-            if method == "reportTaskError":
-                func = self.contracts.task_contract.report_task_error
-            elif method == "submitTaskScore":
-                func = self.contracts.task_contract.submit_task_score
-            elif method == "abortTask":
-                func = self.contracts.task_contract.abort_task
-            else:
-                raise ValueError(f"Unsupported task contract method: {method}")
-            waiter = await func(*args, **kwargs)
-        elif (
-            self.state.waiting_tx_method == method
-            and len(self.state.waiting_tx_hash) > 0
-        ):
-            waiter = TxWaiter(
-                w3_pool=self.contracts._w3_pool,
-                method=self.state.waiting_tx_method,
-                tx_hash=HexBytes(self.state.waiting_tx_hash),
-            )
-        else:
-            raise ValueError(
-                f"Error state waiting tx method: {self.state.waiting_tx_method}, "
-                f"waiting tx hash: {self.state.waiting_tx_hash} in report error"
-            )
-
-        await waiter.wait()
-        async with self.state_context():
-            self.state.waiting_tx_hash = b""
-            self.state.waiting_tx_method = ""
-
+    # Report task error(ParametersValidationFailed)
     async def _report_error(self):
         async with self.state_context():
             self.state.status = models.InferenceTaskStatus.ErrorReported
 
         try:
-            await self._call_task_contract_method(
-                "reportTaskError",
+            await self.relay.report_task_error(
                 task_id_commitment=self.task_id_commitment,
-                error=models.TaskError.ParametersValidationFailed,
+                task_error=models.TaskError.ParametersValidationFailed
             )
             _logger.info(
-                f"Task {self.task_id_commitment.hex()} error. Report the task error to contract."
+                f"Task {self.task_id_commitment.hex()} error. Report the task error."
             )
-        except TxRevertedError as e:
+        except RelayError as e:
             _logger.error(
-                f"Report error of task {self.task_id_commitment.hex()} failed due to {e.reason}"
+                f"Report error of task {self.task_id_commitment.hex()} failed due to {e.message}"
             )
 
+    # Get task info
     async def get_task(self):
-        task = await self.contracts.task_contract.get_task(self.task_id_commitment)
+        try:
+            task = await self.relay.get_task(self.task_id_commitment)
+        except RelayError as e:
+            _logger.error(f"Get task {self.task_id_commitment.hex()} failed due to {e.message}")
+            raise ValueError("Task not found")
         # task not exist
         if task.task_id_commitment != self.task_id_commitment:
             _logger.error(
@@ -289,22 +272,20 @@ class InferenceTaskRunner(InferenceTaskRunnerBase):
             )
             raise ValueError("Task not found")
         return task
-
+        
     async def cancel_task(self):
         try:
-            waiter = await self.contracts.task_contract.abort_task(
-                self.task_id_commitment, models.TaskAbortReason.Timeout
+            await self.relay.abort_task(
+                task_id_commitment=self.task_id_commitment,
+                abort_reason=models.TaskAbortReason.Timeout
             )
-            await waiter.wait()
             _logger.info(
                 f"Task {self.task_id_commitment.hex()} timeout. Cancel the task."
             )
-        except TxRevertedError as e:
-            if "Task not found" not in e.reason and "Illegal node status" not in e.reason:
-                _logger.error(
-                    f"Cancel task {self.task_id_commitment.hex()} failed due to {e.reason}"
-                )
-                raise
+        except RelayError as e:
+            _logger.error(
+                f"Cancel task {self.task_id_commitment.hex()} failed due to {e.message}"
+            )
         except get_cancelled_exc_class():
             raise
         except Exception as e:
@@ -373,9 +354,10 @@ class InferenceTaskRunner(InferenceTaskRunnerBase):
                     self.state.score = b"".join(hashes)
                     self.state.checkpoint = checkpoint
             except TaskInvalid as e:
+                # If the task is invalid, report the error
                 _logger.exception(e)
                 _logger.error(
-                    f"Task {self.task_id_commitment.hex()} error, report error to the chain."
+                    f"Task {self.task_id_commitment.hex()} error, report error."
                 )
                 with fail_after(delay=60, shield=True):
                     await self._report_error()
@@ -383,13 +365,13 @@ class InferenceTaskRunner(InferenceTaskRunnerBase):
         def _illegal_task_state(exc: BaseException):
             return re.search(r"Illegal previous task state", str(exc)) is not None
 
+        # Submit task score for validation
         async def submit_task_score():
             for _ in range(4):
                 try:
-                    await self._call_task_contract_method(
-                        "submitTaskScore",
+                    await self.relay.submit_task_score(
                         task_id_commitment=self.task_id_commitment,
-                        score=self.state.score,
+                        score=self.state.score
                     )
                     _logger.info("Submiting task score success")
                     return
@@ -412,6 +394,7 @@ class InferenceTaskRunner(InferenceTaskRunnerBase):
 
         await submit_task_score()
 
+    # Upload full task result to relay
     async def upload_result(self) -> None:
         _logger.info(f"Task {self.task_id_commitment.hex()} start uploading results")
         await self.relay.upload_task_result(
@@ -419,6 +402,7 @@ class InferenceTaskRunner(InferenceTaskRunnerBase):
         )
         _logger.info(f"Task {self.task_id_commitment.hex()} success")
 
+    # Clean up task files when task is finished
     async def cleanup(self):
         if not self._cleaned:
 
@@ -435,6 +419,7 @@ class InferenceTaskRunner(InferenceTaskRunnerBase):
             self._cleaned = True
 
 
+# Mock InferenceTaskRunner for testing
 class MockInferenceTaskRunner(InferenceTaskRunnerBase):
     def __init__(
         self,
@@ -501,6 +486,7 @@ class DownloadTaskRunner(object):
         state: models.DownloadTaskState,
         state_cache: Optional[DownloadTaskStateCache] = None,
         contracts: Optional[Contracts] = None,
+        relay: Optional[Relay] = None,
         download_model_cache: Optional[DownloadModelCache] = None,
     ):
         self.task_id = task_id
@@ -510,6 +496,9 @@ class DownloadTaskRunner(object):
         if contracts is None:
             contracts = get_contracts()
         self.contracts = contracts
+        if relay is None:
+            relay = get_relay()
+        self.relay = relay
         if download_model_cache is None:
             download_model_cache = get_download_model_cache()
         self.download_model_cache = download_model_cache
@@ -544,10 +533,7 @@ class DownloadTaskRunner(object):
             _logger.info(f"Download model {self._state.model_id} successfully")
 
         if self._state.status == models.DownloadTaskStatus.Executed:
-            waiter = await self.contracts.node_contract.report_model_downloaded(
-                self._state.model_id
-            )
-            await waiter.wait()
+            await self.relay.node_report_model_downloaded(self._state.model_id)
             _logger.info(f"report model {self._state.model_id} is downloaded")
             async with self.state_context():
                 self._state.status = models.DownloadTaskStatus.Success
