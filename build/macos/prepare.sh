@@ -70,7 +70,6 @@ check_or_install create-dmg create-dmg
 mkdir "$WORK_DIR/webui"
 
 cd "$GIT_DIR/src/webui"
-cp src/config.example.json  src/config.json
 
 yarn --immutable && yarn build
 cp -R "$GIT_DIR/src/webui/dist" "$WORK_DIR/webui/dist"
@@ -123,5 +122,5 @@ pip install .
 cd $WORK_DIR
 
 cp -R $GIT_DIR/build/data .
-cp $GIT_DIR/build/config/config.yml.package_example data/config/config.yml
+cp $GIT_DIR/build/macos/config.yml.example data/config/config.yml
 cp $GIT_DIR/build/macos/* .

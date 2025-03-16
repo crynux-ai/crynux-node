@@ -30,7 +30,6 @@ New-Item -ItemType Directory -Path $RELEASE_DIR
 
 # 1. Build the WebUI
 Set-Location "$WORK_DIR/src/webui"
-Copy-Item src/config.example.json src/config.json
 
 if (Test-Path -Path "dist") {
     Remove-Item -Recurse "dist"
@@ -98,6 +97,6 @@ Set-Location $RELEASE_DIR
 New-Item -ItemType Directory -Path config
 Copy-Item -Recurse "$WORK_DIR/build/data" "data"
 Copy-Item $WORK_DIR/build/windows/* .
-Copy-Item $WORK_DIR/build/config/config.yml.package_example "data/config/config.yml"
+Copy-Item $WORK_DIR/build/windows/config.yml.example "data/config/config.yml"
 
 Set-Location $WORK_DIR

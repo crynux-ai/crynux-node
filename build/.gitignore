@@ -1,12 +1,10 @@
 *
 crynux_node/
-!config/*example
 !data/
-!macos/
-!windows/
-!linux-server/
+!macos/*
+!windows/*
+!linux-server/*
 !docker/*
-!Dockerfile
 !bump-version.ps1
 !bump-version.sh
 !changelog-template.md
