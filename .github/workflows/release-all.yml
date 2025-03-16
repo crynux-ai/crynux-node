@@ -40,7 +40,7 @@ jobs:
       blockchain: ${{ matrix.blockchain }}
       release_version: ${{ env.RELEASE_VERSION }}
 
-  build-the-windows-binary:
+  build-the-windows-binaries:
     strategy:
       matrix:
         blockchain:
@@ -56,7 +56,7 @@ jobs:
   publish-release:
     runs-on: ubuntu-22.04
     needs:
-      - build-the-windows-binary
+      - build-the-windows-binaries
       - build-the-mac-dmgs
       - build-the-docker-images
     permissions:
@@ -107,7 +107,7 @@ jobs:
         run: |
           # Escape the links for sed
           windows_dymension_link_escaped=$(printf '%s\n' "${{ env.WINDOWS_DOWNLOAD_LINK_DYMENSION }}" | sed -e 's/[\/&]/\\&/g')
-          windows_ near_link_escaped=$(printf '%s\n' "${{ env.WINDOWS_DOWNLOAD_LINK_NEAR }}" | sed -e 's/[\/&]/\\&/g')
+          windows_near_link_escaped=$(printf '%s\n' "${{ env.WINDOWS_DOWNLOAD_LINK_NEAR }}" | sed -e 's/[\/&]/\\&/g')
 
           # Replace placeholders in the changelog template
           sed -i "s/RELEASE_VERSION/${{ env.RELEASE_VERSION }}/g" build/changelog-template.md
