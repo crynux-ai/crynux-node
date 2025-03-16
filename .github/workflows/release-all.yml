@@ -152,3 +152,18 @@ jobs:
               "mac-link-near": "${{ needs.publish-release.outputs.mac-link-near }}",
               "release-version": "${{ env.RELEASE_VERSION }}"
             }
+  update-docker-compose-project:
+    runs-on: ubuntu-22.04
+    needs:
+      - publish-release
+    steps:
+      - name: Dispatch event to the docker-compose repository
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          token: ${{ secrets.PAT }}
+          repository: ${{ github.repository_owner }}/crynux-node-docker-compose
+          event-type: node-released
+          client-payload: |
+            {
+              "release-version": "${{ env.RELEASE_VERSION }}"
+            }
