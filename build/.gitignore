@@ -9,4 +9,5 @@ crynux_node/
 !bump-version.sh
 !changelog-template.md
 !set-config-files.sh
+!set-config-files.ps1
 !*/
