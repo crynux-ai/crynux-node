@@ -4,7 +4,6 @@ import sqlalchemy as sa
 from sqlalchemy.orm import Mapped, mapped_column
 
 from crynux_server.models import (
-    TaskKind,
     InferenceTaskStatus,
     TaskType,
     DownloadTaskStatus,

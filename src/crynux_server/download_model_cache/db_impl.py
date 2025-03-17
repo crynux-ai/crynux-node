@@ -5,13 +5,13 @@ import sqlalchemy as sa
 
 import crynux_server.db.models as db_models
 from crynux_server import db
-from crynux_server.models import DownloadModel, ModelConfig
+from crynux_server.models import DownloadedModel, ModelConfig
 
 from .abc import DownloadModelCache
 
 
 class DbDownloadModelCache(DownloadModelCache):
-    async def save(self, model: DownloadModel):
+    async def save(self, model: DownloadedModel):
         async with db.session_scope() as sess:
             model_id = model.model.to_model_id()
             model_id_hash = sha256(model_id.encode("utf-8")).hexdigest()
@@ -31,7 +31,7 @@ class DbDownloadModelCache(DownloadModelCache):
                 sess.add(m)
                 await sess.commit()
 
-    async def load_all(self) -> List[DownloadModel]:
+    async def load_all(self) -> List[DownloadedModel]:
         limit = 100
         offset = 0
 
@@ -51,7 +51,7 @@ class DbDownloadModelCache(DownloadModelCache):
                 offset += len(models)
 
         return [
-            DownloadModel(
+            DownloadedModel(
                 task_type=model.task_type,
                 model=ModelConfig(
                     id=model.model_name,

@@ -11,16 +11,14 @@ from anyio.abc import TaskGroup, TaskStatus
 from tenacity import (AsyncRetrying, before_sleep_log, stop_after_attempt,
                       stop_never, wait_fixed)
 from web3 import Web3
-from web3.types import EventData
 
 from crynux_server import models
 from crynux_server.config import Config, wait_privkey
 from crynux_server.contracts import Contracts, set_contracts
-from crynux_server.models.chain_event import ChainEvent, ChainEventType
 from crynux_server.relay import Relay, WebRelay, set_relay
 from crynux_server.task import (DbDownloadTaskStateCache,
                                 DbInferenceTaskStateCache,
-                                DownloadTaskStateCache, InferenceTaskRunner,
+                                DownloadTaskStateCache,
                                 InferenceTaskStateCache, TaskSystem,
                                 set_download_task_state_cache,
                                 set_inference_task_state_cache,
@@ -68,12 +66,10 @@ def _make_relay(privkey: str, relay_url: str) -> Relay:
 
 
 async def _make_watcher(
-    base_url: str,
     relay: Relay,
-    fetch_interval: int = 5,
+    fetch_interval: int = 1,
 ) -> EventWatcher:
-    now = await relay.now()
-    watcher = EventWatcher(base_url=base_url, relay=relay, last_fetch_time=now, fetch_interval=fetch_interval)
+    watcher = EventWatcher(relay=relay, fetch_interval=fetch_interval)
 
     set_watcher(watcher)
     return watcher
@@ -226,7 +222,7 @@ class NodeManager(object):
             )
 
         if self._watcher is None:
-            self._watcher = await _make_watcher(base_url=self.config.relay_url, relay=self._relay)
+            self._watcher = await _make_watcher(relay=self._relay)
 
         _logger.info("Node manager components initializing complete.")
 
@@ -297,7 +293,7 @@ class NodeManager(object):
                     status=models.NodeStatus.Init, init_message=msg
                 )
                 await self.download_model_cache.save(
-                    models.DownloadModel(
+                    models.DownloadedModel(
                         task_type=task_input.task.task_type,
                         model=task_input.task.model
                     )
@@ -415,47 +411,46 @@ class NodeManager(object):
 
         account = self._relay.node_address
 
-        async def _node_kicked_out(chain_event: ChainEvent):
-            address = chain_event.node_address
+        async def _node_kicked_out(event: models.Event):
+            assert isinstance(event, models.NodeKickedOut)
+            address = event.node_address
             if address == account:
                 _logger.info("Node is kicked out")
                 await self.state_cache.set_node_state(
                     status=models.NodeStatus.Stopped, message="Node is kicked out"
                 )
 
-        self._watcher.add_event_filter(ChainEventType.NodeKickedOut, callback=_node_kicked_out)
+        self._watcher.add_event_filter("NodeKickedOut", callback=_node_kicked_out)
 
-        async def _node_slashed(chain_event: ChainEvent):
-            address = chain_event.node_address
+        async def _node_slashed(event: models.Event):
+            assert isinstance(event, models.NodeSlashed)
+            address = event.node_address
             if address == account:
                 _logger.info("Node is slashed")
                 await self.state_cache.set_node_state(
                     status=models.NodeStatus.Stopped, message="Node is slashed"
                 )
 
-        self._watcher.add_event_filter(ChainEventType.NodeSlashed, callback=_node_slashed)
+        self._watcher.add_event_filter("NodeSlashed", callback=_node_slashed)
 
-        async def _inference_task_started(chain_event: ChainEvent):
+        async def _inference_task_started(event: models.Event):
+            assert isinstance(event, models.TaskStarted)
             assert self._task_system is not None
-            task_id_commitment = chain_event.task_id_commitment
-            selected_node = chain_event.node_address
-            if selected_node == account:
-                await self._task_system.create_inference_task(task_id_commitment)
 
-        self._watcher.add_event_filter(ChainEventType.TaskStarted, callback=_inference_task_started)
+            await self._task_system.create_inference_task(event.task_id_commitment)
 
-        async def _download_task_started(chain_event: ChainEvent):
+        self._watcher.add_event_filter("TaskStarted", callback=_inference_task_started)
+
+        async def _download_task_started(event: models.Event):
+            assert isinstance(event, models.DownloadModel)
             assert self._task_system is not None
-            address = chain_event.node_address
-            download_model_event = json.loads(chain_event.args)
-            model_id = download_model_event.model_id
-            task_type = models.TaskType(chain_event.event_type)
-            task_id_commitment = chain_event.task_id_commitment
-            if address == account:
-                task_id = f"{task_id_commitment}_{address}_{model_id}"
-                await self._task_system.create_download_task(task_id, task_type, model_id)
+            address = event.node_address
+            model_id = event.model_id
+            task_type = event.task_type
+            task_id = f"{address}_{model_id}"
+            await self._task_system.create_download_task(task_id, task_type, model_id)
 
-        self._watcher.add_event_filter(ChainEventType.DownloadModel, _download_task_started)
+        self._watcher.add_event_filter("DownloadModel", _download_task_started)
 
         # call task_status.started() only once
         task_status_set = False

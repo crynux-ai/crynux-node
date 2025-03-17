@@ -1,10 +1,9 @@
-from .download_model import DownloadModel, ModelConfig
-from .event import (TaskEndAborted, TaskEndGroupRefund, TaskEndGroupSuccess,
-                    TaskEndInvalidated, TaskEndSuccess, TaskErrorReported,
-                    TaskEvent, TaskKind, TaskParametersUploaded, TaskQueued,
-                    TaskScoreReady, TaskStarted, TaskValidated,
-                    load_event_from_contracts, load_event_from_json)
-from .node import (ChainNetworkNodeInfo, ChainNodeInfo, ChainNodeStatus,
+from .download_model import DownloadedModel, ModelConfig
+from .event import (EventType, Event, DownloadModel, TaskEndAborted, TaskEndGroupRefund,
+                    TaskEndGroupSuccess, TaskEndInvalidated, TaskEndSuccess,
+                    TaskErrorReported, TaskScoreReady, TaskStarted,
+                    TaskValidated, NodeKickedOut, NodeSlashed, load_event_from_json)
+from .node import (ChainNetworkNodeInfo, ChainNodeInfo, ChainNodeStatus, NodeInfo,
                    GpuInfo, NodeState, NodeStatus, convert_node_status)
 from .task import (ChainTask, DownloadTaskState, DownloadTaskStatus,
                    InferenceTaskState, InferenceTaskStatus, RelayTask,
@@ -14,11 +13,10 @@ from .worker import (DownloadTaskInput, ErrorResult, InferenceTaskInput,
                      SuccessResult, TaskInput, TaskResult)
 
 __all__ = [
-    "TaskKind",
-    "TaskEvent",
-    "TaskQueued",
+    "EventType",
+    "Event",
+    "DownloadModel",
     "TaskStarted",
-    "TaskParametersUploaded",
     "TaskErrorReported",
     "TaskScoreReady",
     "TaskValidated",
@@ -27,14 +25,16 @@ __all__ = [
     "TaskEndAborted",
     "TaskEndGroupSuccess",
     "TaskEndGroupRefund",
+    "NodeKickedOut",
+    "NodeSlashed",
     "load_event_from_json",
-    "load_event_from_contracts",
     "ChainTask",
     "RelayTask",
     "ChainNodeStatus",
     "NodeStatus",
     "GpuInfo",
     "ChainNodeInfo",
+    "NodeInfo",
     "ChainNetworkNodeInfo",
     "convert_node_status",
     "NodeState",
@@ -54,5 +54,5 @@ __all__ = [
     "SuccessResult",
     "ErrorResult",
     "TaskResult",
-    "DownloadModel",
+    "DownloadedModel",
 ]

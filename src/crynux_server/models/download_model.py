@@ -29,6 +29,6 @@ class ModelConfig(BaseModel):
         )
 
 
-class DownloadModel(BaseModel):
+class DownloadedModel(BaseModel):
     task_type: TaskType
     model: ModelConfig

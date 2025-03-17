@@ -6,7 +6,7 @@ from anyio import CancelScope, fail_after, get_cancelled_exc_class, sleep
 from web3 import Web3
 
 from crynux_server import models
-from crynux_server.contracts import Contracts, TxOption, TxRevertedError
+from crynux_server.contracts import Contracts, TxOption
 from crynux_server.download_model_cache import DownloadModelCache
 from crynux_server.relay.abc import Relay
 from crynux_server.relay.exceptions import RelayError
@@ -144,7 +144,7 @@ class NodeStateManager(object):
                 await self.relay.node_join(
                     gpu_name=gpu_name,
                     gpu_vram=gpu_vram,
-                    version=version,
+                    version=".".join(str(v) for v in version),
                     model_ids=model_ids,
                 )
                 # update tx state to avoid the web user controlling node status by api
@@ -204,7 +204,7 @@ class NodeStateManager(object):
                 gpu_name=gpu_name,
                 gpu_vram=gpu_vram,
                 model_ids=model_ids,
-                version=version,
+                version=".".join(str(v) for v in version),
             )
             await self.state_cache.set_tx_state(models.TxStatus.Pending)
 

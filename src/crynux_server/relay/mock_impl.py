@@ -1,15 +1,16 @@
 import json
 import os
-from pyexpat import model
 import shutil
 import time
 from contextlib import contextmanager
+from datetime import datetime
 from tempfile import mkdtemp
 from typing import BinaryIO, Dict, List, Optional
 
 from anyio import Condition, get_cancelled_exc_class, to_thread
+from web3 import Web3
 
-from crynux_server.models import RelayTask, TaskType, InferenceTaskStatus
+from crynux_server.models import InferenceTaskStatus, RelayTask, TaskType
 
 from .abc import Relay
 from .exceptions import RelayError
@@ -79,17 +80,30 @@ class MockRelay(Relay):
                         model_id += f"+{variant}"
 
             t = RelayTask(
+                sequence=1,
                 task_id_commitment=task_id_commitment,
-                creator="",
+                creator=Web3.to_checksum_address("0x00000000000000000000"),
+                sampling_seed=bytes([0] * 32),
+                nonce=bytes([0] * 32),
                 task_args=task_args,
                 status=InferenceTaskStatus.Started,
                 task_type=TaskType.SD,
+                task_version="2.5.0",
+                timeout=300,
                 min_vram=4,
                 required_gpu="",
                 required_gpu_vram=0,
-                task_fee=1,
+                task_fee=Web3.to_wei(1, "wei"),
                 task_size=1,
                 model_ids=[model_id],
+                score="",
+                qos_score=1,
+                selected_node=Web3.to_checksum_address("0x00000000000000000000"),
+                create_time=datetime.now(),
+                start_time=datetime.now(),
+                score_ready_time=datetime.now(),
+                validated_time=datetime.now(),
+                result_uploaded_time=datetime.now(),
             )
             self.tasks[task_id_commitment] = t
             if checkpoint_dir is not None:

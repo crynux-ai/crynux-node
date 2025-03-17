@@ -7,6 +7,7 @@ import shutil
 import time
 from abc import ABC, abstractmethod
 from contextlib import asynccontextmanager
+from datetime import datetime
 from typing import Awaitable, Callable, List, Optional
 
 from anyio import (create_memory_object_stream, create_task_group, fail_after,
@@ -15,11 +16,11 @@ from anyio.streams.memory import (MemoryObjectReceiveStream,
                                   MemoryObjectSendStream)
 from hexbytes import HexBytes
 from tenacity import retry, stop_after_delay, wait_chain, wait_fixed
+from web3 import Web3
 
 from crynux_server import models
 from crynux_server.config import Config, get_config
-from crynux_server.contracts import (Contracts, TxRevertedError, TxWaiter,
-                                     get_contracts)
+from crynux_server.contracts import (Contracts, get_contracts)
 from crynux_server.download_model_cache import (DownloadModelCache,
                                                 get_download_model_cache)
 from crynux_server.relay import Relay, get_relay
@@ -36,6 +37,7 @@ _logger = logging.getLogger(__name__)
 
 OkCallback = Callable[[bool], Awaitable[None]]
 ErrCallback = Callable[[Exception], Awaitable[None]]
+
 
 # Manage the lifestyle of one task
 class InferenceTaskRunnerBase(ABC):
@@ -100,7 +102,7 @@ class InferenceTaskRunnerBase(ABC):
 
             # Get task info and update local record
             task = await self.get_task()
-            start_timestamp = task.start_timestamp
+            start_timestamp = int(task.start_time.timestamp())
             if start_timestamp == 0:
                 start_timestamp = int(time.time())
             timeout = start_timestamp + task.timeout
@@ -124,7 +126,7 @@ class InferenceTaskRunnerBase(ABC):
     async def cleanup(self): ...
 
     @abstractmethod
-    async def get_task(self) -> models.ChainTask: ...
+    async def get_task(self) -> models.RelayTask: ...
 
     @abstractmethod
     async def cancel_task(self): ...
@@ -248,7 +250,7 @@ class InferenceTaskRunner(InferenceTaskRunnerBase):
         try:
             await self.relay.report_task_error(
                 task_id_commitment=self.task_id_commitment,
-                task_error=models.TaskError.ParametersValidationFailed
+                task_error=models.TaskError.ParametersValidationFailed,
             )
             _logger.info(
                 f"Task {self.task_id_commitment.hex()} error. Report the task error."
@@ -263,7 +265,9 @@ class InferenceTaskRunner(InferenceTaskRunnerBase):
         try:
             task = await self.relay.get_task(self.task_id_commitment)
         except RelayError as e:
-            _logger.error(f"Get task {self.task_id_commitment.hex()} failed due to {e.message}")
+            _logger.error(
+                f"Get task {self.task_id_commitment.hex()} failed due to {e.message}"
+            )
             raise ValueError("Task not found")
         # task not exist
         if task.task_id_commitment != self.task_id_commitment:
@@ -272,12 +276,12 @@ class InferenceTaskRunner(InferenceTaskRunnerBase):
             )
             raise ValueError("Task not found")
         return task
-        
+
     async def cancel_task(self):
         try:
             await self.relay.abort_task(
                 task_id_commitment=self.task_id_commitment,
-                abort_reason=models.TaskAbortReason.Timeout
+                abort_reason=models.TaskAbortReason.Timeout,
             )
             _logger.info(
                 f"Task {self.task_id_commitment.hex()} timeout. Cancel the task."
@@ -371,7 +375,7 @@ class InferenceTaskRunner(InferenceTaskRunnerBase):
                 try:
                     await self.relay.submit_task_score(
                         task_id_commitment=self.task_id_commitment,
-                        score=self.state.score
+                        score=self.state.score,
                     )
                     _logger.info("Submiting task score success")
                     return
@@ -437,31 +441,31 @@ class MockInferenceTaskRunner(InferenceTaskRunnerBase):
         self._timeout = timeout
 
     async def get_task(self):
-        return models.ChainTask(
+        return models.RelayTask(
+            sequence=1,
+            task_id_commitment=self.task_id_commitment,
+            creator=Web3.to_checksum_address("0x00000000000000000000"),
+            sampling_seed=bytes([0] * 32),
+            nonce=bytes([0] * 32),
+            task_args="",
+            status=models.InferenceTaskStatus.Started,
             task_type=models.TaskType.SD,
-            creator="",
-            task_id_commitment=random.randbytes(4),
-            sampling_seed=random.randbytes(4),
-            nonce=random.randbytes(4),
-            sequence=random.randint(1, 10000),
-            status=models.InferenceTaskStatus.Queued,
-            selected_node="",
-            timeout=int(time.time()) + self._timeout,
-            score=b"",
-            task_fee=0,
-            task_size=1,
-            task_model_ids=["crynux-ai/stable-diffusion-v1-5:"],
-            min_vram=0,
+            task_version="2.5.0",
+            timeout=300,
+            min_vram=4,
             required_gpu="",
             required_gpu_vram=0,
-            task_version=[2, 0, 0],
-            abort_reason=models.TaskAbortReason.IncorrectResult,
-            error=models.TaskError.ParametersValidationFailed,
-            payment_addresses=[],
-            payments=[],
-            create_timestamp=0,
-            start_timestamp=0,
-            score_ready_timestamp=0,
+            task_fee=Web3.to_wei(1, "wei"),
+            task_size=1,
+            model_ids=[""],
+            score="",
+            qos_score=1,
+            selected_node=Web3.to_checksum_address("0x00000000000000000000"),
+            create_time=datetime.now(),
+            start_time=datetime.now(),
+            score_ready_time=datetime.now(),
+            validated_time=datetime.now(),
+            result_uploaded_time=datetime.now(),
         )
 
     async def cancel_task(self):
@@ -539,5 +543,5 @@ class DownloadTaskRunner(object):
                 self._state.status = models.DownloadTaskStatus.Success
 
             await self.download_model_cache.save(
-                models.DownloadModel(task_type=self._state.task_type, model=model)
+                models.DownloadedModel(task_type=self._state.task_type, model=model)
             )
