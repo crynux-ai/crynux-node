@@ -102,7 +102,9 @@ class InferenceTaskRunnerBase(ABC):
 
             # Get task info and update local record
             task = await self.get_task()
-            start_timestamp = int(task.start_time.timestamp())
+            start_timestamp = 0
+            if task.start_time is not None:
+                start_timestamp = int(task.start_time.timestamp())
             if start_timestamp == 0:
                 start_timestamp = int(time.time())
             timeout = start_timestamp + task.timeout

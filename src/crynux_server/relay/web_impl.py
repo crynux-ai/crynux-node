@@ -149,7 +149,7 @@ class WebRelay(Relay):
 
         resp = await self.client.post(
             f"/v1/inference_tasks/{task_id_commitment_hex}/task_error",
-            params={
+            json={
                 "task_error": task_error,
                 "timestamp": timestamp,
                 "signature": signature,
@@ -165,7 +165,7 @@ class WebRelay(Relay):
 
         resp = await self.client.post(
             f"/v1/inference_tasks/{task_id_commitment_hex}/score",
-            params={"score": score_hex, "timestamp": timestamp, "signature": signature},
+            json={"score": score_hex, "timestamp": timestamp, "signature": signature},
         )
         resp = _process_resp(resp, "submitTaskScore")
 
@@ -181,7 +181,7 @@ class WebRelay(Relay):
 
         resp = await self.client.post(
             f"/v1/inference_tasks/{task_id_commitment_hex}/abort_reason",
-            params={
+            json={
                 "abort_reason": abort_reason,
                 "timestamp": timestamp,
                 "signature": signature,
@@ -308,7 +308,7 @@ class WebRelay(Relay):
         timestamp, signature = self.signer.sign(input)
         resp = await self.client.post(
             f"/v1/node/{self.node_address}/join",
-            params={
+            json={
                 "gpu_name": gpu_name,
                 "gpu_vram": gpu_vram,
                 "model_ids": model_ids,
@@ -324,7 +324,7 @@ class WebRelay(Relay):
         timestamp, signature = self.signer.sign(input)
         resp = await self.client.post(
             f"/v1/node/{self.node_address}/model",
-            params={
+            json={
                 "model_id": model_id,
                 "timestamp": timestamp,
                 "signature": signature,
@@ -337,7 +337,7 @@ class WebRelay(Relay):
         timestamp, signature = self.signer.sign(input)
         resp = await self.client.post(
             f"/v1/node/{self.node_address}/pause",
-            params={"timestamp": timestamp, "signature": signature},
+            json={"timestamp": timestamp, "signature": signature},
         )
         resp = _process_resp(resp, "nodePause")
 
@@ -346,7 +346,7 @@ class WebRelay(Relay):
         timestamp, signature = self.signer.sign(input)
         resp = await self.client.post(
             f"/v1/node/{self.node_address}/quit",
-            params={"timestamp": timestamp, "signature": signature},
+            json={"timestamp": timestamp, "signature": signature},
         )
         resp = _process_resp(resp, "nodeQuit")
 
@@ -355,7 +355,7 @@ class WebRelay(Relay):
         timestamp, signature = self.signer.sign(input)
         resp = await self.client.post(
             f"/v1/node/{self.node_address}/resume",
-            params={"timestamp": timestamp, "signature": signature},
+            json={"timestamp": timestamp, "signature": signature},
         )
         resp = _process_resp(resp, "nodeResume")
 
@@ -376,15 +376,17 @@ class WebRelay(Relay):
         timestamp, signature = self.signer.sign(input)
         resp = await self.client.post(
             f"/v1/node/{self.node_address}/version",
-            params={"version": version, "timestamp": timestamp, "signature": signature},
+            json={"version": version, "timestamp": timestamp, "signature": signature},
         )
         resp = _process_resp(resp, "nodeUpdateNodeVersion")
 
     """ balance related """
 
-    async def get_balance(self) -> int:
+    async def get_balance(self, address: Optional[str] = None) -> int:
+        if address is None:
+            address = self.node_address
         resp = await self.client.get(
-            f"/v1/balance/{self.node_address}",
+            f"/v1/balance/{address}",
         )
         resp = _process_resp(resp, "getBalance")
         content = resp.json()
@@ -396,7 +398,7 @@ class WebRelay(Relay):
         timestamp, signature = self.signer.sign(input)
         resp = await self.client.post(
             f"/v1/balance/{self.node_address}/transfer",
-            params={
+            json={
                 "value": amount,
                 "to": to_addr,
                 "timestamp": timestamp,

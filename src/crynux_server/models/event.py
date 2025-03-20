@@ -103,7 +103,7 @@ class NodeSlashed(Event):
 def load_event_from_json(type: EventType, event_json: str) -> Event:
     try:
         cls = globals()[type]
-        assert isinstance(cls, Event)
+        assert issubclass(cls, Event)
         return cls.model_validate_json(event_json)
     except (KeyError, AssertionError):
         raise ValueError(f"unknown event type {type} from json")

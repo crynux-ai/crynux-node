@@ -109,11 +109,11 @@ class RelayTask(BaseModel):
     score: str
     qos_score: int
     selected_node: AddressFromStr
-    create_time: datetime
-    start_time: datetime
-    score_ready_time: datetime
-    validated_time: datetime
-    result_uploaded_time: datetime
+    create_time: Optional[datetime] = None
+    start_time: Optional[datetime] = None
+    score_ready_time: Optional[datetime] = None
+    validated_time: Optional[datetime] = None
+    result_uploaded_time: Optional[datetime] = None
 
 
 class InferenceTaskState(BaseModel):

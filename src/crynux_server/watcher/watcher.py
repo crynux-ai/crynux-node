@@ -3,10 +3,9 @@ from collections import defaultdict
 from datetime import datetime, timedelta
 from typing import Awaitable, Callable, Dict, List, Optional
 
-from anyio import (CancelScope, create_memory_object_stream, create_task_group,
-                   sleep)
-from anyio.streams.memory import (MemoryObjectReceiveStream,
-                                  MemoryObjectSendStream)
+from anyio.abc import TaskStatus
+from anyio import CancelScope, create_memory_object_stream, create_task_group, sleep, TASK_STATUS_IGNORED
+from anyio.streams.memory import MemoryObjectReceiveStream, MemoryObjectSendStream
 
 from crynux_server.models import Event, EventType
 from crynux_server.relay import Relay
@@ -80,13 +79,13 @@ class EventWatcher(object):
                 page=page,
                 page_size=page_size,
             )
+            all_events.extend(events)
             if len(events) < page_size:
                 break
-            all_events.extend(events)
             page += 1
 
         _logger.debug(
-            f"fetched events for node {self._relay.node_address} from {start_time} to {end_time}"
+            f"fetched events for node {self._relay.node_address} from {start_time} to {end_time}, events: {all_events}"
         )
         self._last_fetch_time = end_time
         return all_events
@@ -143,7 +142,11 @@ class EventWatcher(object):
 
     # Start the watcher
     # The watcher will fetch events and process these events
-    async def start(self):
+    async def start(
+        self,
+        *,
+        task_status: TaskStatus[None] = TASK_STATUS_IGNORED,
+    ):
         assert (
             self._cancel_scope is None
         ), "The watcher has already started. You should stop the watcher before restart it."
@@ -160,6 +163,7 @@ class EventWatcher(object):
                 async with create_task_group() as tg:
                     tg.start_soon(self._event_processor, status_receiver)
                     tg.start_soon(self._event_fetcher, status_sender)
+                    task_status.started()
 
         finally:
             self._cancel_scope = None
