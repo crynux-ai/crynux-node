@@ -15,6 +15,10 @@ on:
         description: 'location'
         required: false
         default: 'The developer team'
+      blockchain:
+        description: 'Blockchain'
+        required: true
+        default: 'dymension'
 
 env:
   RELEASE_VERSION: 2.5.0
@@ -51,6 +55,11 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '18.x'
+
+      - name: Set the config files
+        run: |
+            chmod +x build/set-config-files.sh
+            ./build/set-config-files.sh ${{ inputs.blockchain }}
 
       - name: Run the build script
         run: ./build/windows/build.ps1
