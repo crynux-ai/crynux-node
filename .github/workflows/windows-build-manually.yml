@@ -57,9 +57,7 @@ jobs:
           node-version: '18.x'
 
       - name: Set the config files
-        run: |
-            chmod +x build/set-config-files.sh
-            ./build/set-config-files.sh ${{ inputs.blockchain }}
+        run: ./build/set-config-files.ps1 ${{ inputs.blockchain }}
 
       - name: Run the build script
         run: ./build/windows/build.ps1
