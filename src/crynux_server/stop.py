@@ -13,6 +13,7 @@ from crynux_server.node_manager.state_cache import (
     StateCache,
 )
 from crynux_server.download_model_cache import DownloadModelCache, DbDownloadModelCache
+from crynux_server.relay import Relay, WebRelay
 
 _logger = logging.getLogger(__name__)
 
@@ -20,7 +21,9 @@ _logger = logging.getLogger(__name__)
 async def _stop(
     state_manager: Optional[NodeStateManager] = None,
     contracts: Optional[Contracts] = None,
+    relay: Optional[Relay] = None,
     state_cache: Optional[ManagerStateCache] = None,
+    base_url: Optional[str] = None,
     node_state_cache_cls: Type[StateCache[models.NodeState]] = DbNodeStateCache,
     tx_state_cache_cls: Type[StateCache[models.TxState]] = DbTxStateCache,
     download_model_cache_cls: Type[DownloadModelCache] = DbDownloadModelCache,
@@ -48,13 +51,16 @@ async def _stop(
                 task_queue_contract_address=config.ethereum.contract.task_queue,
                 netstats_contract_address=config.ethereum.contract.netstats,
             )
+        if relay is None:
+            assert base_url is not None
+            relay = WebRelay(base_url, config.ethereum.privkey)
         if state_cache is None:
             state_cache = ManagerStateCache(
                 node_state_cache_cls=node_state_cache_cls,
                 tx_state_cache_cls=tx_state_cache_cls,
             )
         download_model_cache = download_model_cache_cls()
-        state_manager = NodeStateManager(state_cache=state_cache, download_model_cache=download_model_cache, contracts=contracts)
+        state_manager = NodeStateManager(state_cache=state_cache, download_model_cache=download_model_cache, contracts=contracts, relay=relay)
 
     try:
         waiter = await state_manager.stop(option=option)

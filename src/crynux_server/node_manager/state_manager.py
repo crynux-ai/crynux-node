@@ -6,8 +6,10 @@ from anyio import CancelScope, fail_after, get_cancelled_exc_class, sleep
 from web3 import Web3
 
 from crynux_server import models
-from crynux_server.contracts import Contracts, TxOption, TxRevertedError
+from crynux_server.contracts import Contracts, TxOption
 from crynux_server.download_model_cache import DownloadModelCache
+from crynux_server.relay.abc import Relay
+from crynux_server.relay.exceptions import RelayError
 
 from .state_cache import ManagerStateCache
 
@@ -20,16 +22,16 @@ class NodeStateManager(object):
         state_cache: ManagerStateCache,
         download_model_cache: DownloadModelCache,
         contracts: Contracts,
+        relay: Relay,
     ):
         self.state_cache = state_cache
         self.download_model_cache = download_model_cache
         self.contracts = contracts
+        self.relay = relay
         self._cancel_scope: Optional[CancelScope] = None
 
     async def _get_node_status(self):
-        remote_status = await self.contracts.node_contract.get_node_status(
-            self.contracts.account
-        )
+        remote_status = await self.relay.node_get_node_status()
         local_status = models.convert_node_status(remote_status)
         return local_status
 
@@ -101,7 +103,7 @@ class NodeStateManager(object):
             raise
         except get_cancelled_exc_class():
             raise
-        except (TxRevertedError, AssertionError, ValueError) as e:
+        except (RelayError, AssertionError, ValueError) as e:
             _logger.error(f"tx error {str(e)}")
             with fail_after(5, shield=True):
                 await self.state_cache.set_tx_state(models.TxStatus.Error, str(e))
@@ -116,9 +118,7 @@ class NodeStateManager(object):
     ):
         _logger.info("Trying to join the network automatically...")
         while True:
-            status = await self.contracts.node_contract.get_node_status(
-                self.contracts.account
-            )
+            status = await self.relay.node_get_node_status()
             if status in [
                 models.ChainNodeStatus.AVAILABLE,
                 models.ChainNodeStatus.BUSY,
@@ -136,42 +136,34 @@ class NodeStateManager(object):
 
             elif status == models.ChainNodeStatus.QUIT:
                 node_amount = Web3.to_wei("400.01", "ether")
-                balance = await self.contracts.get_balance(
-                    self.contracts.account
-                )
+                balance = await self.relay.get_balance()
                 if balance < node_amount:
                     raise ValueError("Node token balance is not enough to join")
                 download_models = await self.download_model_cache.load_all()
                 model_ids = [model.model.to_model_id() for model in download_models]
-                waiter = await self.contracts.node_contract.join(
+                await self.relay.node_join(
                     gpu_name=gpu_name,
                     gpu_vram=gpu_vram,
-                    public_key=self.contracts.public_key.to_bytes(),
-                    version=version,
+                    version=".".join(str(v) for v in version),
                     model_ids=model_ids,
-                    option=option,
-                    stake_amount=node_amount
                 )
                 # update tx state to avoid the web user controlling node status by api
                 # it's the same in try_stop method
-                await waiter.wait()
                 await self._wait_for_running()
             elif status == models.ChainNodeStatus.PAUSED:
-                waiter = await self.contracts.node_contract.resume(option=option)
-                await waiter.wait()
+                await self.relay.node_resume()
                 await self._wait_for_running()
 
             _logger.info("Node joins in the network successfully.")
             break
 
     async def try_stop(self, *, option: "Optional[TxOption]" = None):
-        status = await self.contracts.node_contract.get_node_status(
-            self.contracts.account
-        )
+        status = await self.relay.node_get_node_status()
         if status == models.ChainNodeStatus.AVAILABLE:
-            waiter = await self.contracts.node_contract.quit(option=option)
+            await self.relay.node_quit()
+
             await self.state_cache.set_tx_state(models.TxStatus.Pending)
-            await waiter.wait()
+            await self._wait_for_stop()
             # dont need to update node status because in non-headless mode the sync-state method will update it,
             # and in headless mode the node status is useless
             await self.state_cache.set_tx_state(models.TxStatus.Success)
@@ -202,28 +194,23 @@ class NodeStateManager(object):
             ), "Cannot start node. Last transaction is in pending."
 
             node_amount = Web3.to_wei(400, "ether")
-            balance = await self.contracts.get_balance(
-                self.contracts.account
-            )
+            balance = await self.relay.get_balance()
             if balance < node_amount:
                 raise ValueError("Node token balance is not enough to join.")
 
             download_models = await self.download_model_cache.load_all()
             model_ids = [model.model.to_model_id() for model in download_models]
-            waiter = await self.contracts.node_contract.join(
+            await self.relay.node_join(
                 gpu_name=gpu_name,
                 gpu_vram=gpu_vram,
-                public_key=self.contracts.public_key.to_bytes(),
                 model_ids=model_ids,
-                version=version,
-                option=option,
-                stake_amount=node_amount
+                version=".".join(str(v) for v in version),
             )
             await self.state_cache.set_tx_state(models.TxStatus.Pending)
 
         async def wait():
             async with self._wrap_tx_error():
-                await waiter.wait()
+                # await waiter.wait()
 
                 await self._wait_for_running()
 
@@ -244,12 +231,11 @@ class NodeStateManager(object):
                 tx_status != models.TxStatus.Pending
             ), "Cannot start node. Last transaction is in pending."
 
-            waiter = await self.contracts.node_contract.quit(option=option)
+            await self.relay.node_quit()
             await self.state_cache.set_tx_state(models.TxStatus.Pending)
 
         async def wait():
             async with self._wrap_tx_error():
-                await waiter.wait()
 
                 await self._wait_for_stop()
 
@@ -270,12 +256,11 @@ class NodeStateManager(object):
                 tx_status != models.TxStatus.Pending
             ), "Cannot start node. Last transaction is in pending."
 
-            waiter = await self.contracts.node_contract.pause(option=option)
+            await self.relay.node_pause()
             await self.state_cache.set_tx_state(models.TxStatus.Pending)
 
         async def wait():
             async with self._wrap_tx_error():
-                await waiter.wait()
 
                 await self._wait_for_pause()
 
@@ -296,12 +281,11 @@ class NodeStateManager(object):
                 tx_status != models.TxStatus.Pending
             ), "Cannot start node. Last transaction is in pending."
 
-            waiter = await self.contracts.node_contract.resume(option=option)
+            await self.relay.node_resume()
             await self.state_cache.set_tx_state(models.TxStatus.Pending)
 
         async def wait():
             async with self._wrap_tx_error():
-                await waiter.wait()
 
                 await self._wait_for_running()
 

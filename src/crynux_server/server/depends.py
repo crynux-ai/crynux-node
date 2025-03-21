@@ -21,7 +21,6 @@ __all__ = [
     "ConfigDep",
     "NodeStateManagerDep",
     "TaskStateCacheDep",
-    "ContractsDep",
     "WorkerManagerDep",
     "SystemInfoDep",
 ]
@@ -53,15 +52,6 @@ async def _get_task_state_cache():
         raise
 
 
-async def _get_contracts():
-    try:
-        return get_contracts()
-    except AssertionError as e:
-        if "Contracts has not been set" in str(e):
-            return None
-        raise
-
-
 async def _get_worker_manager():
     return get_worker_manager()
 
@@ -82,7 +72,6 @@ NodeStateManagerDep = Annotated[
 TaskStateCacheDep = Annotated[
     Optional[InferenceTaskStateCache], Depends(_get_task_state_cache)
 ]
-ContractsDep = Annotated[Optional[Contracts], Depends(_get_contracts)]
 WorkerManagerDep = Annotated[WorkerManager, Depends(_get_worker_manager)]
 SystemInfoDep = Annotated[SystemInfo, Depends(_get_system_info)]
 AccountInfoDep = Annotated[AccountInfo, Depends(_get_account_info)]

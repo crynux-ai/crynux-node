@@ -1,7 +1,10 @@
+from datetime import datetime
 from enum import IntEnum
 from typing import List, Optional
 
 from pydantic import BaseModel
+
+from .common import AddressFromStr, BytesFromHex, WeiFromStr
 
 
 class TaskType(IntEnum):
@@ -87,17 +90,30 @@ class PoseConfig(BaseModel):
 
 
 class RelayTask(BaseModel):
-    task_id_commitment: bytes
-    creator: str
+    sequence: int
     task_args: str
+    task_id_commitment: BytesFromHex
+    creator: AddressFromStr
+    sampling_seed: BytesFromHex
+    nonce: BytesFromHex
     status: InferenceTaskStatus
     task_type: TaskType
+    task_version: str
+    timeout: int
     min_vram: int
     required_gpu: str
     required_gpu_vram: int
-    task_fee: float
+    task_fee: WeiFromStr
     task_size: int
     model_ids: List[str]
+    score: str
+    qos_score: int
+    selected_node: AddressFromStr
+    create_time: Optional[datetime] = None
+    start_time: Optional[datetime] = None
+    score_ready_time: Optional[datetime] = None
+    validated_time: Optional[datetime] = None
+    result_uploaded_time: Optional[datetime] = None
 
 
 class InferenceTaskState(BaseModel):
