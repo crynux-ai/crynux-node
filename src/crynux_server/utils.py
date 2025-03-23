@@ -1,11 +1,11 @@
 import platform
 import re
-import time
 from collections import OrderedDict
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 import psutil
 from anyio import Path, run_process, to_thread
+from eth_account import Account
 from pydantic import BaseModel
 from web3 import Web3
 
@@ -56,8 +56,8 @@ async def _get_memory_info() -> MemoryInfo:
 
     svmem = await to_thread.run_sync(psutil.virtual_memory)
 
-    info.total_mb = svmem.total // (2 ** 20)
-    info.available_mb = svmem.available // (2 ** 20)
+    info.total_mb = svmem.total // (2**20)
+    info.available_mb = svmem.available // (2**20)
 
     return info
 
@@ -70,8 +70,10 @@ async def _get_osx_memory_info() -> MemoryInfo:
     if total_mem:
         info.total_mb = round(int(total_mem.group(1)) / 1024 / 1024)
 
-    usage_cmd = ("vm_stat | perl -ne '/page size of (\\d+)/ and $size=$1; "
-                 "/Pages\\s+free[^\\d]+(\\d+)/ and printf(\"%.2f\",  $1 * $size / 1048576);'")
+    usage_cmd = (
+        "vm_stat | perl -ne '/page size of (\\d+)/ and $size=$1; "
+        '/Pages\\s+free[^\\d]+(\\d+)/ and printf("%.2f",  $1 * $size / 1048576);\''
+    )
     res = await run_process(usage_cmd)
     output = res.stdout.decode()
     info.available_mb = int(float(output))
@@ -193,9 +195,9 @@ class DiskInfo(BaseModel):
 
 
 async def get_disk_info(
-        base_model_dir: str,
-        lora_model_dir: str,
-        log_dir: str,
+    base_model_dir: str,
+    lora_model_dir: str,
+    log_dir: str,
 ) -> DiskInfo:
     info = DiskInfo()
     path = Path(base_model_dir)
@@ -204,7 +206,7 @@ async def get_disk_info(
         async for f in path.rglob("*"):
             if await f.is_file():
                 size += (await f.stat()).st_size
-        info.base_models = size // (2 ** 30)
+        info.base_models = size // (2**30)
 
     path = Path(lora_model_dir)
     if await path.exists():
@@ -212,7 +214,7 @@ async def get_disk_info(
         async for f in path.rglob("*"):
             if await f.is_file():
                 size += (await f.stat()).st_size
-        info.lora_models = size // (2 ** 20)
+        info.lora_models = size // (2**20)
 
     path = Path(log_dir)
     if await path.exists():
@@ -223,3 +225,8 @@ async def get_disk_info(
         info.logs += size // 1024
 
     return info
+
+
+def get_address_from_privkey(privkey: str):
+    addrLowcase = Account.from_key(privkey).address
+    return Web3.to_checksum_address(addrLowcase)
