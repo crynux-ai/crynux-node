@@ -309,7 +309,7 @@ async def set_privkey(privkey: str):
     condition = _get_condition()
     async with condition:
         config.ethereum.privkey = privkey
-        condition.notify(1)
+        condition.notify_all()
 
     await to_thread.run_sync(partial(config.ethereum.dump_privkey, privkey=privkey))
 

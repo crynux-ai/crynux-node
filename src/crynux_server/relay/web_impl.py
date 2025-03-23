@@ -8,7 +8,6 @@ from typing import Any, BinaryIO, Dict, List, Optional
 
 import httpx
 from anyio import open_file, to_thread, wrap_file
-from eth_account import Account
 from hexbytes import HexBytes
 from web3 import Web3
 
@@ -21,6 +20,7 @@ from crynux_server.models import (
 )
 from crynux_server.models.node import ChainNodeStatus, NodeInfo
 from crynux_server.models.task import RelayTask
+from crynux_server.utils import get_address_from_privkey
 
 from .abc import Relay
 from .exceptions import RelayError
@@ -48,17 +48,12 @@ def _process_resp(resp: httpx.Response, method: str):
         raise RelayError(resp.status_code, method, message) from e
 
 
-def _get_address_from_privkey(privkey: str):
-    addrLowcase = Account.from_key(privkey).address
-    return Web3.to_checksum_address(addrLowcase)
-
-
 class WebRelay(Relay):
     def __init__(self, base_url: str, privkey: str) -> None:
         super().__init__()
         self.client = httpx.AsyncClient(base_url=base_url, timeout=30)
         self.signer = Signer(privkey=privkey)
-        self._node_address = _get_address_from_privkey(privkey)
+        self._node_address = get_address_from_privkey(privkey)
 
     @property
     def node_address(self):
@@ -394,12 +389,12 @@ class WebRelay(Relay):
         return Web3.to_wei(balance, "wei")
 
     async def transfer(self, amount: int, to_addr: str):
-        input = {"from": self.node_address, "value": amount, "to": to_addr}
+        input = {"from": self.node_address, "value": str(amount), "to": to_addr}
         timestamp, signature = self.signer.sign(input)
         resp = await self.client.post(
             f"/v1/balance/{self.node_address}/transfer",
             json={
-                "value": amount,
+                "value": str(amount),
                 "to": to_addr,
                 "timestamp": timestamp,
                 "signature": signature,
