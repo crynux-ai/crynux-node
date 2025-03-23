@@ -11,7 +11,7 @@ $blockchain = $args[0]
 # Define an array of file pairs with names
 # Format: @("name", "source_path", "destination_path")
 $file_pairs = @(
-    @("WebUI", ".\src\webui\src\config.${blockchain}.js", ".\src\webui\src\config.js"),
+    @("WebUI", ".\src\webui\src\config.${blockchain}.json", ".\src\webui\src\config.json"),
     @("Node Docker", ".\build\docker\config.yml.${blockchain}", ".\build\docker\config.yml.example"),
     @("Node MacOS", ".\build\macos\config.yml.${blockchain}", ".\build\macos\config.yml.example"),
     @("Node Windows", ".\build\windows\config.yml.${blockchain}", ".\build\windows\config.yml.example")
