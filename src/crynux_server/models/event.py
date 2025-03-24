@@ -1,3 +1,4 @@
+import json
 from typing import Literal
 
 from pydantic import BaseModel, Field
@@ -22,6 +23,7 @@ EventType = Literal[
 
 
 class Event(BaseModel):
+    id: int
     type: EventType = Field(init_var=False)
 
 
@@ -100,10 +102,12 @@ class NodeSlashed(Event):
     node_address: AddressFromStr
 
 
-def load_event_from_json(type: EventType, event_json: str) -> Event:
+def load_event(id: int, type: EventType, args: str) -> Event:
     try:
         cls = globals()[type]
         assert issubclass(cls, Event)
-        return cls.model_validate_json(event_json)
+        e = json.loads(args)
+        e["id"] = id
+        return cls.model_validate(e)
     except (KeyError, AssertionError):
         raise ValueError(f"unknown event type {type} from json")

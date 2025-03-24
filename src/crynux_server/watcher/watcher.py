@@ -1,11 +1,12 @@
 import logging
 from collections import defaultdict
-from datetime import datetime, timedelta
 from typing import Awaitable, Callable, Dict, List, Optional
 
+from anyio import (TASK_STATUS_IGNORED, CancelScope,
+                   create_memory_object_stream, create_task_group, sleep)
 from anyio.abc import TaskStatus
-from anyio import CancelScope, create_memory_object_stream, create_task_group, sleep, TASK_STATUS_IGNORED
-from anyio.streams.memory import MemoryObjectReceiveStream, MemoryObjectSendStream
+from anyio.streams.memory import (MemoryObjectReceiveStream,
+                                  MemoryObjectSendStream)
 
 from crynux_server.models import Event, EventType
 from crynux_server.relay import Relay
@@ -55,7 +56,7 @@ class EventWatcher(object):
     ):
         self._relay = relay
 
-        self._last_fetch_time = datetime.now()
+        self._last_event_id: Optional[int] = None
         self._fetch_interval = fetch_interval
 
         self._next_filter_id = 0
@@ -65,38 +66,37 @@ class EventWatcher(object):
         self._cancel_scope: Optional[CancelScope] = None
 
     async def _fetch_events(self) -> List[Event]:
-        start_time = self._last_fetch_time
-        end_time = datetime.now()
-        page = 1
-        page_size = 50
-
-        all_events = []
-        while True:
-            events = await self._relay.get_events(
-                start_time=start_time,
-                end_time=end_time,
-                node_address=self._relay.node_address,
-                page=page,
-                page_size=page_size,
+        start_id = self._last_event_id
+        if start_id is None:
+            start_id = await self._relay.get_current_event_id(
+                node_address=self._relay.node_address
             )
-            all_events.extend(events)
-            if len(events) < page_size:
-                break
-            page += 1
 
-        _logger.debug(
-            f"fetched events for node {self._relay.node_address} from {start_time} to {end_time}, events: {all_events}"
+        events = await self._relay.get_events(
+            start_id=start_id,
+            node_address=self._relay.node_address,
         )
-        self._last_fetch_time = end_time
-        return all_events
+        _logger.debug(
+            f"fetched events for node {self._relay.node_address} from {start_id}, events: {events}"
+        )
+        if len(events) > 0:
+            self._last_event_id = events[-1].id
+        else:
+            self._last_event_id = start_id
+        return events
 
     # Fetch events evrey self._fetch_interval seconds
     # Send the fetched events to the event_sender
     # The _event_processor will process these events
-    async def _event_fetcher(self, event_sender: MemoryObjectSendStream[Event]):
+    async def _event_fetcher(
+        self,
+        event_sender: MemoryObjectSendStream[Event],
+        task_status: TaskStatus[None],
+    ):
         async with event_sender:
             while True:
                 events = await self._fetch_events()
+                task_status.started()
                 for event in events:
                     await event_sender.send(event)
                 await sleep(self._fetch_interval)
@@ -162,8 +162,7 @@ class EventWatcher(object):
 
                 async with create_task_group() as tg:
                     tg.start_soon(self._event_processor, status_receiver)
-                    tg.start_soon(self._event_fetcher, status_sender)
-                    task_status.started()
+                    tg.start_soon(self._event_fetcher, status_sender, task_status)
 
         finally:
             self._cancel_scope = None
