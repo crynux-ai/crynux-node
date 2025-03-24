@@ -93,10 +93,13 @@ class EventWatcher(object):
         event_sender: MemoryObjectSendStream[Event],
         task_status: TaskStatus[None],
     ):
+        started = False
         async with event_sender:
             while True:
                 events = await self._fetch_events()
-                task_status.started()
+                if not started:
+                    task_status.started()
+                    started = True
                 for event in events:
                     await event_sender.send(event)
                 await sleep(self._fetch_interval)
