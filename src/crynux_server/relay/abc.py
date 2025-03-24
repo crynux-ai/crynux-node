@@ -4,8 +4,15 @@ from typing import BinaryIO, List, Optional
 
 from eth_typing import ChecksumAddress
 
-from crynux_server.models import (ChainNodeStatus, Event, EventType, NodeInfo,
-                                  RelayTask, TaskAbortReason, TaskError)
+from crynux_server.models import (
+    ChainNodeStatus,
+    Event,
+    EventType,
+    NodeInfo,
+    RelayTask,
+    TaskAbortReason,
+    TaskError,
+)
 
 
 class Relay(ABC):
@@ -113,11 +120,17 @@ class Relay(ABC):
     @abstractmethod
     async def get_events(
         self,
-        start_time: datetime,
-        end_time: Optional[datetime] = None,
+        start_id: int,
         event_type: Optional[EventType] = None,
         node_address: Optional[str] = None,
         task_id_commitment: Optional[bytes] = None,
-        page: Optional[int] = None,
-        page_size: Optional[int] = None,
+        limit: Optional[int] = None,
     ) -> List[Event]: ...
+
+    @abstractmethod
+    async def get_current_event_id(
+        self,
+        event_type: Optional[EventType] = None,
+        node_address: Optional[str] = None,
+        task_id_commitment: Optional[bytes] = None,
+    ) -> int: ...

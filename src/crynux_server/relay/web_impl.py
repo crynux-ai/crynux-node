@@ -11,13 +11,8 @@ from anyio import open_file, to_thread, wrap_file
 from hexbytes import HexBytes
 from web3 import Web3
 
-from crynux_server.models import (
-    Event,
-    EventType,
-    TaskAbortReason,
-    TaskError,
-    load_event_from_json,
-)
+from crynux_server.models import (Event, EventType, TaskAbortReason, TaskError,
+                                  load_event)
 from crynux_server.models.node import ChainNodeStatus, NodeInfo
 from crynux_server.models.task import RelayTask
 from crynux_server.utils import get_address_from_privkey
@@ -404,36 +399,52 @@ class WebRelay(Relay):
 
     async def get_events(
         self,
-        start_time: datetime,
-        end_time: Optional[datetime] = None,
+        start_id: int,
         event_type: Optional[EventType] = None,
         node_address: Optional[str] = None,
         task_id_commitment: Optional[bytes] = None,
-        page: Optional[int] = None,
-        page_size: Optional[int] = None,
+        limit: Optional[int] = None,
     ) -> List[Event]:
-        input: Dict[str, Any] = {"start_time": int(start_time.timestamp())}
-        if end_time is not None:
-            input["end_time"] = int(end_time.timestamp())
+        input: Dict[str, Any] = {"start": start_id}
         if event_type is not None:
             input["event_type"] = event_type
         if node_address is not None:
             input["node_address"] = node_address
         if task_id_commitment is not None:
             input["task_id_commitment"] = "0x" + task_id_commitment.hex()
-        if page is not None:
-            input["page"] = page
-        if page_size is not None:
-            input["page_size"] = page_size
+        if limit is not None:
+            input["limit"] = limit
 
         resp = await self.client.get("/v1/events", params=input)
-        resp = _process_resp(resp, "getEvent")
+        resp = _process_resp(resp, "getEvents")
         content = resp.json()
         data = content["data"]
 
         events = []
         for e in data:
+            id = e["id"]
             task_type = e["type"]
             args = e["args"]
-            events.append(load_event_from_json(task_type, args))
+            events.append(load_event(id, task_type, args))
         return events
+
+    async def get_current_event_id(
+        self,
+        event_type: Optional[EventType] = None,
+        node_address: Optional[str] = None,
+        task_id_commitment: Optional[bytes] = None,
+    ) -> int:
+        input = {}
+        if event_type is not None:
+            input["event_type"] = event_type
+        if node_address is not None:
+            input["node_address"] = node_address
+        if task_id_commitment is not None:
+            input["task_id_commitment"] = "0x" + task_id_commitment.hex()
+
+        resp = await self.client.get("/v1/events/current_id", params=input)
+        resp = _process_resp(resp, "getCurrentEventID")
+        content = resp.json()
+        data = content["data"]
+
+        return data
