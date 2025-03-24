@@ -32,7 +32,9 @@ jobs:
             submodules: 'true'
 
         - name: Set the config files
+          shell: bash
           run: |
+            set -e
             chmod +x build/set-config-files.sh
             ./build/set-config-files.sh ${{ inputs.blockchain }}
 

@@ -36,7 +36,10 @@ jobs:
           node-version: '18.x'
 
       - name: Set the config files
-        run: ./build/set-config-files.ps1 ${{ inputs.blockchain }}
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          ./build/set-config-files.ps1 ${{ inputs.blockchain }}
 
       - name: Run the build script
         run: ./build/windows/build.ps1
