@@ -6,6 +6,7 @@ if __name__ == "__main__":
 import logging
 import math
 import os.path
+import platform
 import signal
 from typing import Optional
 
@@ -87,11 +88,15 @@ class CrynuxRunner(object):
             gpu_info = await utils.get_gpu_info()
             gpu_name = gpu_info.model
             gpu_vram_gb = math.ceil(gpu_info.vram_total_mb / 1024)
+            if utils.is_running_in_docker():
+                platform = "docker"
+            else:
+                platform = utils.get_os()
 
             _logger.info("Starting node manager...")
 
             self._node_manager = NodeManager(
-                config=self.config, gpu_name=gpu_name, gpu_vram=gpu_vram_gb
+                config=self.config, platform=platform, gpu_name=gpu_name, gpu_vram=gpu_vram_gb
             )
             set_node_manager(self._node_manager)
 

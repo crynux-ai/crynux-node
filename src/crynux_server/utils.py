@@ -1,3 +1,4 @@
+import os.path
 import platform
 import re
 from collections import OrderedDict
@@ -44,6 +45,23 @@ def get_task_hash(task_args: str):
 
 def get_os():
     return platform.system()
+
+
+def is_running_in_docker():
+    if os.path.exists("/.dockerenv"):
+        return True
+
+    try:
+        with open("/proc/self/cgroup", "r") as f:
+            if any("docker" in line for line in f):
+                return True
+    except IOError:
+        pass
+
+    if os.environ.get("KUBERNETES_SERVICE_HOST"):
+        return True
+
+    return False
 
 
 class MemoryInfo(BaseModel):
