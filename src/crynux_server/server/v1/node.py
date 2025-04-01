@@ -52,13 +52,17 @@ async def control_node(
         raise HTTPException(400, detail="Private key has not been set.")
     if input.action == "start":
         gpu_info = await utils.get_gpu_info()
+        if utils.is_running_in_docker():
+            platform = "docker"
+        else:
+            platform = utils.get_os()
         async with worker_manager.wait_connected():
             version = worker_manager.version
             assert version is not None
             version_list = [int(v) for v in version.split(".")]
             assert len(version_list) == 3
             wait = await state_manager.start(
-                gpu_name=gpu_info.model,
+                gpu_name=gpu_info.model + "+" + platform,
                 gpu_vram=math.ceil(gpu_info.vram_total_mb / 1024),
                 version=version_list
             )
