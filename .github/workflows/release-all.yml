@@ -111,7 +111,7 @@ jobs:
       - name: Download Mac DMGs
         uses: actions/download-artifact@v4
         with:
-          pattern: mac-app-${{ env.RELEASE_VERSION }}-*.dmg
+          pattern: mac-app-${{ env.RELEASE_VERSION }}-*
 
       - name: Print the workspace
         run: |
