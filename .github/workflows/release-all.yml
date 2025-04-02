@@ -17,6 +17,7 @@ env:
 permissions:  
   actions: write
   packages: write
+  contents: read
 
 jobs:
   prepare-version:
