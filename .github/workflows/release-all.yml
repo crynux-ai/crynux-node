@@ -115,7 +115,7 @@ jobs:
 
       - name: Extract Mac DMGs
         run: |
-          unzip mac-app*.zip
+          unzip mac-app*
 
       - name: Print the workspace
         run: |
