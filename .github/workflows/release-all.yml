@@ -15,6 +15,13 @@ env:
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
+  prepare-version:
+    runs-on: ubuntu-latest
+    steps:
+       - run: echo "null"
+    outputs:
+      version: ${{ env.RELEASE_VERSION }}
+
   build-the-docker-images:
     strategy:
       matrix:
@@ -28,6 +35,7 @@ jobs:
       blockchain: ${{ matrix.blockchain }}
 
   build-the-mac-dmgs:
+    needs: [prepare-version]
     strategy:
       matrix:
         blockchain:
@@ -38,9 +46,10 @@ jobs:
     secrets: inherit
     with:
       blockchain: ${{ matrix.blockchain }}
-      release_version: ${{ env.RELEASE_VERSION }}
+      release_version: ${{ needs.prepare-version.outputs.version }}
 
   build-the-windows-binaries:
+    needs: [prepare-version]
     strategy:
       matrix:
         blockchain:
@@ -51,7 +60,7 @@ jobs:
     secrets: inherit
     with:
       blockchain: ${{ matrix.blockchain }}
-      release_version: ${{ env.RELEASE_VERSION }}
+      release_version: ${{ needs.prepare-version.outputs.version }}
 
   publish-release:
     runs-on: ubuntu-22.04
