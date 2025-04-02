@@ -49,7 +49,7 @@ jobs:
         uses: hoatruongdev09/google-drive-file-upload-github-action@v1.1
         with:
           service-account-json: ${{ secrets.GOOGLE_DRIVE_GSA_CREDENTIALS_BASE64 }}
-          file-path: "build/crynux_node/dist/crynux-node-helium-v${{ inputs.release_version }}-${{ inputs.blockchain }}-windows-x64.zip"
+          file-path: "build/crynux_node/dist/crynux-node-helium-v${{ inputs.release_version }}-windows-x64.zip"
           upload-name: "crynux-node-helium-v${{ inputs.release_version }}-${{ inputs.blockchain }}-windows-x64.zip"
           upload-to-folder-id: ${{ secrets.GOOGLE_DRIVE_FOLDER_ID }}
 

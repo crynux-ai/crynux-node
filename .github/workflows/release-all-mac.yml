@@ -69,6 +69,11 @@ jobs:
       - name: Build
         run: ./build/macos/build.sh -s "${{ secrets.APPLE_DEVELOPER_IDENTITY }}" -u "${{ secrets.APPLE_USER }}" -p "${{ secrets.APPLE_PASS }}" -t "${{ secrets.APPLE_TEAM_ID }}"
 
+      - name: rename
+        shell: bash
+        run: |
+          mv build/crynux_node/dist/crynux-node-helium-v${{ inputs.release_version }}-mac-arm64-signed.dmg build/crynux_node/dist/crynux-node-helium-v${{ inputs.release_version }}-${{ inputs.blockchain }}-mac-arm64-signed.dmg
+
       - name: Upload the artifact
         uses: actions/upload-artifact@v4
         with:
