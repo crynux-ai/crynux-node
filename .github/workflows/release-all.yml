@@ -88,12 +88,12 @@ jobs:
         id: read_links
         run: |
           # Read Dymension links
-          WINDOWS_DOWNLOAD_LINK_DYMENSION=$(cat gdrive-links-dymension/download_link.txt)
-          WINDOWS_PREVIEW_LINK_DYMENSION=$(cat gdrive-links-dymension/view_link.txt)
+          WINDOWS_DOWNLOAD_LINK_DYMENSION=$(awk '{$1=$1};1' < gdrive-links-dymension/download_link.txt)
+          WINDOWS_PREVIEW_LINK_DYMENSION=$(awk '{$1=$1};1' < gdrive-links-dymension/view_link.txt)
 
           # Read Near links
-          WINDOWS_DOWNLOAD_LINK_NEAR=$(cat gdrive-links-near/download_link.txt)
-          WINDOWS_PREVIEW_LINK_NEAR=$(cat gdrive-links-near/view_link.txt)
+          WINDOWS_DOWNLOAD_LINK_NEAR=$(awk '{$1=$1};1' < gdrive-links-near/download_link.txt)
+          WINDOWS_PREVIEW_LINK_NEAR=$(awk '{$1=$1};1' < gdrive-links-near/view_link.txt)
 
           # Set outputs
           echo "WINDOWS_DOWNLOAD_LINK_DYMENSION=${WINDOWS_DOWNLOAD_LINK_DYMENSION}" >> $GITHUB_ENV
@@ -112,6 +112,10 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           pattern: mac-app-${{ env.RELEASE_VERSION }}-*
+
+      - name: Extract Mac DMGs
+        run: |
+          unzip mac-app*.zip
 
       - name: Print the workspace
         run: |
