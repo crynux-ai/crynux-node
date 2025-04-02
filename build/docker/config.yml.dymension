@@ -50,7 +50,7 @@ task_config:
       - id: "crynux-ai/stable-diffusion-v1-5"
       - id: "crynux-ai/sdxl-turbo"
     gpt_base:
-      - id: "gpt2"
+      - id: "Qwen/Qwen2.5-7B"
     controlnet: []
     lora: []
 
