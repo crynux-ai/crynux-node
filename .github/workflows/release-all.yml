@@ -14,6 +14,10 @@ env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
 
+permissions:  
+  actions: write
+  packages: write
+
 jobs:
   prepare-version:
     runs-on: ubuntu-latest
