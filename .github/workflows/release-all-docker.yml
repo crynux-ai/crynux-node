@@ -7,6 +7,10 @@ on:
         required: true
         type: string
 
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
 jobs:
   build-the-docker-image:
     name: Build the release Docker image
