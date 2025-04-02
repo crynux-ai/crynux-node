@@ -156,7 +156,7 @@ jobs:
           token: ${{ secrets.PAT }}
           repository: ${{ github.repository_owner }}/documentation
           event-type: node-released
-          client-payload: |
+          client-payload: |-
             {
               "windows-download-link-dymension": "${{ needs.publish-release.outputs.windows-download-link-dymension }}",
               "windows-preview-link-dymension": "${{ needs.publish-release.outputs.windows-preview-link-dymension }}",
@@ -177,7 +177,7 @@ jobs:
           token: ${{ secrets.PAT }}
           repository: ${{ github.repository_owner }}/crynux-node-docker-compose
           event-type: node-released
-          client-payload: |
+          client-payload: |-
             {
               "release-version": "${{ env.RELEASE_VERSION }}"
             }
