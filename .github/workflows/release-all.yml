@@ -113,9 +113,9 @@ jobs:
         with:
           pattern: mac-app-${{ env.RELEASE_VERSION }}-*
 
-      - name: Extract Mac DMGs
+      - name: Move Mac DMGs
         run: |
-          unzip mac-app*
+          mv mac-app*/* ./
 
       - name: Print the workspace
         run: |
