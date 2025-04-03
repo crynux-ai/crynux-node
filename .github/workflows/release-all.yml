@@ -115,6 +115,7 @@ jobs:
 
       - name: Move Mac DMGs
         run: |
+          ls -lR mac-app*
           mv mac-app*/* ./
 
       - name: Print the workspace
