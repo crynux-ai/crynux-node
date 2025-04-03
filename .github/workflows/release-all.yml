@@ -88,12 +88,17 @@ jobs:
         id: read_links
         run: |
           # Read Dymension links
-          WINDOWS_DOWNLOAD_LINK_DYMENSION=$(awk '{$1=$1};1' < gdrive-links-dymension/download_link.txt)
-          WINDOWS_PREVIEW_LINK_DYMENSION=$(awk '{$1=$1};1' < gdrive-links-dymension/view_link.txt)
+          WINDOWS_DOWNLOAD_LINK_DYMENSION=$(tr -d '\r\n' < gdrive-links-dymension/download_link.txt | sed 's/[\x00-\x1F]//g')
+          WINDOWS_PREVIEW_LINK_DYMENSION=$(tr -d '\r\n' < gdrive-links-dymension/view_link.txt | sed 's/[\x00-\x1F]//g')
 
           # Read Near links
-          WINDOWS_DOWNLOAD_LINK_NEAR=$(awk '{$1=$1};1' < gdrive-links-near/download_link.txt)
-          WINDOWS_PREVIEW_LINK_NEAR=$(awk '{$1=$1};1' < gdrive-links-near/view_link.txt)
+          WINDOWS_DOWNLOAD_LINK_NEAR=$(tr -d '\r\n' < gdrive-links-near/download_link.txt | sed 's/[\x00-\x1F]//g')
+          WINDOWS_PREVIEW_LINK_NEAR=$((tr -d '\r\n' < gdrive-links-near/view_link.txt | sed 's/[\x00-\x1F]//g')
+
+          echo "Windows download link (Dymension): ${WINDOWS_DOWNLOAD_LINK_DYMENSION}, length: ${#WINDOWS_DOWNLOAD_LINK_DYMENSION}"
+          echo "Windows preview link (Dymension): ${WINDOWS_PREVIEW_LINK_DYMENSION}, length: ${#WINDOWS_PREVIEW_LINK_DYMENSION}"
+          echo "Windows download link (Near): ${WINDOWS_DOWNLOAD_LINK_NEAR}, length: ${#WINDOWS_DOWNLOAD_LINK_NEAR}"
+          echo "Windows preview link (Near): ${WINDOWS_PREVIEW_LINK_NEAR}, length: ${#WINDOWS_PREVIEW_LINK_NEAR}"
 
           # Set outputs
           echo "WINDOWS_DOWNLOAD_LINK_DYMENSION=${WINDOWS_DOWNLOAD_LINK_DYMENSION}" >> $GITHUB_ENV
