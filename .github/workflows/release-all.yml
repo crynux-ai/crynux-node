@@ -14,7 +14,19 @@ env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
 
+permissions:  
+  actions: write
+  packages: write
+  contents: write
+
 jobs:
+  prepare-version:
+    runs-on: ubuntu-latest
+    steps:
+       - run: echo "null"
+    outputs:
+      version: ${{ env.RELEASE_VERSION }}
+
   build-the-docker-images:
     strategy:
       matrix:
@@ -28,6 +40,7 @@ jobs:
       blockchain: ${{ matrix.blockchain }}
 
   build-the-mac-dmgs:
+    needs: [prepare-version]
     strategy:
       matrix:
         blockchain:
@@ -38,9 +51,10 @@ jobs:
     secrets: inherit
     with:
       blockchain: ${{ matrix.blockchain }}
-      release_version: ${{ env.RELEASE_VERSION }}
+      release_version: ${{ needs.prepare-version.outputs.version }}
 
   build-the-windows-binaries:
+    needs: [prepare-version]
     strategy:
       matrix:
         blockchain:
@@ -51,7 +65,7 @@ jobs:
     secrets: inherit
     with:
       blockchain: ${{ matrix.blockchain }}
-      release_version: ${{ env.RELEASE_VERSION }}
+      release_version: ${{ needs.prepare-version.outputs.version }}
 
   publish-release:
     runs-on: ubuntu-22.04
@@ -74,12 +88,17 @@ jobs:
         id: read_links
         run: |
           # Read Dymension links
-          WINDOWS_DOWNLOAD_LINK_DYMENSION=$(cat gdrive-links-dymension/download_link.txt)
-          WINDOWS_PREVIEW_LINK_DYMENSION=$(cat gdrive-links-dymension/view_link.txt)
+          WINDOWS_DOWNLOAD_LINK_DYMENSION=$(tr -d '\r\n' < gdrive-links-dymension/download_link.txt | sed 's/[\x00-\x1F]//g')
+          WINDOWS_PREVIEW_LINK_DYMENSION=$(tr -d '\r\n' < gdrive-links-dymension/view_link.txt | sed 's/[\x00-\x1F]//g')
 
           # Read Near links
-          WINDOWS_DOWNLOAD_LINK_NEAR=$(cat gdrive-links-near/download_link.txt)
-          WINDOWS_PREVIEW_LINK_NEAR=$(cat gdrive-links-near/view_link.txt)
+          WINDOWS_DOWNLOAD_LINK_NEAR=$(tr -d '\r\n' < gdrive-links-near/download_link.txt | sed 's/[\x00-\x1F]//g')
+          WINDOWS_PREVIEW_LINK_NEAR=$(tr -d '\r\n' < gdrive-links-near/view_link.txt | sed 's/[\x00-\x1F]//g')
+
+          echo "Windows download link (Dymension): ${WINDOWS_DOWNLOAD_LINK_DYMENSION}, length: ${#WINDOWS_DOWNLOAD_LINK_DYMENSION}"
+          echo "Windows preview link (Dymension): ${WINDOWS_PREVIEW_LINK_DYMENSION}, length: ${#WINDOWS_PREVIEW_LINK_DYMENSION}"
+          echo "Windows download link (Near): ${WINDOWS_DOWNLOAD_LINK_NEAR}, length: ${#WINDOWS_DOWNLOAD_LINK_NEAR}"
+          echo "Windows preview link (Near): ${WINDOWS_PREVIEW_LINK_NEAR}, length: ${#WINDOWS_PREVIEW_LINK_NEAR}"
 
           # Set outputs
           echo "WINDOWS_DOWNLOAD_LINK_DYMENSION=${WINDOWS_DOWNLOAD_LINK_DYMENSION}" >> $GITHUB_ENV
@@ -97,7 +116,12 @@ jobs:
       - name: Download Mac DMGs
         uses: actions/download-artifact@v4
         with:
-          pattern: mac-app-${{ env.RELEASE_VERSION }}-*.dmg
+          pattern: mac-app-${{ env.RELEASE_VERSION }}-*
+
+      - name: Move Mac DMGs
+        run: |
+          ls -lR mac-app*
+          mv mac-app*/* ./
 
       - name: Print the workspace
         run: |
@@ -142,7 +166,7 @@ jobs:
           token: ${{ secrets.PAT }}
           repository: ${{ github.repository_owner }}/documentation
           event-type: node-released
-          client-payload: |
+          client-payload: |-
             {
               "windows-download-link-dymension": "${{ needs.publish-release.outputs.windows-download-link-dymension }}",
               "windows-preview-link-dymension": "${{ needs.publish-release.outputs.windows-preview-link-dymension }}",
@@ -163,7 +187,7 @@ jobs:
           token: ${{ secrets.PAT }}
           repository: ${{ github.repository_owner }}/crynux-node-docker-compose
           event-type: node-released
-          client-payload: |
+          client-payload: |-
             {
               "release-version": "${{ env.RELEASE_VERSION }}"
             }

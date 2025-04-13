@@ -2,7 +2,7 @@ from .download_model import DownloadedModel, ModelConfig
 from .event import (EventType, Event, DownloadModel, TaskEndAborted, TaskEndGroupRefund,
                     TaskEndGroupSuccess, TaskEndInvalidated, TaskEndSuccess,
                     TaskErrorReported, TaskScoreReady, TaskStarted,
-                    TaskValidated, NodeKickedOut, NodeSlashed, load_event_from_json)
+                    TaskValidated, NodeKickedOut, NodeSlashed, load_event)
 from .node import (ChainNetworkNodeInfo, ChainNodeInfo, ChainNodeStatus, NodeInfo,
                    GpuInfo, NodeState, NodeStatus, convert_node_status)
 from .task import (ChainTask, DownloadTaskState, DownloadTaskStatus,
@@ -27,7 +27,7 @@ __all__ = [
     "TaskEndGroupRefund",
     "NodeKickedOut",
     "NodeSlashed",
-    "load_event_from_json",
+    "load_event",
     "ChainTask",
     "RelayTask",
     "ChainNodeStatus",

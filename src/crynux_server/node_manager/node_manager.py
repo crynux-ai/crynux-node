@@ -123,6 +123,7 @@ class NodeManager(object):
     def __init__(
         self,
         config: Config,
+        platform: str,
         gpu_name: str,
         gpu_vram: int,
         inference_state_cache_cls: Type[InferenceTaskStateCache] = DbInferenceTaskStateCache,
@@ -142,6 +143,7 @@ class NodeManager(object):
         retry_delay: float = 30,
     ) -> None:
         self.config = config
+        self.platform = platform
         self.gpu_name = gpu_name
         self.gpu_vram = gpu_vram
 
@@ -641,7 +643,7 @@ class NodeManager(object):
                                     version_list = [int(v) for v in version.split(".")]
                                     assert len(version_list) == 3
                                     await self._node_state_manager.try_start(
-                                        gpu_name=self.gpu_name,
+                                        gpu_name=self.gpu_name + "+" + self.platform,
                                         gpu_vram=self.gpu_vram,
                                         version=version_list,
                                     )
