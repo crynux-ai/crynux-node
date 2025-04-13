@@ -23,23 +23,23 @@ while getopts ":s:u:p:t:" opt; do
 done
 
 ## Prepare the dist project and install the environments
-./build/macos/prepare.sh -w ./build/crynux_node
+./build/macos/prepare.sh -w ./build/crynux_node || exit 1
 
 ## Build the dist bundle
-cd ./build/crynux_node || exit
+cd ./build/crynux_node || exit 1
 
 if [ "$IDENTITY" ]; then
   echo "Packaging using identity: $IDENTITY"
-  ./package.sh -s "$IDENTITY"
+  ./package.sh -s "$IDENTITY" || exit 1
 else
   echo "Packaging using local developer identity"
-  ./package.sh
+  ./package.sh || exit 1
 fi
 
 if [ "$IDENTITY" ]; then
   ## Sign the DMG file
   echo "Signing the DMG file"
-  codesign -s "$IDENTITY" "dist/Crynux Node.dmg"
+  codesign -s "$IDENTITY" "dist/Crynux Node.dmg" || exit 1
 fi
 
 if [ "$IDENTITY" ]; then
@@ -49,9 +49,9 @@ if [ "$IDENTITY" ]; then
     --package "dist/Crynux Node.dmg" \
     --username "$APPLE_USER" \
     --team "$APPLE_TEAM_ID" \
-    --password "$APPLE_PASS"
+    --password "$APPLE_PASS" || exit 1
 fi
 
 VERSION=2.5.0
 
-mv "dist/Crynux Node.dmg" "dist/crynux-node-helium-v${VERSION}-mac-arm64-signed.dmg"
+mv "dist/Crynux Node.dmg" "dist/crynux-node-helium-v${VERSION}-mac-arm64-signed.dmg" || exit 1
