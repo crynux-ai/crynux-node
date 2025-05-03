@@ -122,17 +122,13 @@ class NodeStateManager(object):
             if status in [
                 models.ChainNodeStatus.AVAILABLE,
                 models.ChainNodeStatus.BUSY,
+                models.ChainNodeStatus.PENDING_PAUSE,
+                models.ChainNodeStatus.PENDING_QUIT,
             ]:
                 _logger.info("Node has joined in the network.")
                 local_status = models.convert_node_status(status)
                 await self.state_cache.set_node_state(local_status)
                 break
-            elif status in [
-                models.ChainNodeStatus.PENDING_PAUSE,
-                models.ChainNodeStatus.PENDING_QUIT,
-            ]:
-                await sleep(interval)
-                continue
 
             elif status == models.ChainNodeStatus.QUIT:
                 node_amount = Web3.to_wei("400.01", "ether")
