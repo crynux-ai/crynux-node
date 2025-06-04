@@ -8,7 +8,7 @@ log:
 ethereum:
   # The JSON RPC endpoint of the Blockchain node
   # Here we use the private chain for the Hydrogen Network
-  provider: "https://json-rpc.testnet-kaspa.crynux.ai"
+  provider: "https://json-rpc.testnet-kasplex.crynux.ai"
 
   # The Blockchain params
   # Leave it as is for the private chain used in the Hydrogen Network
@@ -33,7 +33,7 @@ db:
   filename: db/server.db
 
 # The URL of the Relay
-relay_url: "https://kaspa.relay.crynux.ai"
+relay_url: "https://kasplex.relay.crynux.ai"
 
 # The directory that stores the distribution files of the WebUI
 web_dist: dist
