@@ -654,16 +654,16 @@ const copyText = async (text) => {
                         <a-statistic title="Action" class="wallet-value">
                             <template #formatter>
                                 <a-space>
-                                    <a-button 
-                                        type="default" 
+                                    <a-button
+                                        type="default"
                                         size="small"
                                         :disabled="accountStatus.address === ''"
                                         @click="showTestTokenModal = true"
                                     >
                                         Deposit
                                     </a-button>
-                                    <a-button 
-                                        type="default" 
+                                    <a-button
+                                        type="default"
                                         size="small"
                                         :disabled="accountStatus.address === ''"
                                         @click="showWithdrawModal = true"
@@ -929,9 +929,10 @@ const copyText = async (text) => {
             <div class="network-on">ON</div>
             <img v-if="config.network === 'dymension'" class="dymension-logo" src="/dymension.png" width="120" alt="Dymension logo" />
             <img v-if="config.network === 'near'" class="near-logo" src="/near.png" width="120" alt="Near logo" />
+            <img v-if="config.network === 'kasplex'" class="kasplex-logo" src="/kasplex.png" width="120" alt="Kasplex logo" />
         </div>
     </div>
-    
+
     <a-modal
         v-model:visible="showTestTokenModal"
         title="Get Test CNX Tokens"
