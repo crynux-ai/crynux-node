@@ -10,7 +10,7 @@ on:
       - '*'
 
 env:
-  RELEASE_VERSION: 2.5.0
+  RELEASE_VERSION: 2.5.1
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
 
@@ -33,6 +33,7 @@ jobs:
         blockchain:
           - dymension
           - near
+          - kasplex
     name: Build the Docker image for ${{ matrix.blockchain }}
     uses: ./.github/workflows/release-all-docker.yml
     secrets: inherit
@@ -46,6 +47,7 @@ jobs:
         blockchain:
           - dymension
           - near
+          - kasplex
     name: Build the Mac DMG for ${{ matrix.blockchain }}
     uses: ./.github/workflows/release-all-mac.yml
     secrets: inherit
@@ -60,6 +62,7 @@ jobs:
         blockchain:
           - dymension
           - near
+          - kasplex
     name: Build the Windows binary for ${{ matrix.blockchain }}
     uses: ./.github/workflows/release-all-windows.yml
     secrets: inherit
@@ -95,16 +98,24 @@ jobs:
           WINDOWS_DOWNLOAD_LINK_NEAR=$(tr -d '\r\n' < gdrive-links-near/download_link.txt | sed 's/[\x00-\x1F]//g')
           WINDOWS_PREVIEW_LINK_NEAR=$(tr -d '\r\n' < gdrive-links-near/view_link.txt | sed 's/[\x00-\x1F]//g')
 
+          # Read Kasplex links
+          WINDOWS_DOWNLOAD_LINK_KASPLEX=$(tr -d '\r\n' < gdrive-links-kasplex/download_link.txt | sed 's/[\x00-\x1F]//g')
+          WINDOWS_PREVIEW_LINK_KASPLEX=$(tr -d '\r\n' < gdrive-links-kasplex/view_link.txt | sed 's/[\x00-\x1F]//g')
+
           echo "Windows download link (Dymension): ${WINDOWS_DOWNLOAD_LINK_DYMENSION}, length: ${#WINDOWS_DOWNLOAD_LINK_DYMENSION}"
           echo "Windows preview link (Dymension): ${WINDOWS_PREVIEW_LINK_DYMENSION}, length: ${#WINDOWS_PREVIEW_LINK_DYMENSION}"
           echo "Windows download link (Near): ${WINDOWS_DOWNLOAD_LINK_NEAR}, length: ${#WINDOWS_DOWNLOAD_LINK_NEAR}"
           echo "Windows preview link (Near): ${WINDOWS_PREVIEW_LINK_NEAR}, length: ${#WINDOWS_PREVIEW_LINK_NEAR}"
+          echo "Windows download link (Kasplex): ${WINDOWS_DOWNLOAD_LINK_KASPLEX}, length: ${#WINDOWS_DOWNLOAD_LINK_KASPLEX}"
+          echo "Windows preview link (Kasplex): ${WINDOWS_PREVIEW_LINK_KASPLEX}, length: ${#WINDOWS_PREVIEW_LINK_KASPLEX}"
 
           # Set outputs
           echo "WINDOWS_DOWNLOAD_LINK_DYMENSION=${WINDOWS_DOWNLOAD_LINK_DYMENSION}" >> $GITHUB_ENV
           echo "WINDOWS_PREVIEW_LINK_DYMENSION=${WINDOWS_PREVIEW_LINK_DYMENSION}" >> $GITHUB_ENV
           echo "WINDOWS_DOWNLOAD_LINK_NEAR=${WINDOWS_DOWNLOAD_LINK_NEAR}" >> $GITHUB_ENV
           echo "WINDOWS_PREVIEW_LINK_NEAR=${WINDOWS_PREVIEW_LINK_NEAR}" >> $GITHUB_ENV
+          echo "WINDOWS_DOWNLOAD_LINK_KASPLEX=${WINDOWS_DOWNLOAD_LINK_KASPLEX}" >> $GITHUB_ENV
+          echo "WINDOWS_PREVIEW_LINK_KASPLEX=${WINDOWS_PREVIEW_LINK_KASPLEX}" >> $GITHUB_ENV
 
       - name: Print the Google Drive links
         run: |
@@ -112,6 +123,8 @@ jobs:
           echo "Windows preview link (Dymension): ${{ env.WINDOWS_PREVIEW_LINK_DYMENSION }}"
           echo "Windows download link (Near): ${{ env.WINDOWS_DOWNLOAD_LINK_NEAR }}"
           echo "Windows preview link (Near): ${{ env.WINDOWS_PREVIEW_LINK_NEAR }}"
+          echo "Windows download link (Kasplex): ${{ env.WINDOWS_DOWNLOAD_LINK_KASPLEX }}"
+          echo "Windows preview link (Kasplex): ${{ env.WINDOWS_PREVIEW_LINK_KASPLEX }}"
 
       - name: Download Mac DMGs
         uses: actions/download-artifact@v4
@@ -132,11 +145,12 @@ jobs:
           # Escape the links for sed
           windows_dymension_link_escaped=$(printf '%s\n' "${{ env.WINDOWS_DOWNLOAD_LINK_DYMENSION }}" | sed -e 's/[\/&]/\\&/g')
           windows_near_link_escaped=$(printf '%s\n' "${{ env.WINDOWS_DOWNLOAD_LINK_NEAR }}" | sed -e 's/[\/&]/\\&/g')
-
+          windows_kasplex_link_escaped=$(printf '%s\n' "${{ env.WINDOWS_DOWNLOAD_LINK_KASPLEX }}" | sed -e 's/[\/&]/\\&/g')
           # Replace placeholders in the changelog template
           sed -i "s/RELEASE_VERSION/${{ env.RELEASE_VERSION }}/g" build/changelog-template.md
           sed -i "s/WINDOWS_LINK_DYMENSION/$windows_dymension_link_escaped/g" build/changelog-template.md
           sed -i "s/WINDOWS_LINK_NEAR/$windows_near_link_escaped/g" build/changelog-template.md
+          sed -i "s/WINDOWS_LINK_KASPLEX/$windows_kasplex_link_escaped/g" build/changelog-template.md
 
       - id: release
         name: Release
@@ -147,13 +161,17 @@ jobs:
           files: |
             crynux-node-helium-v${{ env.RELEASE_VERSION }}-dymension-mac-arm64-signed.dmg
             crynux-node-helium-v${{ env.RELEASE_VERSION }}-near-mac-arm64-signed.dmg
+            crynux-node-helium-v${{ env.RELEASE_VERSION }}-kasplex-mac-arm64-signed.dmg
     outputs:
       windows-download-link-dymension: ${{ env.WINDOWS_DOWNLOAD_LINK_DYMENSION }}
       windows-preview-link-dymension: ${{ env.WINDOWS_PREVIEW_LINK_DYMENSION }}
       windows-download-link-near: ${{ env.WINDOWS_DOWNLOAD_LINK_NEAR }}
       windows-preview-link-near: ${{ env.WINDOWS_PREVIEW_LINK_NEAR }}
+      windows-download-link-kasplex: ${{ env.WINDOWS_DOWNLOAD_LINK_KASPLEX }}
+      windows-preview-link-kasplex: ${{ env.WINDOWS_PREVIEW_LINK_KASPLEX }}
       mac-link-dymension: ${{ fromJSON(steps.release.outputs.assets)[0].browser_download_url }}
       mac-link-near: ${{ fromJSON(steps.release.outputs.assets)[1].browser_download_url }}
+      mac-link-kasplex: ${{ fromJSON(steps.release.outputs.assets)[2].browser_download_url }}
 
   update-documentation:
     runs-on: ubuntu-22.04
@@ -172,8 +190,11 @@ jobs:
               "windows-preview-link-dymension": "${{ needs.publish-release.outputs.windows-preview-link-dymension }}",
               "windows-download-link-near": "${{ needs.publish-release.outputs.windows-download-link-near }}",
               "windows-preview-link-near": "${{ needs.publish-release.outputs.windows-preview-link-near }}",
+              "windows-download-link-kasplex": "${{ needs.publish-release.outputs.windows-download-link-kasplex }}",
+              "windows-preview-link-kasplex": "${{ needs.publish-release.outputs.windows-preview-link-kasplex }}",
               "mac-link-dymension": "${{ needs.publish-release.outputs.mac-link-dymension }}",
               "mac-link-near": "${{ needs.publish-release.outputs.mac-link-near }}",
+              "mac-link-kasplex": "${{ needs.publish-release.outputs.mac-link-kasplex }}",
               "release-version": "${{ env.RELEASE_VERSION }}"
             }
   update-docker-compose-project:
