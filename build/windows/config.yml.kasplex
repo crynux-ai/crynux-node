@@ -36,7 +36,7 @@ db:
 relay_url: "https://kasplex.relay.crynux.ai"
 
 # The directory that stores the distribution files of the WebUI
-web_dist: dist
+web_dist: webui/dist
 
 # The resource dir for icons etc.
 resource_dir: res
