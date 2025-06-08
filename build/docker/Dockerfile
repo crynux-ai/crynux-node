@@ -6,7 +6,7 @@ COPY src/webui /app/
 
 RUN yarn && yarn build
 
-FROM nvidia/cuda:11.8.0-cudnn8-runtime-ubuntu22.04 as base
+FROM nvidia/cuda:12.8.1-cudnn-runtime-ubuntu22.04 as base
 
 RUN apt update
 RUN apt install python3.10 python3.10-venv ffmpeg libsm6 libxext6 -y
