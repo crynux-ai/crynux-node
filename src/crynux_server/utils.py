@@ -114,36 +114,30 @@ class GpuInfo(BaseModel):
 
 
 async def _get_nvidia_gpu_info() -> GpuInfo:
-    # res = await run_process(
-    #     "nvidia-smi --query-gpu=name,utilization.gpu,memory.used,memory.total --format=csv"
-    # )
-    # output = res.stdout.decode()
-    # result_line = output.split("\n")[1].strip()
-    # results = result_line.split(",")
-    # assert len(results) == 4
-
-    # info = GpuInfo()
-
-    # p = re.compile(r"(\d+)")
-
-    # info.model = results[0].strip()
-
-    # m = p.search(results[1])
-    # if m is not None:
-    #     info.usage = int(m.group(1))
-    # m = p.search(results[2])
-    # if m is not None:
-    #     info.vram_used_mb = int(m.group(1))
-    # m = p.search(results[3])
-    # if m is not None:
-    #     info.vram_total_mb = int(m.group(1))
-
-    info = GpuInfo(
-        model="NVIDIA GeForce RTX 4090",
-        usage=50,
-        vram_used_mb=12*1024,
-        vram_total_mb=24*1024,
+    res = await run_process(
+        "nvidia-smi --query-gpu=name,utilization.gpu,memory.used,memory.total --format=csv"
     )
+    output = res.stdout.decode()
+    result_line = output.split("\n")[1].strip()
+    results = result_line.split(",")
+    assert len(results) == 4
+
+    info = GpuInfo()
+
+    p = re.compile(r"(\d+)")
+
+    info.model = results[0].strip()
+
+    m = p.search(results[1])
+    if m is not None:
+        info.usage = int(m.group(1))
+    m = p.search(results[2])
+    if m is not None:
+        info.vram_used_mb = int(m.group(1))
+    m = p.search(results[3])
+    if m is not None:
+        info.vram_total_mb = int(m.group(1))
+
     return info
 
 
