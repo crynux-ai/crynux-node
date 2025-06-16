@@ -39,9 +39,11 @@ FROM base as builder2
 
 WORKDIR /app
 
+RUN apt install curl build-essential libssl-dev libffi-dev python3.10-dev -y
 
 RUN python3 -m venv venv
 ENV PATH="/app/venv/bin:${PATH}"
+ENV TRITON_CACHE_DIR="/app/venv/triton_cache"
 
 COPY stable-diffusion-task stable-diffusion-task
 COPY gpt-task gpt-task
@@ -58,6 +60,7 @@ RUN pip install .
 WORKDIR /app/crynux-worker
 RUN pip install -r requirements.txt
 RUN pip install .
+RUN python -c "import bitsandbytes; import torch; print('Triton pre-compilation triggered and finished.')"
 
 FROM base as final
 
@@ -67,6 +70,8 @@ COPY --from=builder2 /app/venv /app/worker/venv
 COPY crynux-worker/crynux_worker_process.py /app/worker/crynux_worker_process.py
 
 ENV PATH="/app/venv/bin:${PATH}"
+ENV TRITON_CACHE_DIR="/app/worker/venv/triton_cache"
+
 
 WORKDIR /app
 COPY build/docker/config.yml.example config.yml.example
