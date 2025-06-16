@@ -43,7 +43,7 @@ RUN apt install curl build-essential libssl-dev libffi-dev python3.10-dev -y
 
 RUN python3 -m venv venv
 ENV PATH="/app/venv/bin:${PATH}"
-ENV TRITON_CACHE_DIR="/app/worker/venv/triton_cache"
+ENV TRITON_CACHE_DIR="/app/venv/triton_cache"
 
 COPY stable-diffusion-task stable-diffusion-task
 COPY gpt-task gpt-task
