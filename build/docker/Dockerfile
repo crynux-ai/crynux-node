@@ -55,7 +55,7 @@ RUN pip uninstall -y triton
 
 FROM nvidia/cuda:12.8.1-cudnn-runtime-ubuntu22.04 as final
 
-RUN apt update && apt install python3.10 python3.10-venv -y --no-install-recommends && rm -rf /var/lib/apt/lists/*
+RUN apt update && apt install python3.10 python3.10-venv ffmpeg libsm6 libxext6 -y --no-install-recommends && rm -rf /var/lib/apt/lists/*
 
 COPY build/data/ /app/
 COPY --from=builder1 /app/venv /app/venv
