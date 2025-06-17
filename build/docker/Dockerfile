@@ -38,13 +38,6 @@ WORKDIR /app
 
 RUN python3 -m venv venv
 ENV PATH="/app/venv/bin:${PATH}"
-ENV TRITON_CACHE_DIR="/app/venv/triton_cache"
-ENV TORCH_CUDA_ARCH_LIST="7.5;8.6;8.9;12.0"
-ENV CUDA_VISIBLE_DEVICES="0"
-ENV FORCE_CUDA="1"
-ENV TORCH_CUDA_AVAILABLE="1"
-ENV CUDA_LAUNCH_BLOCKING="0"
-
 
 COPY stable-diffusion-task stable-diffusion-task
 COPY gpt-task gpt-task
@@ -58,7 +51,7 @@ RUN pip install --no-cache-dir -r requirements_cuda.txt && pip install --no-cach
 
 WORKDIR /app/crynux-worker
 RUN pip install --no-cache-dir -r requirements.txt && pip install --no-cache-dir .
-RUN python -c "import torch; print(f'Torch cuda available: {torch.cuda.is_available()}'); import bitsandbytes; print('Triton pre-compilation triggered and finished.')"
+RUN pip uninstall -y triton
 
 FROM nvidia/cuda:12.8.1-cudnn-runtime-ubuntu22.04 as final
 
@@ -70,8 +63,6 @@ COPY --from=builder2 /app/venv /app/worker/venv
 COPY crynux-worker/crynux_worker_process.py /app/worker/crynux_worker_process.py
 
 ENV PATH="/app/venv/bin:${PATH}"
-ENV TRITON_CACHE_DIR="/app/worker/venv/triton_cache"
-
 
 WORKDIR /app
 COPY build/docker/config.yml.example config.yml.example
