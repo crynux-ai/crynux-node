@@ -40,6 +40,11 @@ RUN python3 -m venv venv
 ENV PATH="/app/venv/bin:${PATH}"
 ENV TRITON_CACHE_DIR="/app/venv/triton_cache"
 ENV TORCH_CUDA_ARCH_LIST="7.5;8.6;8.9;12.0"
+ENV CUDA_VISIBLE_DEVICES="0"
+ENV FORCE_CUDA="1"
+ENV TORCH_CUDA_AVAILABLE="1"
+ENV CUDA_LAUNCH_BLOCKING="0"
+
 
 COPY stable-diffusion-task stable-diffusion-task
 COPY gpt-task gpt-task
