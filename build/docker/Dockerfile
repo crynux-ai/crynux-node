@@ -58,7 +58,7 @@ RUN pip install --no-cache-dir -r requirements_cuda.txt && pip install --no-cach
 
 WORKDIR /app/crynux-worker
 RUN pip install --no-cache-dir -r requirements.txt && pip install --no-cache-dir .
-RUN python -c "import bitsandbytes; import torch; print('Triton pre-compilation triggered and finished.')"
+RUN python -c "import torch; print(f'Torch cuda available: {torch.cuda.is_available()}'); import bitsandbytes; print('Triton pre-compilation triggered and finished.')"
 
 FROM nvidia/cuda:12.8.1-cudnn-runtime-ubuntu22.04 as final
 
