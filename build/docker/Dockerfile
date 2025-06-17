@@ -30,7 +30,7 @@ COPY requirements_docker.txt requirements.txt
 COPY MANIFEST.in MANIFEST.in
 COPY go.mod go.mod
 COPY go.sum go.sum
-RUN pip install -r --no-cache-dir requirements.txt && pip --no-cache-dir install .
+RUN pip install --no-cache-dir -r requirements.txt && pip install --no-cache-dir .
 
 FROM base as builder2
 
@@ -46,13 +46,13 @@ COPY gpt-task gpt-task
 COPY crynux-worker crynux-worker
 
 WORKDIR /app/stable-diffusion-task
-RUN pip install -r --no-cache-dir requirements_cuda.txt && pip --no-cache-dir install .
+RUN pip install --no-cache-dir -r requirements_cuda.txt && pip install --no-cache-dir .
 
 WORKDIR /app/gpt-task
-RUN pip install -r --no-cache-dir requirements_cuda.txt && pip --no-cache-dir install .
+RUN pip install --no-cache-dir -r requirements_cuda.txt && pip install --no-cache-dir .
 
 WORKDIR /app/crynux-worker
-RUN pip install -r --no-cache-dir requirements.txt && pip --no-cache-dir install .
+RUN pip install --no-cache-dir -r requirements.txt && pip install --no-cache-dir .
 RUN python -c "import bitsandbytes; import torch; print('Triton pre-compilation triggered and finished.')"
 
 FROM nvidia/cuda:12.8.1-cudnn-runtime-ubuntu22.04 as final
