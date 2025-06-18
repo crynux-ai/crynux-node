@@ -119,6 +119,12 @@ cd crynux-worker
 pip install -r requirements.txt
 pip install .
 
+pip show triton > /dev/null
+if [ $? -eq 0 ]; then
+    echo "Uninstalling triton..."
+    pip uninstall triton -y
+fi
+
 cd $WORK_DIR
 
 cp -R $GIT_DIR/build/data .
