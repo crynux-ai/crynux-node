@@ -21,7 +21,7 @@ on:
         default: 'dymension'
 
 env:
-  RELEASE_VERSION: 2.5.0
+  RELEASE_VERSION: 2.5.2
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
 

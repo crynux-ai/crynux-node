@@ -30,3 +30,5 @@ Write-Output "Bumping version number to: $VERSION"
 
 ## Update github action
 (Get-Content ".github/workflows/release-all.yml") -replace "RELEASE_VERSION: [0-9].[0-9].[0-9]", "RELEASE_VERSION: $VERSION" | Set-Content ".github/workflows/release-all.yml"
+(Get-Content ".github/workflows/windows-build-manually.yml") -replace "RELEASE_VERSION: [0-9].[0-9].[0-9]", "RELEASE_VERSION: $VERSION" | Set-Content ".github/workflows/windows-build-manually.yml"
+(Get-Content ".github/workflows/mac-build-manually.yml") -replace "RELEASE_VERSION: [0-9].[0-9].[0-9]", "RELEASE_VERSION: $VERSION" | Set-Content ".github/workflows/mac-build-manually.yml"
