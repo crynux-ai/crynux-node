@@ -93,6 +93,13 @@ Set-Location $RELEASE_DIR/crynux-worker
 pip install -r requirements.txt
 pip install .
 
+# Uninstall triton if it is installed
+pip show triton > $null
+if ($?) {
+    Write-Output "Uninstalling triton..."
+    pip uninstall triton -y
+}
+
 Set-Location $RELEASE_DIR
 New-Item -ItemType Directory -Path config
 Copy-Item -Recurse "$WORK_DIR/build/data" "data"
