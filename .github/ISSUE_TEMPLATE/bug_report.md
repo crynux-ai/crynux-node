@@ -19,7 +19,7 @@ assignees: ''
 
 > Please provide the full stack trace of the error
 > Find the most relevant part of the error and stack trace, do not just paste the whole log here
-> Tutorial: [Locate the Error Message](https://docs.crynux.ai/troubleshooting/locate-the-error-message)
+> Tutorial: [Locate the Error Message](https://docs.crynux.io/troubleshooting/locate-the-error-message)
 > Optionally, upload the log file as attachment
 ---
 

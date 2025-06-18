@@ -17,8 +17,8 @@ Download the attached DMG files below
 
 ## Tutorials
 
-[Start a Node on Windows](https://docs.crynux.ai/node-hosting/start-a-node-windows)
+[Start a Node on Windows](https://docs.crynux.io/node-hosting/start-a-node-windows)
 
-[Start a Node on Mac](https://docs.crynux.ai/node-hosting/start-a-node-mac)
+[Start a Node on Mac](https://docs.crynux.io/node-hosting/start-a-node-mac)
 
-[Start a Node using Docker](https://docs.crynux.ai/node-hosting/start-a-node-docker)
+[Start a Node using Docker](https://docs.crynux.io/node-hosting/start-a-node-docker)

@@ -94,7 +94,7 @@ class WebUICallable(QObject):
     def __init__(self, crynux_app):
         super().__init__()
         self.crynux_app = crynux_app
-        self.settings = QSettings("crynux.ai", "crynux_node")
+        self.settings = QSettings("crynux.io", "crynux_node")
 
     @pyqtSlot(str, result="QString")
     def get_settings_item(self, key):

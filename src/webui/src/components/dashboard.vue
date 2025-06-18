@@ -892,11 +892,11 @@ const copyText = async (text) => {
     </a-row>
     <div id="bottom-bar" :class="{'bottom-bar': true, 'fixed-bottom-bar': fixedBottomBar}">
         <a-space class="footer-links" align="center" :direction="screens['xs'] ? 'vertical' : 'horizontal'">
-            <a-typography-link href="https://crynux.ai" target="_blank">Home</a-typography-link>
+            <a-typography-link href="https://crynux.io" target="_blank">Home</a-typography-link>
             <span class="bottom-bar-divider">&nbsp;|&nbsp;</span>
-            <a-typography-link href="https://docs.crynux.ai" target="_blank">Docs</a-typography-link>
+            <a-typography-link href="https://docs.crynux.io" target="_blank">Docs</a-typography-link>
             <span class="bottom-bar-divider">&nbsp;|&nbsp;</span>
-            <a-typography-link href="https://blog.crynux.ai" target="_blank">Blog</a-typography-link>
+            <a-typography-link href="https://blog.crynux.io" target="_blank">Blog</a-typography-link>
             <span class="bottom-bar-divider">&nbsp;|&nbsp;</span>
             <a-typography-link href="https://twitter.com/crynuxai" target="_blank"
             >Twitter
@@ -908,7 +908,7 @@ const copyText = async (text) => {
             </a-typography-link
             >
             <span class="bottom-bar-divider">&nbsp;|&nbsp;</span>
-            <a-typography-link href="https://netstats.crynux.ai" target="_blank"
+            <a-typography-link href="https://netstats.crynux.io" target="_blank"
             >Netstats
             </a-typography-link
             >
