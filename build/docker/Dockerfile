@@ -6,14 +6,11 @@ COPY src/webui /app/
 
 RUN yarn && yarn build
 
-FROM nvidia/cuda:11.8.0-cudnn8-runtime-ubuntu22.04 as base
+FROM nvidia/cuda:12.8.1-cudnn-devel-ubuntu22.04 as base
 
-RUN apt update
-RUN apt install python3.10 python3.10-venv ffmpeg libsm6 libxext6 -y
+RUN apt update && apt install python3.10 python3.10-venv python3.10-dev python3-pip curl build-essential libssl-dev libffi-dev ffmpeg libsm6 libxext6 -y --no-install-recommends && rm -rf /var/lib/apt/lists/*
 
 FROM base as builder1
-
-RUN apt install curl build-essential libssl-dev libffi-dev python3.10-dev -y
 
 RUN curl -O -L "https://golang.org/dl/go1.21.0.linux-amd64.tar.gz" && tar -C /usr/local -xzf go1.21.0.linux-amd64.tar.gz
 ENV PATH="${PATH}:/usr/local/go/bin"
@@ -33,12 +30,11 @@ COPY requirements_docker.txt requirements.txt
 COPY MANIFEST.in MANIFEST.in
 COPY go.mod go.mod
 COPY go.sum go.sum
-RUN pip install -r requirements.txt && pip install .
+RUN pip install --no-cache-dir -r requirements.txt && pip install --no-cache-dir .
 
 FROM base as builder2
 
 WORKDIR /app
-
 
 RUN python3 -m venv venv
 ENV PATH="/app/venv/bin:${PATH}"
@@ -48,18 +44,18 @@ COPY gpt-task gpt-task
 COPY crynux-worker crynux-worker
 
 WORKDIR /app/stable-diffusion-task
-RUN pip install -r requirements_cuda.txt
-RUN pip install .
+RUN pip install --no-cache-dir -r requirements_cuda.txt && pip install --no-cache-dir .
 
 WORKDIR /app/gpt-task
-RUN pip install -r requirements_cuda.txt
-RUN pip install .
+RUN pip install --no-cache-dir -r requirements_cuda.txt && pip install --no-cache-dir .
 
 WORKDIR /app/crynux-worker
-RUN pip install -r requirements.txt
-RUN pip install .
+RUN pip install --no-cache-dir -r requirements.txt && pip install --no-cache-dir .
+RUN pip uninstall -y triton
 
-FROM base as final
+FROM nvidia/cuda:12.8.1-cudnn-runtime-ubuntu22.04 as final
+
+RUN apt update && apt install python3.10 python3.10-venv ffmpeg libsm6 libxext6 -y --no-install-recommends && rm -rf /var/lib/apt/lists/*
 
 COPY build/data/ /app/
 COPY --from=builder1 /app/venv /app/venv

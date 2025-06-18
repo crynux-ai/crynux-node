@@ -9,3 +9,5 @@ sed -i -E "s/VERSION=[0-9].[0-9].[0-9]/VERSION=$1/g" build/macos/build.sh
 sed -i -E "s/VERSION=[0-9].[0-9].[0-9]/VERSION=$1/g" build/linux-server/package.sh
 sed -i -E "s/VERSION = \"[0-9].[0-9].[0-9]\"/VERSION = \"$1\"/g" build/windows/package.ps1
 sed -i -E "s/RELEASE_VERSION: [0-9].[0-9].[0-9]/RELEASE_VERSION: $1/g" .github/workflows/release-all.yml
+sed -i -E "s/RELEASE_VERSION: [0-9].[0-9].[0-9]/RELEASE_VERSION: $1/g" .github/workflows/windows-build-manually.yml
+sed -i -E "s/RELEASE_VERSION: [0-9].[0-9].[0-9]/RELEASE_VERSION: $1/g" .github/workflows/mac-build-manually.yml
