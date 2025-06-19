@@ -898,7 +898,7 @@ const copyText = async (text) => {
             <span class="bottom-bar-divider">&nbsp;|&nbsp;</span>
             <a-typography-link href="https://blog.crynux.io" target="_blank">Blog</a-typography-link>
             <span class="bottom-bar-divider">&nbsp;|&nbsp;</span>
-            <a-typography-link href="https://twitter.com/crynuxai" target="_blank"
+            <a-typography-link href="https://twitter.com/crynuxio" target="_blank"
             >Twitter
             </a-typography-link
             >
