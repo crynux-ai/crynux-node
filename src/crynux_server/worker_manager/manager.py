@@ -6,7 +6,7 @@ from contextlib import asynccontextmanager, contextmanager
 from typing import Dict, Optional
 
 import psutil
-from anyio import Condition, sleep
+from anyio import Condition, fail_after, sleep
 
 from crynux_server.config import Config, get_config
 from crynux_server.models import TaskInput
@@ -98,13 +98,40 @@ class WorkerManager(object):
                 process.kill()
 
         p = subprocess.Popen(args=args, env=envs)
+        self._worker_process = p
+        
+        # Check if process is still alive immediately after start
+        if p.poll() is not None:
+            # Process has already terminated
+            raise RuntimeError(f"Worker process failed to start. Exit code: {p.returncode}")
+        
         try:
             yield
         finally:
-            process = psutil.Process(p.pid)
-            for proc in process.children(recursive=True):
-                proc.kill()
-            process.kill()
+            if self._worker_process is not None:
+                process = psutil.Process(self._worker_process.pid)
+                for proc in process.children(recursive=True):
+                    proc.kill()
+                process.kill()
+                self._worker_process = None
+
+    def is_worker_process_alive(self) -> bool:
+        """
+        Check if the worker process is still alive.
+        Returns True if process is running, False otherwise.
+        """
+        if self._worker_process is None:
+            return False
+        return self._worker_process.poll() is None
+
+    def get_worker_process_exit_code(self) -> Optional[int]:
+        """
+        Get the exit code of the worker process.
+        Returns None if process is still running, otherwise returns the exit code.
+        """
+        if self._worker_process is None:
+            return None
+        return self._worker_process.poll()
 
     async def connect(self, version: str) -> int:
         worker_id = self._next_worker_id
@@ -134,11 +161,12 @@ class WorkerManager(object):
         return self._current_worker_id > 0
 
     @asynccontextmanager
-    async def wait_connected(self):
-        async with self._connect_condition:
-            while self._current_worker_id == 0:
-                await self._connect_condition.wait()
-            yield
+    async def wait_connected(self, timeout: Optional[float] = None):
+        with fail_after(timeout):
+            async with self._connect_condition:
+                while self._current_worker_id == 0:
+                    await self._connect_condition.wait()
+                yield
 
     @asynccontextmanager
     async def wait_connection_changed(self):

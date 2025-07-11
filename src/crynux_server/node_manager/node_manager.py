@@ -579,6 +579,13 @@ class NodeManager(object):
         try:
             async with create_task_group() as tg:
                 self._tg = tg
+
+                async with self._worker_manager.wait_connected(timeout=30):
+                    version = self._worker_manager.version
+                    assert version is not None
+                    version_list = [int(v) for v in version.split(".")]
+                    assert len(version_list) == 3
+
                 try:
                     async with create_task_group() as init_tg:
                         await self.state_cache.set_node_state(models.NodeStatus.Init)
@@ -637,16 +644,11 @@ class NodeManager(object):
                     ):
                         with attemp:
                             try:
-                                async with self._worker_manager.wait_connected():
-                                    version = self._worker_manager.version
-                                    assert version is not None
-                                    version_list = [int(v) for v in version.split(".")]
-                                    assert len(version_list) == 3
-                                    await self._node_state_manager.try_start(
-                                        gpu_name=self.gpu_name + "+" + self.platform,
-                                        gpu_vram=self.gpu_vram,
-                                        version=version_list,
-                                    )
+                                await self._node_state_manager.try_start(
+                                    gpu_name=self.gpu_name + "+" + self.platform,
+                                    gpu_vram=self.gpu_vram,
+                                    version=version_list,
+                                )
                             except Exception as e:
                                 _logger.warning(e)
                                 _logger.info("Cannot auto join the network")
