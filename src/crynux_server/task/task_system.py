@@ -1,13 +1,18 @@
 import asyncio
 import logging
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 
 from anyio import create_task_group, get_cancelled_exc_class
 from anyio.abc import TaskGroup
 from tenacity import retry, stop_after_attempt, stop_never, wait_exponential, wait_fixed
 
 from crynux_server.contracts import Contracts
-from crynux_server.models import DownloadTaskState, DownloadTaskStatus, TaskType
+from crynux_server.models import (
+    DownloadTaskState,
+    DownloadTaskStatus,
+    ModelFileEntry,
+    TaskType,
+)
 from crynux_server.relay.abc import Relay
 
 from .download_task import DownloadTaskRunner
@@ -122,7 +127,7 @@ class TaskSystem(object):
 
     # Create download task with the given task_id
     async def create_download_task(
-        self, task_id: str, task_type: TaskType, model_id: str
+        self, task_id: str, task_type: TaskType, model_files: List[ModelFileEntry]
     ):
         if task_id not in self._download_runners:
             if await self._download_state_cache.has(task_id):
@@ -133,7 +138,7 @@ class TaskSystem(object):
             state = DownloadTaskState(
                 task_id=task_id,
                 task_type=task_type,
-                model_id=model_id,
+                model_files=model_files,
                 status=DownloadTaskStatus.Started,
             )
             runner = DownloadTaskRunner(

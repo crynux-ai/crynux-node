@@ -8,6 +8,8 @@ from crynux_server.models import (
     ChainNodeStatus,
     Event,
     EventType,
+    InMemoryModel,
+    ModelFileEntry,
     NodeInfo,
     RelayTask,
     TaskError,
@@ -93,7 +95,7 @@ class Relay(ABC):
         network: str,
         gpu_name: str,
         gpu_vram: int,
-        model_ids: List[str],
+        model_files: List[ModelFileEntry],
         version: str,
         staking_amount: int,
     ): ...
@@ -103,12 +105,15 @@ class Relay(ABC):
         self,
         gpu_name: str,
         gpu_vram: int,
-        model_ids: List[str],
+        model_files: List[ModelFileEntry],
         version: str,
     ): ...
 
     @abstractmethod
-    async def node_report_model_downloaded(self, model_id: str): ...
+    async def node_report_model_downloaded(self, model_file: ModelFileEntry): ...
+
+    @abstractmethod
+    async def node_report_in_memory_model(self, model: Optional[InMemoryModel]): ...
 
     @abstractmethod
     async def node_pause(self): ...

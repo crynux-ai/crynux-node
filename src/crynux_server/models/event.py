@@ -1,9 +1,10 @@
 import json
-from typing import Literal
+from typing import List, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from .common import AddressFromStr, BytesFromHex
+from .model_file import ModelFileEntry
 from .task import (
     InferenceTaskStatus,
     SoftTaskAbortReason,
@@ -46,9 +47,11 @@ class TaskStarted(Event):
 
 
 class DownloadModel(Event):
+    model_config = ConfigDict(protected_namespaces=())
+
     type: EventType = Field(default="DownloadModel", init_var=False, frozen=True)
     node_address: AddressFromStr
-    model_id: str
+    model_files: List[ModelFileEntry]
     task_type: TaskType
 
 

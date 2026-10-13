@@ -1,7 +1,8 @@
-from typing import List, Literal
+from typing import Literal
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, ConfigDict, field_validator
 
+from .model_file import IMAGE_BASE_MODEL_FORMAT, ModelFileEntry
 from .model_name import normalize_model_name
 from .task import TaskType
 
@@ -34,7 +35,23 @@ class ModelConfig(BaseModel):
             {"id": model_name, "type": model_type, "variant": variant}
         )
 
+    def to_model_file_entry(self, task_type: TaskType) -> ModelFileEntry:
+        """Source entry of a base model; the entry carries no revision."""
+        if self.type != "base":
+            raise ValueError(f"Model type {self.type} has no model file entry")
+        model_format = "" if task_type == TaskType.LLM else IMAGE_BASE_MODEL_FORMAT
+        return ModelFileEntry(repository=self.id, format=model_format)
+
 
 class DownloadedModel(BaseModel):
+    model_config = ConfigDict(protected_namespaces=())
+
     task_type: TaskType
-    model: ModelConfig
+    model_file: ModelFileEntry
+
+    @field_validator("model_file")
+    @classmethod
+    def _require_revision(cls, v: ModelFileEntry) -> ModelFileEntry:
+        if not v.is_exact:
+            raise ValueError("A downloaded model file requires a revision")
+        return v

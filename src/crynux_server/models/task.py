@@ -3,9 +3,10 @@ from datetime import datetime
 from enum import IntEnum
 from typing import Annotated, Any, List, Optional
 
-from pydantic import BaseModel, BeforeValidator
+from pydantic import BaseModel, BeforeValidator, ConfigDict, Field
 
 from .common import AddressFromStr, BytesFromHex, WeiFromStr
+from .model_file import ModelFileEntry, ModelFileList
 
 _logger = logging.getLogger(__name__)
 
@@ -107,6 +108,8 @@ class PoseConfig(BaseModel):
 
 
 class RelayTask(BaseModel):
+    model_config = ConfigDict(protected_namespaces=())
+
     sequence: int
     task_args: str
     task_id_commitment: BytesFromHex
@@ -123,6 +126,12 @@ class RelayTask(BaseModel):
     task_fee: WeiFromStr
     task_size: int
     model_ids: List[str]
+    # Exact model files frozen by the Relay once the task has started
+    execution_model_files: ModelFileList = Field(default_factory=list)
+    # Identity of the in-memory model the task requests: the hex SHA-256 and
+    # the canonical config the hash is computed from
+    requested_model_cache_hash: Optional[str] = None
+    requested_model_cache_config: Any = None
     score: str
     qos_score: int
     selected_node: AddressFromStr
@@ -148,7 +157,9 @@ class InferenceTaskState(BaseModel):
 
 
 class DownloadTaskState(BaseModel):
+    model_config = ConfigDict(protected_namespaces=())
+
     task_id: str
     task_type: TaskType
-    model_id: str
+    model_files: List[ModelFileEntry]
     status: DownloadTaskStatus

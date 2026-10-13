@@ -36,3 +36,15 @@ def test_node_task_error_ten_field_golden_vector():
         "0xaa9547f4d769763dfb39d86f5cd199faa7c899788ab7175a3adc6aa60a32cc1b"
         "528196c2d3a764748c99e977e66baa8706503576de45885215ce10185479528101"
     )
+
+
+def test_signature_sorts_keys_of_dicts_inside_lists():
+    signer = Signer(
+        "0x420fcabfd5dbb55215490693062e6e530840c64de837d071f0d9da21aaac861e"
+    )
+    unordered = {"files": [{"revision": "r", "repository": "a", "kwargs": {"y": 1, "x": 2}}]}
+    ordered = {"files": [{"kwargs": {"x": 2, "y": 1}, "repository": "a", "revision": "r"}]}
+
+    assert signer.sign(unordered, timestamp=1784851234) == signer.sign(
+        ordered, timestamp=1784851234
+    )

@@ -8,7 +8,7 @@ from typing import AsyncGenerator
 import sqlalchemy as sa
 from anyio import fail_after
 from sqlalchemy.pool import NullPool
-from sqlalchemy.ext.asyncio import (AsyncEngine, AsyncSession,
+from sqlalchemy.ext.asyncio import (AsyncConnection, AsyncEngine, AsyncSession,
                                     async_sessionmaker, create_async_engine)
 
 from crynux_server.config import get_config, DBConfig
@@ -36,6 +36,24 @@ async def get_session() -> AsyncGenerator[AsyncSession, None]:
 session_scope = asynccontextmanager(get_session)
 
 
+async def _table_columns(conn: AsyncConnection, table: str) -> set[str]:
+    res = await conn.execute(sa.text(f"PRAGMA table_info({table})"))
+    return {row[1] for row in res}
+
+
+# Download records without a model file revision cannot describe the files
+# held on disk. The tables are recreated empty; the Hugging Face cache files
+# stay untouched.
+async def _drop_revisionless_download_tables(conn: AsyncConnection):
+    for table, column in (
+        ("download_models", "revision"),
+        ("download_task_states", "model_files"),
+    ):
+        columns = await _table_columns(conn, table)
+        if len(columns) > 0 and column not in columns:
+            await conn.execute(sa.text(f"DROP TABLE {table}"))
+
+
 async def init(db: DBConfig | None = None):
     if db is None:        
         db = get_config().db
@@ -58,11 +76,11 @@ async def init(db: DBConfig | None = None):
     session = async_sessionmaker(engine, autoflush=False, expire_on_commit=False)
 
     async with engine.begin() as conn:
+        await _drop_revisionless_download_tables(conn)
         await conn.run_sync(Base.metadata.create_all)
         # create_all never alters existing tables, so columns added to
         # existing tables must be created here for old databases
-        res = await conn.execute(sa.text("PRAGMA table_info(inference_task_states)"))
-        columns = {row[1] for row in res}
+        columns = await _table_columns(conn, "inference_task_states")
         if "result_uploaded" not in columns:
             await conn.execute(
                 sa.text(

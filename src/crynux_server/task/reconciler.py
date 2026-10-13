@@ -13,6 +13,11 @@ from pydantic import ValidationError
 
 from crynux_server import models
 from crynux_server.config import Config, get_config
+from crynux_server.in_memory_model_tracker import (
+    InMemoryModelTracker,
+    build_in_memory_model,
+    get_in_memory_model_tracker,
+)
 from crynux_server.relay import Relay, get_relay
 from crynux_server.relay.exceptions import RelayError
 from crynux_server.worker_manager import (TaskCancelled, TaskDownloadError,
@@ -72,10 +77,14 @@ class TaskReconciler(object):
         config: Optional[Config] = None,
         interval: float = 1,
         error_reporter: Optional[TaskErrorReporter] = None,
+        in_memory_model_tracker: Optional[InMemoryModelTracker] = None,
     ):
         if relay is None:
             relay = get_relay()
         self.relay = relay
+        if in_memory_model_tracker is None:
+            in_memory_model_tracker = get_in_memory_model_tracker()
+        self.in_memory_model_tracker = in_memory_model_tracker
         if state_cache is None:
             state_cache = get_inference_task_state_cache()
         self.cache = state_cache
@@ -450,14 +459,38 @@ class TaskReconciler(object):
         task_models = [
             models.ModelConfig.from_model_id(model_id) for model_id in task.model_ids
         ]
-        files, hashes, checkpoint, execution_dtype = await run_inference_task(
-            task_id_commitment=task_id,
-            task_type=state.task_type,
-            models=task_models,
-            task_args=task.task_args,
-            task_dir=task_dir,
-            deadline=deadline,
+        # The Worker's memory is unknown after any failed or cancelled execution
+        epoch = self.in_memory_model_tracker.epoch
+        try:
+            (
+                files,
+                hashes,
+                checkpoint,
+                execution_dtype,
+                model_cache_hash,
+            ) = await run_inference_task(
+                task_id_commitment=task_id,
+                task_type=state.task_type,
+                models=task_models,
+                task_args=task.task_args,
+                task_dir=task_dir,
+                deadline=deadline,
+                execution_model_files=task.execution_model_files,
+                requested_model_cache_hash=task.requested_model_cache_hash,
+            )
+        except Exception:
+            self.in_memory_model_tracker.set(None, epoch)
+            raise
+        in_memory_model = build_in_memory_model(
+            task, execution_dtype, model_cache_hash
         )
+        if in_memory_model is None:
+            _logger.warning(
+                "Task %s did not confirm its requested model cache identity, "
+                "the in-memory model is reported as empty",
+                HexBytes(task_id).hex(),
+            )
+        self.in_memory_model_tracker.set(in_memory_model, epoch)
         return files, b"".join(hashes), checkpoint, execution_dtype
 
     async def _download_auxiliary_models(

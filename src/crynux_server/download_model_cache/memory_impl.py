@@ -1,4 +1,3 @@
-from hashlib import sha256
 from typing import Dict, List
 
 from crynux_server.models import DownloadedModel
@@ -11,9 +10,7 @@ class MemoryDownloadModelCache(DownloadModelCache):
         self._download_models: Dict[str, DownloadedModel] = {}
 
     async def save(self, model: DownloadedModel):
-        model_id = model.model.to_model_id()
-        model_id_hash = sha256(model_id.encode("utf-8")).hexdigest()
-        self._download_models[model_id_hash] = model
+        self._download_models[model.model_file.digest()] = model
 
     async def load_all(self) -> List[DownloadedModel]:
         return list(self._download_models.values())

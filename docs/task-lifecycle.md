@@ -11,6 +11,8 @@ Task execution failures are classified into exactly two categories:
 
 Before inference, `TaskReconciler` MUST derive every non-base model from the authoritative `task.model_ids` and download those models sequentially through task-scoped foreground jobs. The inference worker MUST continue to load every model from the local cache only (`local_files_only`) and MUST NOT download models. A base model absent from the local cache, or a non-base model still absent after its foreground job succeeds, fails inference with the `Task model not downloaded` error. The node therefore does not report `TaskInvalid` for invalid model identifiers; download failures and cache misses become `TaskExecutionError` and end through the relay timeout, the always-safe silent path. The `Task model not downloaded` traceback additionally suppresses the inference worker restart, as specified in `docs/task-system-design.md`; its protocol handling is identical to every other `TaskExecutionError`.
 
+`TaskReconciler` MUST send the authoritative `execution_model_files` of the task record to the inference worker in `InferenceTaskInput.execution_model_files` as exact load constraints, together with `requested_model_cache_hash`. The task arguments MUST remain unchanged.
+
 The classification boundary is protocol-critical because of validation groups:
 
 - A task MAY be part of a hidden 3-node validation group. The node cannot detect group membership at execution time.

@@ -1,7 +1,9 @@
 from typing import List
 from enum import Enum, IntEnum
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
+
+from .model_file import ModelFileList
 
 
 class ChainNodeStatus(IntEnum):
@@ -30,11 +32,13 @@ class ChainNodeInfo(BaseModel):
 
 
 class NodeInfo(BaseModel):
+    model_config = ConfigDict(protected_namespaces=())
+
     address: str
     gpu_name: str
     gpu_vram: int
-    in_use_model_ids: List[str]
-    model_ids: List[str]
+    in_memory_model_files: ModelFileList
+    model_files: ModelFileList
     qos_score: float
     staking_score: float
     prob_weight: float

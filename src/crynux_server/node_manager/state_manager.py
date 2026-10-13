@@ -240,16 +240,21 @@ class NodeStateManager(object):
             staking_amount, value=stake_value, option=option
         )
 
+    # The complete local inventory of exact model files. Node join and joined-node
+    # capability synchronization both report exactly this list.
+    async def _build_model_file_inventory(self) -> List[models.ModelFileEntry]:
+        download_models = await self.download_model_cache.load_all()
+        return [model.model_file for model in download_models]
+
     async def _sync_capabilities(
         self, gpu_name: str, gpu_vram: int, version: List[int]
     ):
-        download_models = await self.download_model_cache.load_all()
-        model_ids = [model.model.to_model_id() for model in download_models]
+        model_files = await self._build_model_file_inventory()
         await self.relay.node_sync_capabilities(
             gpu_name=gpu_name,
             gpu_vram=gpu_vram,
             version=".".join(str(v) for v in version),
-            model_ids=model_ids,
+            model_files=model_files,
         )
 
     async def try_start(
@@ -293,14 +298,12 @@ class NodeStateManager(object):
                     if waiter is not None:
                         await waiter.wait()
 
-                    download_models = await self.download_model_cache.load_all()
-                    model_ids = [model.model.to_model_id() for model in download_models]
                     await self.relay.node_join(
                         network=self.config.ethereum.network,
                         gpu_name=gpu_name,
                         gpu_vram=gpu_vram,
                         version=".".join(str(v) for v in version),
-                        model_ids=model_ids,
+                        model_files=await self._build_model_file_inventory(),
                         staking_amount=staking_amount,
                     )
                     # update tx state to avoid the web user controlling node status by api
@@ -369,13 +372,11 @@ class NodeStateManager(object):
                 async with self._wrap_tx_error():
                     if waiter is not None:
                         await waiter.wait()
-                    download_models = await self.download_model_cache.load_all()
-                    model_ids = [model.model.to_model_id() for model in download_models]
                     await self.relay.node_join(
                         network=self.config.ethereum.network,
                         gpu_name=gpu_name,
                         gpu_vram=gpu_vram,
-                        model_ids=model_ids,
+                        model_files=await self._build_model_file_inventory(),
                         version=".".join(str(v) for v in version),
                         staking_amount=staking_amount,
                     )

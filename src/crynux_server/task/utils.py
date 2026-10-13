@@ -10,7 +10,9 @@ from crynux_server.models import (
     TaskInput,
     TaskType,
     ModelConfig,
+    ModelFileEntry,
     DownloadTaskInput,
+    resolve_model_files,
 )
 from crynux_server.worker_manager import TaskCancellationType, get_worker_manager
 
@@ -31,6 +33,8 @@ async def run_inference_task(
     task_args: str,
     task_dir: str,
     deadline: Optional[float] = None,
+    execution_model_files: Optional[List[ModelFileEntry]] = None,
+    requested_model_cache_hash: Optional[str] = None,
 ):
     worker_manager = get_worker_manager("inference")
     task_input = TaskInput(
@@ -41,6 +45,8 @@ async def run_inference_task(
             models=models,
             task_args=task_args,
             output_dir=task_dir,
+            execution_model_files=execution_model_files or [],
+            requested_model_cache_hash=requested_model_cache_hash,
         )
     )
     task_result = await worker_manager.send_task(task_input, deadline=deadline)
@@ -78,25 +84,33 @@ async def run_inference_task(
         hashes = [get_image_hash(filename) for filename in files]
         checkpoint = os.path.join(task_dir, "checkpoint")
 
-    return files, hashes, checkpoint, success_result.execution_dtype
+    return (
+        files,
+        hashes,
+        checkpoint,
+        success_result.execution_dtype,
+        success_result.model_cache_hash,
+    )
 
 
 async def run_download_task(
     task_id: str,
     task_type: TaskType,
-    model: ModelConfig,
-):
+    model_files: List[ModelFileEntry],
+) -> List[ModelFileEntry]:
+    """Download the required model files and return the exact entry of each."""
     worker_manager = get_worker_manager("download")
     task_input = TaskInput(
         task=DownloadTaskInput(
             task_name="download",
             task_type=task_type,
             task_id=task_id,
-            model=model,
+            model_files=model_files,
         )
     )
     task_result = await worker_manager.send_task(task_input)
-    await task_result.get()
+    success_result = await task_result.get()
+    return resolve_model_files(model_files, success_result.model_files)
 
 
 def validate_score(score: bytes) -> bool:

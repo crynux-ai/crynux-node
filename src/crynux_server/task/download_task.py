@@ -60,25 +60,36 @@ class DownloadTaskRunner(object):
         if self._state.status == models.DownloadTaskStatus.Success:
             return
 
-        model = models.ModelConfig.from_model_id(self._state.model_id)
         if self._state.status == models.DownloadTaskStatus.Started:
-            _logger.info(f"start downloading model {self._state.model_id}")
-            await run_download_task(
-                task_id=self.task_id, task_type=self._state.task_type, model=model
+            _logger.info(
+                f"start downloading {len(self._state.model_files)} model files"
             )
+            downloaded_files = await run_download_task(
+                task_id=self.task_id,
+                task_type=self._state.task_type,
+                model_files=self._state.model_files,
+            )
+            # Persist the exact entries so a restart reports the downloaded revisions
             async with self.state_context():
+                self._state.model_files = downloaded_files
                 self._state.status = models.DownloadTaskStatus.Executed
-            _logger.info(f"Download model {self._state.model_id} successfully")
+            _logger.info(f"Download model files {self.task_id} successfully")
 
         if self._state.status == models.DownloadTaskStatus.Executed:
-            await self.relay.node_report_model_downloaded(self._state.model_id)
-            _logger.info(f"report model {self._state.model_id} is downloaded")
+            for model_file in self._state.model_files:
+                await self.relay.node_report_model_downloaded(model_file)
+                _logger.info(
+                    f"report model file {model_file.repository}@{model_file.revision} is downloaded"
+                )
             async with self.state_context():
                 self._state.status = models.DownloadTaskStatus.Success
 
-            await self.download_model_cache.save(
-                models.DownloadedModel(task_type=self._state.task_type, model=model)
-            )
+            for model_file in self._state.model_files:
+                await self.download_model_cache.save(
+                    models.DownloadedModel(
+                        task_type=self._state.task_type, model_file=model_file
+                    )
+                )
 
     async def mark_failed(self):
         async with self.state_context():

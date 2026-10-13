@@ -53,7 +53,7 @@ class DownloadTaskState(Base, BaseMixin):
     task_type: Mapped[TaskType] = mapped_column(
         sa.Enum(TaskType), nullable=False, index=True
     )
-    model_id: Mapped[str] = mapped_column(sa.Text, nullable=False, index=False)
+    model_files: Mapped[str] = mapped_column(sa.Text, nullable=False, index=False)
     status: Mapped[DownloadTaskStatus] = mapped_column(
         sa.Enum(DownloadTaskStatus), nullable=False, index=True
     )

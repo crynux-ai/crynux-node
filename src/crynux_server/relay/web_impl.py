@@ -13,7 +13,14 @@ from anyio import open_file, to_thread, wrap_file
 from hexbytes import HexBytes
 from web3 import Web3
 
-from crynux_server.models import Event, EventType, TaskError, load_event
+from crynux_server.models import (
+    Event,
+    EventType,
+    InMemoryModel,
+    ModelFileEntry,
+    TaskError,
+    load_event,
+)
 from crynux_server.models.node import ChainNodeStatus, NodeInfo
 from crynux_server.models.task import RelayTask
 from crynux_server.utils import get_address_from_privkey
@@ -338,14 +345,21 @@ class WebRelay(Relay):
 
     @_web_relay_restart_pool_error
     async def node_join(
-        self, network: str, gpu_name: str, gpu_vram: int, model_ids: List[str], version: str, staking_amount: int
+        self,
+        network: str,
+        gpu_name: str,
+        gpu_vram: int,
+        model_files: List[ModelFileEntry],
+        version: str,
+        staking_amount: int,
     ):
+        model_files_data = [entry.model_dump() for entry in model_files]
         input = {
             "address": self.node_address,
             "network": network,
             "gpu_name": gpu_name,
             "gpu_vram": gpu_vram,
-            "model_ids": model_ids,
+            "model_files": model_files_data,
             "version": version,
             "staking": str(staking_amount),
         }
@@ -356,7 +370,7 @@ class WebRelay(Relay):
                 "network": network,
                 "gpu_name": gpu_name,
                 "gpu_vram": gpu_vram,
-                "model_ids": model_ids,
+                "model_files": model_files_data,
                 "version": version,
                 "staking": str(staking_amount),
                 "timestamp": timestamp,
@@ -367,13 +381,18 @@ class WebRelay(Relay):
 
     @_web_relay_restart_pool_error
     async def node_sync_capabilities(
-        self, gpu_name: str, gpu_vram: int, model_ids: List[str], version: str
+        self,
+        gpu_name: str,
+        gpu_vram: int,
+        model_files: List[ModelFileEntry],
+        version: str,
     ):
+        model_files_data = [entry.model_dump() for entry in model_files]
         input = {
             "address": self.node_address,
             "gpu_name": gpu_name,
             "gpu_vram": gpu_vram,
-            "model_ids": model_ids,
+            "model_files": model_files_data,
             "version": version,
         }
         timestamp, signature = self.signer.sign(input)
@@ -382,7 +401,7 @@ class WebRelay(Relay):
             json={
                 "gpu_name": gpu_name,
                 "gpu_vram": gpu_vram,
-                "model_ids": model_ids,
+                "model_files": model_files_data,
                 "version": version,
                 "timestamp": timestamp,
                 "signature": signature,
@@ -391,18 +410,34 @@ class WebRelay(Relay):
         _process_resp(resp, "nodeSyncCapabilities")
 
     @_web_relay_restart_pool_error
-    async def node_report_model_downloaded(self, model_id: str):
-        input = {"address": self.node_address, "model_id": model_id}
+    async def node_report_model_downloaded(self, model_file: ModelFileEntry):
+        model_file_data = model_file.model_dump()
+        input = {"address": self.node_address, "model_file": model_file_data}
         timestamp, signature = self.signer.sign(input)
         resp = await self.client.post(
             f"/v1/node/{self.node_address}/model",
             json={
-                "model_id": model_id,
+                "model_file": model_file_data,
                 "timestamp": timestamp,
                 "signature": signature,
             },
         )
         resp = _process_resp(resp, "nodeReportModelDownload")
+
+    @_web_relay_restart_pool_error
+    async def node_report_in_memory_model(self, model: Optional[InMemoryModel]):
+        model_data = None if model is None else model.model_dump()
+        input = {"address": self.node_address, "model": model_data}
+        timestamp, signature = self.signer.sign(input)
+        resp = await self.client.post(
+            f"/v2/node/{self.node_address}/in_memory_model",
+            json={
+                "model": model_data,
+                "timestamp": timestamp,
+                "signature": signature,
+            },
+        )
+        resp = _process_resp(resp, "nodeReportInMemoryModel")
 
     @_web_relay_restart_pool_error
     async def node_pause(self):

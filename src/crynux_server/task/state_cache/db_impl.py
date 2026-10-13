@@ -1,3 +1,4 @@
+import json
 from datetime import datetime
 from typing import List, Optional
 
@@ -6,9 +7,18 @@ import sqlalchemy as sa
 from crynux_server import db
 from crynux_server.db import models as db_models
 from crynux_server.models import (DownloadTaskState, DownloadTaskStatus,
-                                  InferenceTaskState, InferenceTaskStatus)
+                                  InferenceTaskState, InferenceTaskStatus,
+                                  ModelFileEntry)
 
 from .abc import DownloadTaskStateCache, InferenceTaskStateCache
+
+
+def _dump_model_files(model_files: List[ModelFileEntry]) -> str:
+    return json.dumps([entry.model_dump() for entry in model_files])
+
+
+def _load_model_files(data: str) -> List[ModelFileEntry]:
+    return [ModelFileEntry.model_validate(entry) for entry in json.loads(data)]
 
 
 class DbInferenceTaskStateCache(InferenceTaskStateCache):
@@ -130,7 +140,7 @@ class DbDownloadTaskStateCache(DownloadTaskStateCache):
                 return DownloadTaskState(
                     task_id=task_id,
                     task_type=state.task_type,
-                    model_id=state.model_id,
+                    model_files=_load_model_files(state.model_files),
                     status=state.status,
                 )
             else:
@@ -147,14 +157,14 @@ class DbDownloadTaskStateCache(DownloadTaskStateCache):
                 state = db_models.DownloadTaskState(
                     task_id=task_state.task_id,
                     task_type=task_state.task_type,
-                    model_id=task_state.model_id,
+                    model_files=_dump_model_files(task_state.model_files),
                     status=task_state.status,
                 )
                 sess.add(state)
             else:
                 state.task_id = task_state.task_id
                 state.task_type = task_state.task_type
-                state.model_id = task_state.model_id
+                state.model_files = _dump_model_files(task_state.model_files)
                 state.status = task_state.status
             await sess.commit()
 
@@ -185,7 +195,7 @@ class DbDownloadTaskStateCache(DownloadTaskStateCache):
                 DownloadTaskState(
                     task_id=state.task_id,
                     task_type=state.task_type,
-                    model_id=state.model_id,
+                    model_files=_load_model_files(state.model_files),
                     status=state.status,
                 )
                 for state in states

@@ -36,15 +36,20 @@ __all__ = [
 ]
 
 
+def _sort_value(value: Any) -> Any:
+    if isinstance(value, dict):
+        return sort_dict(value)
+    if isinstance(value, list):
+        return [_sort_value(item) for item in value]
+    return value
+
+
 def sort_dict(input: Dict[str, Any]) -> Dict[str, Any]:
     keys = sorted(input.keys())
 
     res = OrderedDict()
     for key in keys:
-        value = input[key]
-        if isinstance(value, dict):
-            value = sort_dict(value)
-        res[key] = value
+        res[key] = _sort_value(input[key])
 
     return res
 

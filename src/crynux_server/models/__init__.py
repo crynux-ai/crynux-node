@@ -1,4 +1,8 @@
 from .download_model import DownloadedModel, ModelConfig
+from .in_memory_model import InMemoryModel
+from .model_file import (IMAGE_BASE_MODEL_FORMAT, SOURCE_TYPE_HUGGINGFACE,
+                         ModelFileEntry, model_files_digest,
+                         resolve_model_files)
 from .model_name import normalize_model_name, normalize_task_args_model_names
 from .event import (EventType, Event, DownloadModel, TaskEndAborted, TaskEndGroupRefund,
                     TaskEndGroupSuccess, TaskEndInvalidated, TaskEndSuccess,
@@ -61,6 +65,12 @@ __all__ = [
     "ErrorResult",
     "TaskResult",
     "DownloadedModel",
+    "InMemoryModel",
+    "ModelFileEntry",
+    "IMAGE_BASE_MODEL_FORMAT",
+    "SOURCE_TYPE_HUGGINGFACE",
+    "model_files_digest",
+    "resolve_model_files",
     "normalize_model_name",
     "normalize_task_args_model_names",
 ]

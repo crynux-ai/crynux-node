@@ -12,6 +12,7 @@ from anyio import Condition, Lock, fail_after, sleep
 
 from crynux_server import utils
 from crynux_server.config import Config, get_config, load_env_file
+from crynux_server.in_memory_model_tracker import get_in_memory_model_tracker
 from crynux_server.models import TaskInput, TaskResult
 from crynux_server.utils import get_selected_gpu_device_uuids
 
@@ -303,6 +304,8 @@ class WorkerManager(object):
         )
         self._task_futures.clear()
         self._task_deadlines.clear()
+        if self.role == "inference":
+            get_in_memory_model_tracker().reset()
 
         async with self._connect_condition:
             self._current_worker_id = 0

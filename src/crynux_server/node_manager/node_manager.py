@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import logging
 from datetime import datetime
-from typing import Optional, Type
+from typing import List, Optional, Tuple, Type
 
 from anyio import (
     TASK_STATUS_IGNORED,
@@ -33,6 +33,7 @@ from crynux_server.config import (
     wait_privkey,
 )
 from crynux_server.contracts import Contracts, set_contracts
+from crynux_server.in_memory_model_tracker import get_in_memory_model_tracker
 from crynux_server.relay import Relay, WebRelay, set_relay
 from crynux_server.task import (
     DbDownloadTaskStateCache,
@@ -70,6 +71,18 @@ from .state_cache import (
 from .state_manager import NodeStateManager, set_node_state_manager
 
 _logger = logging.getLogger(__name__)
+
+IN_MEMORY_MODEL_SYNC_INTERVAL = 1
+
+# Node statuses in which the Relay accepts an in-memory model report
+_JOINED_STATUSES = frozenset(
+    [
+        models.NodeStatus.Running,
+        models.NodeStatus.Paused,
+        models.NodeStatus.PendingPause,
+        models.NodeStatus.PendingStop,
+    ]
+)
 
 
 async def _make_contracts(
@@ -285,7 +298,7 @@ class NodeManager(object):
 
     async def _prefetch_models(self):
         preload_models = self.config.task_config.preloaded_models
-        task_inputs = []
+        planned_models: List[Tuple[models.TaskType, models.ModelConfig]] = []
 
         # The initial inference task model must always be present locally:
         # the inference worker loads models from the local cache only and
@@ -293,75 +306,71 @@ class NodeManager(object):
         initial_task_model = models.ModelConfig(
             id="crynux-network/stable-diffusion-v1-5", type="base", variant="fp16"
         )
-        task_inputs.append(
-            models.TaskInput(
-                task=models.DownloadTaskInput(
-                    task_name="download",
-                    task_type=models.TaskType.SD,
-                    task_id="preload_models_0",
-                    model=initial_task_model,
-                )
-            )
-        )
+        planned_models.append((models.TaskType.SD, initial_task_model))
 
         if preload_models is not None:
-            if preload_models.sd_base is not None:
-                for model in preload_models.sd_base:
-                    if (
-                        model.id == initial_task_model.id
-                        and model.variant == initial_task_model.variant
-                    ):
-                        continue
-                    task_input = models.TaskInput(
-                        task=models.DownloadTaskInput(
-                            task_name="download",
-                            task_type=models.TaskType.SD,
-                            task_id=f"preload_models_{len(task_inputs)}",
-                            model=models.ModelConfig(
-                                id=model.id, type="base", variant=model.variant
-                            ),
-                        )
+            for model in preload_models.sd_base or []:
+                if (
+                    model.id == initial_task_model.id
+                    and model.variant == initial_task_model.variant
+                ):
+                    continue
+                planned_models.append(
+                    (
+                        models.TaskType.SD,
+                        models.ModelConfig(
+                            id=model.id, type="base", variant=model.variant
+                        ),
                     )
-                    task_inputs.append(task_input)
-            if preload_models.gpt_base is not None:
-                for model in preload_models.gpt_base:
-                    task_input = models.TaskInput(
-                        task=models.DownloadTaskInput(
-                            task_name="download",
-                            task_type=models.TaskType.LLM,
-                            task_id=f"preload_models_{len(task_inputs)}",
-                            model=models.ModelConfig(
-                                id=model.id, type="base", variant=model.variant
-                            ),
-                        )
+                )
+            for model in preload_models.gpt_base or []:
+                planned_models.append(
+                    (
+                        models.TaskType.LLM,
+                        models.ModelConfig(
+                            id=model.id, type="base", variant=model.variant
+                        ),
                     )
-                    task_inputs.append(task_input)
-            if preload_models.controlnet is not None:
-                for model in preload_models.controlnet:
-                    task_input = models.TaskInput(
-                        task=models.DownloadTaskInput(
-                            task_name="download",
-                            task_type=models.TaskType.SD,
-                            task_id=f"preload_models_{len(task_inputs)}",
-                            model=models.ModelConfig(
-                                id=model.id, type="controlnet", variant=model.variant
-                            ),
-                        )
+                )
+            for model in preload_models.controlnet or []:
+                planned_models.append(
+                    (
+                        models.TaskType.SD,
+                        models.ModelConfig(
+                            id=model.id, type="controlnet", variant=model.variant
+                        ),
                     )
-                    task_inputs.append(task_input)
-            if preload_models.lora is not None:
-                for model in preload_models.lora:
-                    task_input = models.TaskInput(
-                        task=models.DownloadTaskInput(
-                            task_name="download",
-                            task_type=models.TaskType.SD,
-                            task_id=f"preload_models_{len(task_inputs)}",
-                            model=models.ModelConfig(
-                                id=model.id, type="lora", variant=model.variant
-                            ),
-                        )
+                )
+            for model in preload_models.lora or []:
+                planned_models.append(
+                    (
+                        models.TaskType.SD,
+                        models.ModelConfig(
+                            id=model.id, type="lora", variant=model.variant
+                        ),
                     )
-                    task_inputs.append(task_input)
+                )
+
+        # Base models are downloaded as model file sources whose downloaded
+        # revisions are recorded locally; auxiliary models are cache-only.
+        task_inputs = []
+        for task_type, model in planned_models:
+            task_id = f"preload_models_{len(task_inputs)}"
+            if model.type == "base":
+                download = models.DownloadTaskInput(
+                    task_name="download",
+                    task_type=task_type,
+                    task_id=task_id,
+                    model_files=[model.to_model_file_entry(task_type)],
+                )
+            else:
+                download = models.DownloadTaskInput(
+                    task_name="download",
+                    task_type=task_type,
+                    task_id=task_id,
+                    model=model,
+                )
+            task_inputs.append(models.TaskInput(task=download))
 
         for i, task_input in enumerate(task_inputs):
             task_fut = await self._download_worker_manager.send_task(task_input)
@@ -371,12 +380,17 @@ class NodeManager(object):
                 await self.state_cache.set_node_state(
                     status=models.NodeStatus.Init, init_message=msg
                 )
-                await task_fut.get()
-                await self.download_model_cache.save(
-                    models.DownloadedModel(
-                        task_type=task_input.task.task_type, model=task_input.task.model
+                result = await task_fut.get()
+                download = task_input.task
+                assert isinstance(download, models.DownloadTaskInput)
+                for model_file in models.resolve_model_files(
+                    download.model_files, result.model_files
+                ):
+                    await self.download_model_cache.save(
+                        models.DownloadedModel(
+                            task_type=download.task_type, model_file=model_file
+                        )
                     )
-                )
             except TaskCancelled:
                 raise ValueError(
                     "Failed to download models due to worker internal error"
@@ -486,6 +500,24 @@ class NodeManager(object):
                         )
                     raise
 
+    # Report the in-memory model state while the node is joined. A node that
+    # is not joined has no Relay state, so the next joined cycle reports again.
+    async def _sync_in_memory_model(self):
+        assert self._relay is not None
+        tracker = get_in_memory_model_tracker()
+        while True:
+            status = (await self.state_cache.get_node_state()).status
+            if status in _JOINED_STATUSES:
+                try:
+                    await tracker.sync(self._relay)
+                except get_cancelled_exc_class():
+                    raise
+                except Exception as e:
+                    _logger.warning("Cannot report the in-memory model: %r", e)
+            else:
+                tracker.invalidate()
+            await sleep(IN_MEMORY_MODEL_SYNC_INTERVAL)
+
     async def _auto_stake(self):
         assert self._node_state_manager is not None
 
@@ -547,10 +579,10 @@ class NodeManager(object):
             assert isinstance(event, models.DownloadModel)
             assert self._task_system is not None
             address = event.node_address
-            model_id = event.model_id
-            task_type = event.task_type
-            task_id = f"{address}_{model_id}"
-            await self._task_system.create_download_task(task_id, task_type, model_id)
+            task_id = f"{address}_{models.model_files_digest(event.model_files)}"
+            await self._task_system.create_download_task(
+                task_id, event.task_type, event.model_files
+            )
 
         self._watcher.add_event_filter("DownloadModel", _download_task_started)
 
@@ -800,6 +832,7 @@ class NodeManager(object):
                             raise e
 
                 tg.start_soon(self._sync_node_status)
+                tg.start_soon(self._sync_in_memory_model)
                 tg.start_soon(self._auto_stake)
                 tg.start_soon(self._update_version)
 

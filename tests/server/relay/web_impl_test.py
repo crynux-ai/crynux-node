@@ -2,12 +2,22 @@ import json
 import httpx
 import pytest
 
+from crynux_server.models import InMemoryModel, ModelFileEntry
 from crynux_server.relay.exceptions import RelayError
 from crynux_server.relay.web_impl import WebRelay
 from crynux_server.task.error_report import TaskErrorReport
 
 PRIVKEY = "0xa627246a109551432ac5db6535566af34fdddfaa11df17b8afd53eb987e209a2"
 TASK_ID = bytes([1] * 32)
+MODEL_FILE_A = ModelFileEntry(
+    repository="org/model-a", revision="rev-a", format="diffusers"
+)
+MODEL_FILE_B = ModelFileEntry(
+    repository="org/model-b",
+    revision="rev-b",
+    format="gguf",
+    format_kwargs={"filename": "m.gguf"},
+)
 
 
 def make_relay(handler) -> WebRelay:
@@ -231,12 +241,13 @@ async def test_node_sync_capabilities_reports_complete_signed_inventory():
         return 1784851234, "0x" + "01" * 65
 
     relay.signer.sign = sign
-    model_ids = ["base:model-a", "lora:model-b"]
+    model_files = [MODEL_FILE_A, MODEL_FILE_B]
+    model_files_data = [entry.model_dump() for entry in model_files]
     try:
         await relay.node_sync_capabilities(
             gpu_name="2x NVIDIA GeForce RTX 4090 TP+docker",
             gpu_vram=48,
-            model_ids=model_ids,
+            model_files=model_files,
             version="3.2.0",
         )
     finally:
@@ -248,15 +259,141 @@ async def test_node_sync_capabilities_reports_complete_signed_inventory():
         "address": relay.node_address,
         "gpu_name": "2x NVIDIA GeForce RTX 4090 TP+docker",
         "gpu_vram": 48,
-        "model_ids": model_ids,
+        "model_files": model_files_data,
         "version": "3.2.0",
     }
     body = json.loads(captured.content)
     assert body == {
         "gpu_name": "2x NVIDIA GeForce RTX 4090 TP+docker",
         "gpu_vram": 48,
-        "model_ids": model_ids,
+        "model_files": model_files_data,
         "version": "3.2.0",
+        "timestamp": 1784851234,
+        "signature": "0x" + "01" * 65,
+    }
+    assert body["model_files"][0] == {
+        "source_type": "huggingface",
+        "repository": "org/model-a",
+        "revision": "rev-a",
+        "format": "diffusers",
+        "format_kwargs": {},
+    }
+
+
+async def test_node_join_reports_signed_model_files():
+    captured = None
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal captured
+        captured = request
+        return httpx.Response(200, json={"message": "success"})
+
+    relay = make_relay(handler)
+    signed_input = None
+
+    def sign(input, timestamp=None):
+        nonlocal signed_input
+        signed_input = input
+        return 1784851234, "0x" + "01" * 65
+
+    relay.signer.sign = sign
+    model_files_data = [MODEL_FILE_A.model_dump()]
+    try:
+        await relay.node_join(
+            network="dymension",
+            gpu_name="RTX 4090+docker",
+            gpu_vram=24,
+            model_files=[MODEL_FILE_A],
+            version="3.2.0",
+            staking_amount=10,
+        )
+    finally:
+        await relay.client.aclose()
+
+    assert captured is not None
+    assert captured.url.path == f"/v2/node/{relay.node_address}/join"
+    assert signed_input is not None
+    assert signed_input["model_files"] == model_files_data
+    assert "model_ids" not in signed_input
+    body = json.loads(captured.content)
+    assert body["model_files"] == model_files_data
+    assert "model_ids" not in body
+
+
+async def test_node_report_model_downloaded_sends_model_file():
+    captured = None
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal captured
+        captured = request
+        return httpx.Response(200, json={"message": "success"})
+
+    relay = make_relay(handler)
+    signed_input = None
+
+    def sign(input, timestamp=None):
+        nonlocal signed_input
+        signed_input = input
+        return 1784851234, "0x" + "01" * 65
+
+    relay.signer.sign = sign
+    try:
+        await relay.node_report_model_downloaded(MODEL_FILE_B)
+    finally:
+        await relay.client.aclose()
+
+    assert captured is not None
+    assert captured.url.path == f"/v1/node/{relay.node_address}/model"
+    assert signed_input == {
+        "address": relay.node_address,
+        "model_file": MODEL_FILE_B.model_dump(),
+    }
+    assert json.loads(captured.content) == {
+        "model_file": MODEL_FILE_B.model_dump(),
+        "timestamp": 1784851234,
+        "signature": "0x" + "01" * 65,
+    }
+
+
+@pytest.mark.parametrize("with_model", [True, False])
+async def test_node_report_in_memory_model(with_model):
+    captured = None
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal captured
+        captured = request
+        return httpx.Response(200, json={"message": "success"})
+
+    relay = make_relay(handler)
+    signed_input = None
+
+    def sign(input, timestamp=None):
+        nonlocal signed_input
+        signed_input = input
+        return 1784851234, "0x" + "01" * 65
+
+    relay.signer.sign = sign
+    model = (
+        InMemoryModel(
+            model_cache_hash="ab" * 32,
+            model_cache_config={"dtype": "auto", "task_kind": "image"},
+            model_files=[MODEL_FILE_A],
+            execution_dtype="bfloat16",
+        )
+        if with_model
+        else None
+    )
+    model_data = model.model_dump() if model is not None else None
+    try:
+        await relay.node_report_in_memory_model(model)
+    finally:
+        await relay.client.aclose()
+
+    assert captured is not None
+    assert captured.url.path == f"/v2/node/{relay.node_address}/in_memory_model"
+    assert signed_input == {"address": relay.node_address, "model": model_data}
+    assert json.loads(captured.content) == {
+        "model": model_data,
         "timestamp": 1784851234,
         "signature": "0x" + "01" * 65,
     }
