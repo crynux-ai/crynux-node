@@ -49,10 +49,7 @@ task_config:
   # will be downloaded during the task execution
   preloaded_models:
     sd_base:
-      - id: "crynux-network/sdxl-turbo"
-        variant: "fp16"
-      - id: "crynux-network/stable-diffusion-v1-5"
-        variant: "fp16"
+      - id: "qwen/qwen-image-2.1"
     gpt_base:
       - id: "qwen/qwen3-8b"
     controlnet: []

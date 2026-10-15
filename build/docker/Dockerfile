@@ -6,7 +6,7 @@ COPY src/webui /app/
 
 RUN yarn && yarn build
 
-FROM nvidia/cuda:12.8.1-cudnn-devel-ubuntu22.04 as base
+FROM nvidia/cuda:13.0.3-cudnn-devel-ubuntu22.04 as base
 
 RUN apt update && apt install python3.10 python3.10-venv python3.10-dev python3-pip curl build-essential libssl-dev libffi-dev ffmpeg libsm6 libxext6 -y --no-install-recommends && rm -rf /var/lib/apt/lists/*
 
@@ -47,12 +47,21 @@ WORKDIR /app/stable-diffusion-task
 RUN pip install --no-cache-dir -r requirements_cuda.txt && pip install --no-cache-dir .
 
 WORKDIR /app/gpt-task
-RUN pip install --no-cache-dir -r requirements_cuda.txt && pip install --no-cache-dir .
+# gptqmodel ships as sdist: needs venv torch (no build isolation) and an explicit
+# CUDA_ARCH_LIST because docker build has no nvidia-smi / GPU.
+ENV CUDA_ARCH_LIST="8.0;8.6;8.9;9.0" \
+    TORCH_CUDA_ARCH_LIST="8.0;8.6;8.9;9.0" \
+    MAX_JOBS=2
+RUN pip install --no-cache-dir -U "setuptools<82" wheel && \
+    grep -v '^gptqmodel' requirements_cuda.txt > /tmp/gpt_reqs.txt && \
+    pip install --no-cache-dir -r /tmp/gpt_reqs.txt && \
+    pip install --no-cache-dir --no-build-isolation "gptqmodel==5.6.12" && \
+    pip install --no-cache-dir .
 
 WORKDIR /app/crynux-worker
 RUN pip install --no-cache-dir -r requirements.txt && pip install --no-cache-dir .
 
-FROM nvidia/cuda:12.8.1-cudnn-runtime-ubuntu22.04 as final
+FROM nvidia/cuda:13.0.3-cudnn-runtime-ubuntu22.04 as final
 
 # gcc/g++: Triton JIT-compiles CudaUtils (and kernels) at first use; runtime image has no compiler by default.
 RUN apt update && apt install python3.10 python3.10-venv ffmpeg libsm6 libxext6 gcc g++ -y --no-install-recommends && rm -rf /var/lib/apt/lists/*

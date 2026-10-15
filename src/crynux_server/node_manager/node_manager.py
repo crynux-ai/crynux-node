@@ -304,14 +304,14 @@ class NodeManager(object):
         # the inference worker loads models from the local cache only and
         # cannot download it on the fly
         initial_task_model = models.ModelConfig(
-            id="crynux-network/stable-diffusion-v1-5", type="base", variant="fp16"
+            id="qwen/qwen-image-2.1", type="base"
         )
         planned_models.append((models.TaskType.SD, initial_task_model))
 
         if preload_models is not None:
             for model in preload_models.sd_base or []:
                 if (
-                    model.id == initial_task_model.id
+                    models.normalize_model_name(model.id) == initial_task_model.id
                     and model.variant == initial_task_model.variant
                 ):
                     continue
@@ -403,51 +403,76 @@ class NodeManager(object):
                 raise ValueError("Failed to download models") from e
 
     async def _run_initial_inference_task(self):
+        initial_model = models.ModelConfig(id="qwen/qwen-image-2.1", type="base")
         prompt = (
             "a realistic photo of an old man sitting on a brown chair, "
             "on the seaside, with blue sky and white clouds, a dog is lying "
             "under his legs, masterpiece, high resolution"
         )
         task_args = {
-            "version": "3.0.0",
+            "version": "3.7.0",
             "base_model": {
-                "name": "crynux-network/stable-diffusion-v1-5",
-                "variant": "fp16",
+                "name": initial_model.id,
             },
+            "dtype": "bfloat16",
             "prompt": prompt,
             "negative_prompt": "",
             "task_config": {
-                "num_images": 1,
-                "safety_checker": False,
-                "cfg": 7,
+                "image_width": 1024,
+                "image_height": 1024,
+                "num_images_per_prompt": 1,
+                "steps": 8,
                 "seed": 99975892,
-                "steps": 40,
+            },
+            "quantization_config": {
+                "quant_method": "bitsandbytes",
+                "components_to_quantize": ["transformer", "text_encoder"],
+                "quant_kwargs": {
+                    "load_in_4bit": True,
+                    "bnb_4bit_quant_type": "nf4",
+                    "bnb_4bit_compute_dtype": "bfloat16",
+                    "bnb_4bit_use_double_quant": False,
+                },
             },
         }
+        task_args_json = models.normalize_task_args_model_names(
+            json.dumps(task_args), models.TaskType.SD
+        )
+
+        # Exact revisions recorded during preload; the worker requires them
+        # before loading the base model from the local cache.
+        download_models = await self.download_model_cache.load_all()
+        initial_entry = initial_model.to_model_file_entry(models.TaskType.SD)
+        execution_model_files = [
+            model.model_file
+            for model in download_models
+            if model.task_type == models.TaskType.SD
+            and model.model_file.source_key() == initial_entry.source_key()
+        ]
+        if not execution_model_files:
+            raise ValueError(
+                f"No downloaded model file found for initial validation model "
+                f"{initial_model.id}"
+            )
 
         task_input = models.TaskInput(
             task=models.InferenceTaskInput(
                 task_name="inference",
                 task_type=models.TaskType.SD,
                 task_id="initial_inference_task",
-                models=[
-                    models.ModelConfig(
-                        id="crynux-network/stable-diffusion-v1-5",
-                        type="base",
-                        variant="fp16",
-                    )
-                ],
-                task_args=json.dumps(task_args),
+                models=[initial_model],
+                task_args=task_args_json,
                 output_dir=self.config.task_config.output_dir,
+                execution_model_files=execution_model_files,
             )
         )
         try:
-            with fail_after(300):
+            with fail_after(900):
                 task_fut = await self._worker_manager.send_task(task_input)
                 await task_fut.get()
         except TimeoutError as e:
             msg = (
-                "The initial inference task exceeded the timeout limit(5 min). Maybe your device does not meet "
+                "The initial inference task exceeded the timeout limit(15 min). Maybe your device does not meet "
                 "the lowest hardware requirements"
             )
             raise ValueError(msg) from e

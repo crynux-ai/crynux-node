@@ -13,11 +13,11 @@ pyunormalize==17.0.0
 anyio==3.7.1
 sqlalchemy[asyncio]==2.0.20
 aiosqlite==0.19.0
-fastapi==0.101.1
+fastapi==0.115.6
 hypercorn==0.14.4
 httpx==0.28.1
-pydantic==2.2.1
-pydantic-settings==2.0.3
+pydantic==2.12.5
+pydantic-settings==2.6.1
 importlib-resources==6.0.1
 python-multipart==0.0.6
 tenacity==8.2.3

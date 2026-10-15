@@ -17,11 +17,10 @@ ethereum:
   gas_price: 700000000
   gas: 8000000
 
-  # Contract addresses are replaced with e2e-specific values before build
   contract:
-    benefit_address: "0xa4AC846337794C93d68D387Be77663e32AD415bb"
-    node_staking: "0xf76C3f19c8976d0Bc49d48718669b99747b1837e"
-    delegated_staking: "0x4b0946BB12474332D865AfAc5F77554b503C5570"
+    benefit_address: "0x195FeF730936C4B68BFF9F98429037ba68e82414"
+    node_staking: "0x3EB72d01bd77a36ABB867eafFD6BaECE8252Ce32"
+    delegated_staking: "0xC3C9CC3ce811Bd825118f2E36524716F86923f81"
 
 # The database used to store the local state data
 db:
@@ -43,10 +42,7 @@ task_config:
   # Models that will be preloaded before any task execution
   preloaded_models:
     sd_base:
-      - id: "crynux-network/sdxl-turbo"
-        variant: "fp16"
-      - id: "crynux-network/stable-diffusion-v1-5"
-        variant: "fp16"
+      - id: "qwen/qwen-image-2.1"
     gpt_base:
       - id: "qwen/qwen3-8b"
     controlnet: []
