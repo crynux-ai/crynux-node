@@ -18,7 +18,6 @@ metadata_packages = [
     ('transformers', True),
     ('accelerate', False),
     ('attrs', False),
-    ('compel', False),
     ('controlnet-aux', False),
     ('datasets', False),
     ('einops', False),
