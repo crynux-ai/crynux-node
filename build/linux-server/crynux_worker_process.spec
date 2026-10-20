@@ -7,6 +7,7 @@ from PyInstaller.utils.hooks import copy_metadata
 scipy_hiddenimports = collect_submodules('scipy')
 scipy_datas = collect_data_files('scipy')
 rfc3987_syntax_datas = collect_data_files('rfc3987_syntax')
+kernels_datas = collect_data_files('kernels')
 xgrammar_binaries = collect_dynamic_libs('xgrammar')
 binaries = xgrammar_binaries
 metadata_packages = [
@@ -52,7 +53,7 @@ a = Analysis(
     ['worker/crynux_worker_process.py'],
     pathex=[],
     binaries=binaries,
-    datas=scipy_datas + rfc3987_syntax_datas + metadata_datas,
+    datas=scipy_datas + rfc3987_syntax_datas + kernels_datas + metadata_datas,
     hiddenimports=[
         "diffusers.pipelines.stable_diffusion_xl.pipeline_output",
     ] + scipy_hiddenimports,

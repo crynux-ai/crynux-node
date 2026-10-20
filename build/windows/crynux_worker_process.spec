@@ -8,6 +8,7 @@ from PyInstaller.utils.hooks import copy_metadata
 scipy_hiddenimports = collect_submodules('scipy')
 scipy_datas = collect_data_files('scipy')
 rfc3987_syntax_datas = collect_data_files('rfc3987_syntax')
+kernels_datas = collect_data_files('kernels')
 bitsandbytes_binaries = collect_dynamic_libs('bitsandbytes')
 xgrammar_binaries = collect_dynamic_libs('xgrammar')
 triton_datas, triton_binaries, triton_hiddenimports = collect_all('triton')
@@ -58,7 +59,7 @@ a = Analysis(
     ['worker/crynux_worker_process.py'],
     pathex=[],
     binaries=binaries,
-    datas=scipy_datas + rfc3987_syntax_datas + triton_datas + metadata_datas,
+    datas=scipy_datas + rfc3987_syntax_datas + kernels_datas + triton_datas + metadata_datas,
     hiddenimports=[
         "diffusers.pipelines.stable_diffusion_xl.pipeline_output",
     ] + scipy_hiddenimports + triton_hiddenimports,
