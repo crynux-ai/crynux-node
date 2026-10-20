@@ -57,14 +57,6 @@ jobs:
             sudo systemctl start docker
             docker info
 
-        - name: Show disk usage before Docker build
-          shell: bash
-          run: |
-            set -eux
-            df -h
-            docker system df || true
-            sudo du -hxd1 / /mnt "${GITHUB_WORKSPACE}" "${GITHUB_WORKSPACE}/.docker-data" 2>/dev/null | sort -h || true
-
         - name: Log in to the Container registry
           uses: docker/login-action@65b78e6e13532edd9afa3aa52ac7964289d1a9c1
           with:
@@ -91,12 +83,3 @@ jobs:
             file: build/docker/Dockerfile
             tags: ${{ steps.meta.outputs.tags }}
             labels: ${{ steps.meta.outputs.labels }}
-
-        - name: Show disk usage after Docker build
-          if: always()
-          shell: bash
-          run: |
-            set -eux
-            df -h
-            docker system df || true
-            sudo du -hxd1 / /mnt "${GITHUB_WORKSPACE}" "${GITHUB_WORKSPACE}/.docker-data" 2>/dev/null | sort -h || true

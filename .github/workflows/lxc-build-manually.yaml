@@ -126,12 +126,6 @@ jobs:
             ./ "${LXC_SOURCE_DIR}/"
           sed -i "s|LXC_SOURCE_DIR|${LXC_SOURCE_DIR}|g" build/lxc/crynux-node.lxc.yaml
 
-      - name: Show disk usage before LXC build
-        run: |
-          set -eux
-          df -h
-          sudo du -hxd1 / /mnt "${GITHUB_WORKSPACE}" "${LXC_BUILD_DIR}" 2>/dev/null | sort -h || true
-
       - name: Build Incus image with distrobuilder
         run: |
           # The snap installation places distrobuilder directly in the PATH.
@@ -156,13 +150,6 @@ jobs:
           sudo mv "${LXC_BUILD_DIR}/output/rootfs.squashfs" "rootfs-${FULL_VERSION}.squashfs"
           echo "Renamed files to include full version: ${FULL_VERSION}"
           ls -la incus-*.tar.xz rootfs-*.squashfs
-
-      - name: Show disk usage after LXC build
-        if: always()
-        run: |
-          set -eux
-          df -h
-          sudo du -hxd1 / /mnt "${GITHUB_WORKSPACE}" "${LXC_BUILD_DIR}" 2>/dev/null | sort -h || true
 
       - name: Change ownership of artifacts
         run: |

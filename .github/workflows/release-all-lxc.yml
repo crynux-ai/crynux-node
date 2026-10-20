@@ -82,12 +82,6 @@ jobs:
             ./ "${LXC_SOURCE_DIR}/"
           sed -i "s|LXC_SOURCE_DIR|${LXC_SOURCE_DIR}|g" build/lxc/crynux-node.lxc.yaml
 
-      - name: Show disk usage before LXC build
-        run: |
-          set -eux
-          df -h
-          sudo du -hxd1 / /mnt "${GITHUB_WORKSPACE}" "${LXC_BUILD_DIR}" 2>/dev/null | sort -h || true
-
       - name: Build Incus image with distrobuilder
         run: |
           sudo -E distrobuilder build-incus build/lxc/crynux-node.lxc.yaml "${LXC_BUILD_DIR}/output" \
@@ -107,13 +101,6 @@ jobs:
           sudo mv "${LXC_BUILD_DIR}/output/incus.tar.xz" "incus-${FULL_VERSION}.tar.xz"
           sudo mv "${LXC_BUILD_DIR}/output/rootfs.squashfs" "rootfs-${FULL_VERSION}.squashfs"
           ls -la incus-*.tar.xz rootfs-*.squashfs
-
-      - name: Show disk usage after LXC build
-        if: always()
-        run: |
-          set -eux
-          df -h
-          sudo du -hxd1 / /mnt "${GITHUB_WORKSPACE}" "${LXC_BUILD_DIR}" 2>/dev/null | sort -h || true
 
       - name: Change ownership of artifacts
         run: |
