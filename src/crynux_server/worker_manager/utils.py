@@ -43,19 +43,33 @@ def _linux_bundle_exe_head() -> List[str]:
     return [exe]
 
 
-def _script_cmd_head(script_dir: str = "") -> List[str]:
-    exe = "python"
-    worker_venv = os.path.abspath(os.path.join(script_dir, "venv"))
-    if os.path.exists(worker_venv):
-        # linux
-        linux_exe = os.path.join(worker_venv, "bin", "python")
-        windows_exe = os.path.join(worker_venv, "Scripts", "python.exe")
-        if os.path.exists(linux_exe):
-            exe = linux_exe
-        elif os.path.exists(windows_exe):
-            exe = windows_exe
+def worker_venv_executable_dir(script_dir: str) -> str:
+    """Directory containing the worker venv interpreter for a script launch.
 
-    script_file = os.path.abspath(os.path.join(script_dir, f"crynux_worker_process.py"))
+    Empty for a frozen worker executable and when the worker venv is absent.
+    """
+    if getattr(sys, "frozen", False) or not script_dir:
+        return ""
+    worker_venv = os.path.abspath(os.path.join(script_dir, "venv"))
+    for executable in (
+        os.path.join(worker_venv, "bin", "python"),
+        os.path.join(worker_venv, "Scripts", "python.exe"),
+    ):
+        if os.path.exists(executable):
+            return os.path.dirname(executable)
+    return ""
+
+
+def _script_cmd_head(script_dir: str = "") -> List[str]:
+    exe_dir = worker_venv_executable_dir(script_dir)
+    if not exe_dir:
+        exe = "python"
+    elif os.path.basename(exe_dir) == "Scripts":
+        exe = os.path.join(exe_dir, "python.exe")
+    else:
+        exe = os.path.join(exe_dir, "python")
+
+    script_file = os.path.abspath(os.path.join(script_dir, "crynux_worker_process.py"))
     return [exe, script_file]
 
 

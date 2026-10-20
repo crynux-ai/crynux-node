@@ -26,7 +26,7 @@ from .error import (
 )
 from .exchange import TaskExchange
 from .task import TaskFuture
-from .utils import get_exe_head
+from .utils import get_exe_head, worker_venv_executable_dir
 
 _logger = logging.getLogger(__name__)
 
@@ -230,6 +230,13 @@ class WorkerManager(object):
             executor,
             tp_fallback,
         )
+
+        exe_dir = worker_venv_executable_dir(script_dir)
+        if exe_dir:
+            current_path = envs.get("PATH", "")
+            envs["PATH"] = (
+                exe_dir + os.pathsep + current_path if current_path else exe_dir
+            )
 
         return args, envs, worker_pid_file
 

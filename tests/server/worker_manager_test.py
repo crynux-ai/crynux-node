@@ -1,7 +1,10 @@
+import sys
 import time
 from types import SimpleNamespace
 
 import pytest
+
+from crynux_server.worker_manager.utils import worker_venv_executable_dir
 from anyio import sleep
 
 from crynux_server.models import (
@@ -345,6 +348,24 @@ async def test_health_restart_marks_other_task_as_restarted(worker_manager):
         exc_info.value.cancellation.cancellation_type
         == TaskCancellationType.WORKER_RESTARTED
     )
+
+
+def test_worker_venv_executable_dir_points_at_venv_bin(tmp_path, monkeypatch):
+    monkeypatch.delattr(sys, "frozen", raising=False)
+    bin_dir = tmp_path / "venv" / "bin"
+    bin_dir.mkdir(parents=True)
+    (bin_dir / "python").write_text("", encoding="utf-8")
+
+    assert worker_venv_executable_dir(str(tmp_path)) == str(bin_dir)
+
+
+def test_frozen_worker_does_not_use_a_venv_directory(tmp_path, monkeypatch):
+    monkeypatch.setattr(sys, "frozen", True, raising=False)
+    bin_dir = tmp_path / "venv" / "bin"
+    bin_dir.mkdir(parents=True)
+    (bin_dir / "python").write_text("", encoding="utf-8")
+
+    assert worker_venv_executable_dir(str(tmp_path)) == ""
 
 
 async def test_runner_sync_restart_has_distinct_cancellation(worker_manager):
