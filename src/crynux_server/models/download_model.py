@@ -1,10 +1,18 @@
-from typing import Literal
+from typing import Iterable, List, Literal
 
 from pydantic import BaseModel, ConfigDict, field_validator
 
 from .model_file import IMAGE_BASE_MODEL_FORMAT, ModelFileEntry
 from .model_name import normalize_model_name
 from .task import TaskType
+
+
+def is_component_model_id(model_id: str) -> bool:
+    return model_id.lower().startswith("component:")
+
+
+def is_base_model_id(model_id: str) -> bool:
+    return model_id.lower().startswith("base:")
 
 
 class ModelConfig(BaseModel):
@@ -34,6 +42,32 @@ class ModelConfig(BaseModel):
         return cls.model_validate(
             {"id": model_name, "type": model_type, "variant": variant}
         )
+
+    @classmethod
+    def from_legacy_model_ids(cls, model_ids: Iterable[str]) -> List["ModelConfig"]:
+        """Parse model_ids that use legacy ModelConfig types.
+
+        Identifiers prefixed with ``component:`` are omitted. Components are
+        distributed and loaded through ``execution_model_files``.
+        """
+        return [
+            cls.from_model_id(model_id)
+            for model_id in model_ids
+            if not is_component_model_id(model_id)
+        ]
+
+    @classmethod
+    def from_auxiliary_model_ids(cls, model_ids: Iterable[str]) -> List["ModelConfig"]:
+        """Parse non-base legacy model_ids for task-scoped foreground download.
+
+        ``component:`` identifiers are omitted; they are not downloaded on this
+        path.
+        """
+        return [
+            cls.from_model_id(model_id)
+            for model_id in model_ids
+            if not is_base_model_id(model_id) and not is_component_model_id(model_id)
+        ]
 
     def to_model_file_entry(self, task_type: TaskType) -> ModelFileEntry:
         """Source entry of a base model; the entry carries no revision."""

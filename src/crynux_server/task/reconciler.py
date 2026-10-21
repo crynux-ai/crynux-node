@@ -456,9 +456,7 @@ class TaskReconciler(object):
         if not os.path.exists(task_dir):
             os.makedirs(task_dir, exist_ok=True)
 
-        task_models = [
-            models.ModelConfig.from_model_id(model_id) for model_id in task.model_ids
-        ]
+        task_models = models.ModelConfig.from_legacy_model_ids(task.model_ids)
         # The Worker's memory is unknown after any failed or cancelled execution
         epoch = self.in_memory_model_tracker.epoch
         try:
@@ -498,11 +496,9 @@ class TaskReconciler(object):
     ):
         worker_manager = get_worker_manager("download")
         try:
-            auxiliary_models = [
-                models.ModelConfig.from_model_id(model_id)
-                for model_id in task.model_ids
-                if not model_id.lower().startswith("base:")
-            ]
+            auxiliary_models = models.ModelConfig.from_auxiliary_model_ids(
+                task.model_ids
+            )
         except (ValueError, ValidationError) as e:
             raise TaskDownloadError(
                 f"Task {task_id_hex} has an invalid auxiliary model ID"

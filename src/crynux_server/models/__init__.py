@@ -1,4 +1,9 @@
-from .download_model import DownloadedModel, ModelConfig
+from .download_model import (
+    DownloadedModel,
+    ModelConfig,
+    is_base_model_id,
+    is_component_model_id,
+)
 from .in_memory_model import InMemoryModel
 from .model_file import (IMAGE_BASE_MODEL_FORMAT, SOURCE_TYPE_HUGGINGFACE,
                          ModelFileEntry, model_files_digest,
@@ -60,6 +65,8 @@ __all__ = [
     "DownloadTaskInput",
     "InferenceTaskInput",
     "ModelConfig",
+    "is_base_model_id",
+    "is_component_model_id",
     "TaskInput",
     "SuccessResult",
     "ErrorResult",

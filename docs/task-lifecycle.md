@@ -9,7 +9,7 @@ Task execution failures are classified into exactly two categories:
 - **`TaskInvalid`**: the task itself is at fault. Every node executing this task fails the same way. This classification is derived from the worker error traceback and covers invalid task arguments only.
 - **`TaskExecutionError`**: every other failure, including a foreground model-download failure, foreground download cancellation, expired foreground download deadline, CUDA errors, out-of-memory errors, missing models, and any unclassified exception. Responsibility cannot be attributed to the task, so it is treated as a node-local failure of unknown cause.
 
-Before inference, `TaskReconciler` MUST derive every non-base model from the authoritative `task.model_ids` and download those models sequentially through task-scoped foreground jobs. The inference worker MUST continue to load every model from the local cache only (`local_files_only`) and MUST NOT download models. A base model absent from the local cache, or a non-base model still absent after its foreground job succeeds, fails inference with the `Task model not downloaded` error. The node therefore does not report `TaskInvalid` for invalid model identifiers; download failures and cache misses become `TaskExecutionError` and end through the relay timeout, the always-safe silent path. The `Task model not downloaded` traceback additionally suppresses the inference worker restart, as specified in `docs/task-system-design.md`; its protocol handling is identical to every other `TaskExecutionError`.
+Before inference, `TaskReconciler` MUST derive every non-base, non-component model from the authoritative `task.model_ids` and download those models sequentially through task-scoped foreground jobs. Identifiers prefixed with `component:` MUST NOT use this path; components are distributed and loaded through `execution_model_files`. The inference worker MUST continue to load every model from the local cache only (`local_files_only`) and MUST NOT download models. A base model absent from the local cache, or a non-base legacy model still absent after its foreground job succeeds, fails inference with the `Task model not downloaded` error. The node therefore does not report `TaskInvalid` for invalid model identifiers; download failures and cache misses become `TaskExecutionError` and end through the relay timeout, the always-safe silent path. The `Task model not downloaded` traceback additionally suppresses the inference worker restart, as specified in `docs/task-system-design.md`; its protocol handling is identical to every other `TaskExecutionError`.
 
 `TaskReconciler` MUST send the authoritative `execution_model_files` of the task record to the inference worker in `InferenceTaskInput.execution_model_files` as exact load constraints, together with `requested_model_cache_hash`. The task arguments MUST remain unchanged.
 
@@ -31,7 +31,7 @@ Each reconcile cycle derives at most one action from the fresh relay task status
 
 | Relay status | Local condition | Action |
 |--------------|-----------------|--------|
-| `Started` / `ParametersUploaded` | no valid score, not yet executed in this worker lifetime | Download the task's non-base models, then execute inference |
+| `Started` / `ParametersUploaded` | no valid score, not yet executed in this worker lifetime | Download the task's non-base, non-component models, then execute inference |
 | `Started` / `ParametersUploaded` | execution outcome is `TaskInvalid`, error not yet reported | Report the task error to the relay |
 | `Started` / `ParametersUploaded` | execution outcome is `TaskExecutionError` or `TaskCancelled` | Close the task locally (see section 3) |
 | `Started` / `ParametersUploaded` | valid score persisted | Submit the score |
@@ -55,7 +55,7 @@ The relay sets the node's current-task pointer in the same transaction that sets
 
 ### Foreground download phase
 
-- The reconciler MUST use `task.model_ids` from the current authoritative Relay task record. It MUST select every identifier that does not begin with `base:` and MUST preserve their order.
+- The reconciler MUST use `task.model_ids` from the current authoritative Relay task record. It MUST select every identifier that does not begin with `base:` or `component:` and MUST preserve their order. Identifiers that begin with `component:` MUST be omitted from foreground download and from the legacy `ModelConfig` list passed to inference.
 - The reconciler MUST send one task-scoped `DownloadTaskInput` at a time to the serial download worker and MUST await success before sending the next job.
 - Every foreground download job MUST carry the Relay task deadline, calculated as `start_time + timeout`. The inference execution grace period MUST NOT be added to this deadline.
 - The server MUST NOT inspect the Hugging Face cache before dispatch. The download worker MUST make the operation idempotent for models already present.
@@ -99,7 +99,7 @@ The diagram shows the path of one inference task through the reconcile loop. Eve
 ```mermaid
 flowchart TD
     started["Relay status: Started"] --> exec{Local record}
-    exec -->|no score, not executed| download[Sequentially download non-base models]
+    exec -->|no score, not executed| download[Sequentially download non-base non-component models]
     exec -->|valid score| submit[Submit score]
 
     download -->|success| run[Execute inference worker<br/>local files only]

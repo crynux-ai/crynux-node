@@ -23,6 +23,26 @@ def test_model_config_normalizes_id():
     assert model.id == "qwen/qwen2.5-7b"
 
 
+def test_model_config_skips_component_model_ids():
+    model_ids = [
+        "base:Qwen/Qwen-Image-2.1",
+        "lora:Org/Style",
+        "component:transformer:abenzerps/Qwen-Image-2.1-Uncensored-Quantized",
+        "controlnet:Lllyasviel/Canny",
+    ]
+    legacy = ModelConfig.from_legacy_model_ids(model_ids)
+    assert [m.to_model_id() for m in legacy] == [
+        "base:qwen/qwen-image-2.1",
+        "lora:org/style",
+        "controlnet:lllyasviel/canny",
+    ]
+    auxiliary = ModelConfig.from_auxiliary_model_ids(model_ids)
+    assert [m.to_model_id() for m in auxiliary] == [
+        "lora:org/style",
+        "controlnet:lllyasviel/canny",
+    ]
+
+
 def test_normalize_task_args_model_names_llm():
     task_args = json.dumps(
         {

@@ -150,7 +150,7 @@ The node has two download paths that share one serial download worker.
 
 ### Foreground task-scoped download
 
-- For each inference task execution, `TaskReconciler` MUST read the authoritative `task.model_ids` from the Relay task record and derive every identifier that is not prefixed with `base:`. It MUST preserve Relay order and send one task-scoped `DownloadTaskInput` job at a time to the download worker before dispatching inference.
+- For each inference task execution, `TaskReconciler` MUST read the authoritative `task.model_ids` from the Relay task record and derive every identifier that is not prefixed with `base:` or `component:`. It MUST preserve Relay order and send one task-scoped `DownloadTaskInput` job at a time to the download worker before dispatching inference. Identifiers prefixed with `component:` MUST NOT become foreground download jobs; components are loaded from `execution_model_files`.
 - Each foreground job MUST carry the actual Relay task deadline, `start_time + timeout`, without the inference execution grace period. All foreground jobs for the task share this deadline.
 - The server MUST NOT inspect the Hugging Face cache or skip a job based on server-side cache state. The download worker's idempotence MUST handle a model that is already present.
 - Foreground jobs MUST NOT use the background download state machine, retries, recovery, relay model-download report, or `download_model_cache`.

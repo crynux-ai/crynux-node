@@ -425,6 +425,7 @@ async def test_auxiliary_models_download_before_inference(monkeypatch):
         "base:crynux-network/sdxl",
         "lora:crynux-network/style",
         "controlnet:lllyasviel/canny",
+        "component:transformer:abenzerps/qwen-image-2.1-uncensored-quantized",
     ]
     deadline = task.start_time.timestamp() + task.timeout
 
@@ -437,6 +438,26 @@ async def test_auxiliary_models_download_before_inference(monkeypatch):
         call[0].task.model.type for call in manager.calls
     ] == ["lora", "controlnet"]
     assert all(call[1] == deadline for call in manager.calls)
+
+
+async def test_component_model_ids_skip_auxiliary_download(monkeypatch):
+    relay = FakeRelay()
+    reconciler = make_reconciler(relay)
+    manager = FakeDownloadManager()
+    monkeypatch.setattr(
+        reconciler_module, "get_worker_manager", lambda role: manager
+    )
+    task = make_relay_task(TASK_ID_1, models.InferenceTaskStatus.Started)
+    task.model_ids = [
+        "base:qwen/qwen-image-2.1",
+        "component:transformer:abenzerps/qwen-image-2.1-uncensored-quantized",
+    ]
+
+    await reconciler._download_auxiliary_models(
+        TASK_ID_1.hex(), task, time.time() + 60
+    )
+
+    assert manager.calls == []
 
 
 async def test_auxiliary_download_failure_skips_inference(monkeypatch, tmp_path):
