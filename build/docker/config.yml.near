@@ -42,14 +42,12 @@ web_dist: dist
 resource_dir: res
 
 task_config:
-  # Models that will be preloaded before any task execution
-  # Other models specified by the task
-  # will be downloaded during the task execution
+  # Optional local preload before join. Default empty: base models come from
+  # Relay DownloadModel events (required_models_by_vram and demand-driven).
+  # Fill these lists only for local debugging.
   preloaded_models:
-    sd_base:
-      - id: "qwen/qwen-image-2.1"
-    gpt_base:
-      - id: "qwen/qwen3-8b"
+    sd_base: []
+    gpt_base: []
     controlnet: []
     lora: []
 

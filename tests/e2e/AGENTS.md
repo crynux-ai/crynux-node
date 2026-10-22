@@ -11,7 +11,7 @@
   6. Verify `crynux-node:e2e` exists locally.
 
 - Contract addresses in `tests/e2e/config.yml.e2e_base` MUST match `crynux-contracts/deployments/primary/testnet/crynux-on-base-sepolia/contracts.json` `nodeContracts`.
-- Preloaded models in that config MUST be `qwen/qwen-image-2.1` for `sd_base` and `qwen/qwen3-8b` for `gpt_base`.
+- Node `preloaded_models` in that config MUST be empty. Base models for e2e MUST come from Relay `DownloadModel` events (`required_models_by_vram` and demand-driven distribution).
 
 ## Prepare the mount folder for the Docker image
 
@@ -67,7 +67,7 @@ These match `crynux-bridge/tests/e2e/heartbeat_tasks.e2e.json`.
 | B1 | sd | `Qwen/Qwen-Image-2.1` | BitsAndBytes NF4 on `transformer` + `text_encoder` | TaskArgs | Same `quant_kwargs` as Bridge e2e JSON |
 | B2 | llm | `Qwen/Qwen3.5-27B` | BitsAndBytes NF4 | TaskArgs | Same `quant_kwargs` as Bridge e2e JSON |
 
-Node preloaded models in `tests/e2e/config.yml.e2e_base` remain `qwen/qwen-image-2.1` and `qwen/qwen3-8b`. Preload is for join/validation; heartbeat models above are the pass criteria.
+Node `preloaded_models` in `tests/e2e/config.yml.e2e_base` MUST be empty. After join, the node receives base models through Relay `DownloadModel` events. Heartbeat models above are the pass criteria.
 
 ### Extended LLM coverage (Docker / Linux CUDA node)
 
