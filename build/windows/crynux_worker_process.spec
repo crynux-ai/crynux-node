@@ -23,6 +23,7 @@ metadata_packages = [
     ('datasets', False),
     ('einops', False),
     ('fsspec', False),
+    ('gguf', False),
     ('huggingface-hub', False),
     ('imageio', False),
     ('jsonschema', False),
